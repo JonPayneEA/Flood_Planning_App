@@ -56,13 +56,13 @@ db_connection <- function() {
 db_query <- function(sql, params = NULL) {
   con <- db_connection()
   on.exit(DBI::dbDisconnect(con), add = TRUE)
-
+  
   result <- if (is.null(params)) {
     DBI::dbGetQuery(con, sql)
   } else {
     DBI::dbGetQuery(con, sql, params = params)
   }
-
+  
   setDT(result)
   result[]    # The [] forces print-on-return, useful when debugging at REPL.
 }
@@ -103,10 +103,10 @@ fetch_latest_statement <- function() {
     ORDER BY issued_at DESC
     LIMIT 1
   ", TBL_STATEMENTS))
-
+  
   if (nrow(dt) == 0L) return(NULL)
   as.list(dt[1L])    # data.table's [1L] returns the first row as a data.table;
-                      # as.list() unboxes it to a named list for caller convenience.
+  # as.list() unboxes it to a named list for caller convenience.
 }
 
 
@@ -144,14 +144,14 @@ fetch_risk_polygons <- function(statement_id, day_index) {
     WHERE statement_id = ?
       AND day_index    = ?
   ", TBL_RISK_POLYGONS),
-  params = list(statement_id, day_index))
-
+                 params = list(statement_id, day_index))
+  
   # Empty result -- return an empty sf object so callers can pattern-match on
   # nrow() without separate NULL checks.
   if (nrow(dt) == 0L) {
     return(sf::st_sf(geometry = sf::st_sfc(), crs = 4326))
   }
-
+  
   # sf::st_as_sf parses the WKT column and returns an sf object. CRS 4326
   # (WGS84 lat/lon) is the FGS GeoJSON default and the CRS leaflet expects.
   # We rename the parsed column to "geometry" so downstream code doesn't have
@@ -202,7 +202,7 @@ fetch_ea_areas_for_statement <- function(statement_id, day_index) {
       END,
       intersection_pct DESC
   ", TBL_EA_INTERSECT),
-  params = list(statement_id, day_index))
+           params = list(statement_id, day_index))
 }
 
 
@@ -227,10 +227,10 @@ fetch_summary_counts <- function(statement_id, day_index) {
       (SELECT COUNT(DISTINCT constituency_id)
          FROM %s WHERE statement_id = ? AND day_index = ?) AS constituency_count
   ", TBL_RISK_POLYGONS, TBL_EA_INTERSECT, TBL_CONST_INTERSECT),
-  params = list(statement_id, day_index,
-                statement_id, day_index,
-                statement_id, day_index))
-
+                 params = list(statement_id, day_index,
+                               statement_id, day_index,
+                               statement_id, day_index))
+  
   if (nrow(dt) == 0L) {
     return(list(polygon_count = 0L, ea_area_count = 0L, constituency_count = 0L))
   }

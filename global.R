@@ -2,61 +2,90 @@
 # global.R
 # Runs once when the app starts, before any session begins.
 #
-# Anything defined here is available to ui.R and server.R via the calling
-# environment. Library loads, environment variables, shared constants, and
-# the risk matrix metadata all live here so the rest of the app doesn't have
-# to know where to find them.
+# Responsibilities:
+#   - Library loads
+#   - Environment variable validation
+#   - Shared constants (colour palette, risk matrix metadata)
+#
+# Anything defined here is visible to ui.R and server.R via lexical scoping.
+#
+# CONNECTION STRATEGY:
+#   brickster provides a DBI driver that wraps the Databricks SQL Statement
+#   Execution API. Each query opens a connection via dbConnect() in data.R
+#   and closes it on exit -- the helper handles auth, paging, and result
+#   conversion. No long-lived connection here, unlike the sparklyr version,
+#   because the underlying REST API has no setup cost worth amortising.
 # =============================================================================
 
 
 # -----------------------------------------------------------------------------
 # Library loads.
 #
-# The data layer is fastverse: data.table for in-memory manipulation, plus
-# kit and collapse where their helpers are cleaner than base equivalents.
-# The Shiny/UI layer is base R Shiny -- no bslib or htmlwidgets-wrapped UI
-# helpers, since the layout we want is straightforward and the extra deps
-# aren't earning their keep.
+# data.table for in-memory work, brickster for the DBI driver against the
+# Databricks SQL Statement Execution API, sf for polygon geometry, leaflet
+# for the map, htmltools for the custom HTML chunks.
+#
+# No sparklyr, no pysparklyr, no reticulate, no Python dependency at all.
+# This is the lighter route.
 # -----------------------------------------------------------------------------
 
-library(shiny)        # Reactive web framework
-library(data.table)   # In-memory tabular data, fast joins/filters
-library(odbc)         # Databricks SQL connectivity
-library(DBI)          # The database-agnostic interface odbc plugs into
-library(sf)           # Spatial dataframes for the polygon geometry
-library(leaflet)      # The map widget
-library(htmltools)    # Building custom HTML for the matrix and area list
-library(dotenv)       # Loads .env into Sys.getenv during local development
+library(shiny)
+library(data.table)
+library(brickster)    # DBI driver for Databricks SQL warehouses (no ODBC needed)
+library(DBI)
+library(sf)
+library(leaflet)
+library(htmltools)
+library(dotenv)
 
 
 # -----------------------------------------------------------------------------
 # Local .env loading.
 #
-# When running on Posit Workbench or a developer machine, .env holds the
-# Databricks credentials and the catalog/schema names. On Posit Connect the
-# environment is populated from the deployed app's Vars panel and the .env
-# file is absent (and deliberately excluded by .rscignore).
-#
-# load_dot_env() is silent if .env is missing, so guarding with file.exists
-# is belt-and-braces but makes the intent explicit.
+# Silent no-op when .env is missing, so the guard is belt-and-braces. On
+# Posit Connect the env vars come from the deployed app's Vars panel.
 # -----------------------------------------------------------------------------
 
 if (file.exists(".env")) load_dot_env()
 
 
 # -----------------------------------------------------------------------------
-# Table names assembled from environment variables.
+# Validate required environment variables.
 #
-# Centralising the catalog and schema here means swapping dev for prod is one
-# env-var change, not a search-and-replace across every query. Sys.getenv()
-# takes a default as its second argument which is used when the variable is
-# not set -- handy for local development before .env is populated.
+# Fail loudly at startup rather than letting a half-configured app crash
+# on first user interaction.
 # -----------------------------------------------------------------------------
 
-CAT <- Sys.getenv("FGS_CATALOG", "lab")
-SCH <- Sys.getenv("FGS_SCHEMA",  "fgs_dev")
+required_vars <- c(
+  "DATABRICKS_HOST",          # workspace URL with https:// prefix
+  "DATABRICKS_TOKEN",         # personal access token
+  "DATABRICKS_WAREHOUSE_ID",  # SQL warehouse identifier (NOT a cluster id)
+  "FGS_CATALOG",              # Unity Catalog name
+  "FGS_SCHEMA"                # Schema within that catalog
+)
 
-# paste() with sep = "." builds the three-part Unity Catalog identifier.
+missing_vars <- required_vars[!nzchar(Sys.getenv(required_vars))]
+if (length(missing_vars) > 0L) {
+  stop(
+    "Missing required environment variables: ",
+    paste(missing_vars, collapse = ", "),
+    ". Copy .env.example to .env and fill in the values, or set them in the ",
+    "Posit Connect Vars panel."
+  )
+}
+
+
+# -----------------------------------------------------------------------------
+# Three-part Unity Catalog table identifiers.
+#
+# Built once at startup so every query uses the same names. Catalog and
+# schema both come from env vars; nothing about the table location lives
+# in source.
+# -----------------------------------------------------------------------------
+
+CAT <- Sys.getenv("FGS_CATALOG")
+SCH <- Sys.getenv("FGS_SCHEMA")
+
 TBL_STATEMENTS      <- paste(CAT, SCH, "fgs_statements",                 sep = ".")
 TBL_RISK_POLYGONS   <- paste(CAT, SCH, "fgs_risk_polygons",              sep = ".")
 TBL_EA_INTERSECT    <- paste(CAT, SCH, "fgs_ea_area_intersections",      sep = ".")
@@ -66,11 +95,10 @@ TBL_CONST_INTERSECT <- paste(CAT, SCH, "fgs_constituency_intersections", sep = "
 # -----------------------------------------------------------------------------
 # FGS colour palette.
 #
-# Hex values taken from the FGS User Guide Table 1. Named character vector so
-# colour lookups in server.R read as RISK_COLOUR_HEX[<colour_label>]. The
-# matching CSS classes in ui.R use the same names with a capital first letter
-# (Red/Amber/Yellow/Green) so the risk-bar swatches in the right panel and
-# the polygon fills on the map stay consistent.
+# Hex values taken from the FGS User Guide Table 1. Named character vector
+# so colour lookups read as RISK_COLOUR_HEX[<colour_label>]. The CSS classes
+# in ui.R use the same names (Red/Amber/Yellow/Green) for the swatches in
+# the right-hand panel.
 # -----------------------------------------------------------------------------
 
 RISK_COLOUR_HEX <- c(
@@ -87,11 +115,6 @@ RISK_COLOUR_HEX <- c(
 # Sixteen cells in the 4x4 FGS matrix. x is impact (1 = Minimal, 4 = Severe),
 # y is likelihood (1 = Very Low, 4 = High). Each cell resolves to one of the
 # four colour bands per Table 1.
-#
-# A data.table here rather than a tibble or list-of-lists because:
-#   - the rest of the app uses data.table conventions
-#   - we'll index it by row position when building the UI
-#   - it has zero downstream cost
 # -----------------------------------------------------------------------------
 
 RISK_MATRIX <- data.table(
