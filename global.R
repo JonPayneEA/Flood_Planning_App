@@ -114,10 +114,10 @@ TBL_CONSTITUENCIES  <- paste(CAT, SCH, "parliamentary_constituencies",   sep = "
 # -----------------------------------------------------------------------------
 
 RISK_COLOUR_HEX <- c(
-  Red    = "#b02020",
-  Amber  = "#e08020",
-  Yellow = "#f0d040",
-  Green  = "#4f9d4f"
+  red    = "#b02020",
+  amber  = "#e08020",
+  yellow = "#f0d040",
+  green  = "#4f9d4f"
 )
 
 
