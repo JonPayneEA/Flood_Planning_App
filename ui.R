@@ -127,10 +127,10 @@ div.stat-card .stat-label {
 }
 .area-row:last-child { border-bottom: none; }
 .risk-bar { width: 4px; height: 22px; margin-right: 10px; border-radius: 1px; }
-.risk-bar.Red    { background: #b02020; }
-.risk-bar.Amber  { background: #e08020; }
-.risk-bar.Yellow { background: #f0d040; }
-.risk-bar.Green  { background: #4f9d4f; }
+.risk-bar.red    { background: #b02020; }
+.risk-bar.amber  { background: #e08020; }
+.risk-bar.yellow { background: #f0d040; }
+.risk-bar.green  { background: #4f9d4f; }
 
 /* --- 3. Risk matrix grid -------------------------------------------------- */
 

@@ -348,7 +348,7 @@ server <- function(input, output, session) {
       r <- areas[i]                             # one-row data.table
       tags$div(
         class = "area-row",
-        tags$div(class = paste("risk-bar", r$risk_colour)),
+        tags$div(class = paste("risk-bar", tolower(r$risk_colour))),
         tags$div(
           tags$strong(r$ea_area_name),
           tags$br(),
@@ -410,7 +410,7 @@ server <- function(input, output, session) {
     
     # Look up hex colours for each row's risk_colour band. Vectorised lookup
     # via named-vector indexing -- no loop, no apply().
-    fill_hex <- RISK_COLOUR_HEX[shape$risk_colour]
+    fill_hex <- RISK_COLOUR_HEX[tolower(shape$risk_colour)]
     
     # Build a popup string per polygon. paste0() over the vector columns
     # produces a vector of length nrow(shape), which leaflet maps row-by-row
@@ -457,7 +457,7 @@ server <- function(input, output, session) {
     shape <- ea_geometry()
     if (is.null(shape) || nrow(shape) == 0L) return()
     
-    fill_hex <- RISK_COLOUR_HEX[shape$risk_colour]
+    fill_hex <- RISK_COLOUR_HEX[tolower(shape$risk_colour)]
     
     popup_html <- paste0(
       "<strong>", shape$ea_area_name, "</strong><br>",
