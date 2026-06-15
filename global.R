@@ -30,10 +30,14 @@
 # -----------------------------------------------------------------------------
 
 library(shiny)
+library(bslib)        # Bootstrap 5 layouts -- needed for the CSS we use
 library(data.table)
 library(brickster)    # DBI driver for Databricks SQL warehouses (no ODBC needed)
 library(DBI)
 library(sf)
+library(geojsonsf)    # Parse GeoJSON strings to sf objects (storage format
+# used by the FGS pipeline -- GeoJSON in Delta all the
+# way through to Leaflet)
 library(leaflet)
 library(htmltools)
 library(dotenv)
@@ -90,6 +94,14 @@ TBL_STATEMENTS      <- paste(CAT, SCH, "fgs_statements",                 sep = "
 TBL_RISK_POLYGONS   <- paste(CAT, SCH, "fgs_risk_polygons",              sep = ".")
 TBL_EA_INTERSECT    <- paste(CAT, SCH, "fgs_ea_area_intersections",      sep = ".")
 TBL_CONST_INTERSECT <- paste(CAT, SCH, "fgs_constituency_intersections", sep = ".")
+
+# Geometry source tables. The intersection tables hold the join records
+# (which polygon hits which EA area or constituency) but not the polygon
+# shapes themselves. To draw the EA layer or the constituency layer we
+# join back to these for the geometry.
+TBL_EA_FWA          <- paste(CAT, SCH, "ea_flood_warning_areas",         sep = ".")
+TBL_EA_FAA          <- paste(CAT, SCH, "ea_flood_alert_areas",           sep = ".")
+TBL_CONSTITUENCIES  <- paste(CAT, SCH, "parliamentary_constituencies",   sep = ".")
 
 
 # -----------------------------------------------------------------------------

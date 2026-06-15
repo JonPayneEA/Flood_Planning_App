@@ -1,42 +1,38 @@
 # =============================================================================
 # data.R
-# All data access for the dashboard.
+# All data access for the dashboard, via brickster's DBI backend.
 #
-# One function per query. Each function opens a fresh ODBC connection, runs
-# one statement, and closes the connection on exit. We do not hold a long-
-# lived connection because Posit Connect can suspend idle apps and break held
-# connections silently -- when the user comes back, the next query fails in
-# an opaque way. Per-query connect costs a few hundred milliseconds and is
-# worth the predictability.
+# brickster wraps the Databricks SQL Statement Execution API. From R's
+# perspective it's a standard DBI driver: dbConnect, dbGetQuery, dbDisconnect.
+# Authentication uses DATABRICKS_HOST and DATABRICKS_TOKEN from the environment.
 #
-# All returned tables are data.tables. Geometry comes back as an sf object so
-# leaflet can plot it directly without conversion in server.R.
+# One function per query. Each:
+#   - opens a connection via brickster's DBI driver
+#   - runs one SQL statement
+#   - closes the connection on exit
+# Per-query connections rather than a shared one because the REST API has no
+# per-connection setup cost worth amortising, and per-query connections
+# survive Posit Connect's idle-app suspension cleanly.
 #
-# Environment variables required:
-#   DATABRICKS_SERVER_HOSTNAME    hostname of the workspace
-#   DATABRICKS_HTTP_PATH          HTTP path of the SQL warehouse
-#   DATABRICKS_TOKEN              personal access token (or service principal)
-#   FGS_CATALOG, FGS_SCHEMA       Unity Catalog location of the FGS tables
+# All returned tables are data.tables. Geometry is parsed into sf before
+# returning so leaflet can plot it directly.
 # =============================================================================
 
 
 # -----------------------------------------------------------------------------
 # db_connection()
 #
-# Opens an ODBC connection to a Databricks SQL warehouse using Posit's first-
-# party helper. odbc::databricks() handles the driver lookup and Spark-on-ODBC
-# quirks that would otherwise be a manual dsn-less connection string.
-#
-# Caller is responsible for closing the connection. Helpers below use
-# on.exit(dbDisconnect(...)) to guarantee that.
+# Opens a DBI connection to the configured SQL warehouse. The warehouse_id
+# argument tells brickster which warehouse to run the statement on; host
+# and token are picked up automatically from DATABRICKS_HOST and
+# DATABRICKS_TOKEN. We could pass them explicitly but env-var auth is the
+# documented pattern and keeps credentials out of any error trace.
 # -----------------------------------------------------------------------------
 
 db_connection <- function() {
   DBI::dbConnect(
-    odbc::databricks(),
-    httpPath  = Sys.getenv("DATABRICKS_HTTP_PATH"),
-    workspace = paste0("https://", Sys.getenv("DATABRICKS_SERVER_HOSTNAME")),
-    token     = Sys.getenv("DATABRICKS_TOKEN")
+    brickster::DatabricksSQL(),
+    warehouse_id = Sys.getenv("DATABRICKS_WAREHOUSE_ID")
   )
 }
 
@@ -44,46 +40,66 @@ db_connection <- function() {
 # -----------------------------------------------------------------------------
 # db_query()
 #
-# Convenience wrapper: connect, query, disconnect, return a data.table.
-# Parameters are bound via DBI's positional ? placeholders -- safer than
-# pasting into the SQL string, since DBI handles quoting and escaping.
+# Convenience wrapper: connect, run query, disconnect, return a data.table.
+# setDT() converts the result by reference with no copy. The trailing []
+# forces print-on-return, useful when calling these functions directly at
+# the REPL during development.
 #
-# setDT() converts the data.frame returned by DBI into a data.table by
-# reference, with no copy. Cheap, and means every query in this file returns
-# the same type.
+# Note on parameterisation:
+#   brickster's DBI implementation does not support the params = argument to
+#   dbGetQuery() that standard DBI drivers expose. Values are interpolated
+#   into the SQL string via sprintf() in each fetch_* function below. This
+#   is safe for our queries because every bound value is an integer we
+#   control (statement_id and day_index), never user input.
 # -----------------------------------------------------------------------------
 
-db_query <- function(sql, params = NULL) {
+db_query <- function(sql) {
   con <- db_connection()
   on.exit(DBI::dbDisconnect(con), add = TRUE)
-  
-  result <- if (is.null(params)) {
-    DBI::dbGetQuery(con, sql)
-  } else {
-    DBI::dbGetQuery(con, sql, params = params)
-  }
-  
+  result <- DBI::dbGetQuery(con, sql)
   setDT(result)
-  result[]    # The [] forces print-on-return, useful when debugging at REPL.
+  result[]
 }
 
 
 # =============================================================================
 # QUERIES
 #
-# Each function below corresponds to one block of data the UI needs. Keeping
-# them as named functions (rather than building queries inline in server.R)
-# means each query can be lifted out and run by hand in Databricks SQL during
-# debugging, and the SQL text lives in one place.
+# Each function corresponds to one block of data the UI needs. SQL is kept
+# verbose so it lifts straight into Databricks SQL for debugging.
 # =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# fetch_recent_statements()
+#
+# Returns the most recent N statements as a data.table for use in the
+# statement picker dropdown. Caller composes display labels from issued_at
+# and statement_id.
+#
+# Used only when the app starts up (to populate the dropdown choices); not
+# called per reactive update.
+# -----------------------------------------------------------------------------
+
+fetch_recent_statements <- function(n = 20L) {
+  db_query(sprintf("
+    SELECT
+      statement_id,
+      issued_at,
+      headline
+    FROM %s
+    ORDER BY issued_at DESC
+    LIMIT %d
+  ", TBL_STATEMENTS, as.integer(n)))
+}
 
 
 # -----------------------------------------------------------------------------
 # fetch_latest_statement()
 #
-# Returns metadata for the most recently issued FGS statement, as a one-row
-# named list. Used by the title banner ("Forecast Day 1 - issued 22 May 14:30")
-# and to anchor every other query to a specific statement_id.
+# Returns metadata for the most recently issued FGS statement, as a named
+# list. The title banner uses this; every other query depends on the
+# statement_id it provides.
 #
 # Returns NULL when the table is empty -- caller checks with is.null().
 # -----------------------------------------------------------------------------
@@ -105,21 +121,19 @@ fetch_latest_statement <- function() {
   ", TBL_STATEMENTS))
   
   if (nrow(dt) == 0L) return(NULL)
-  as.list(dt[1L])    # data.table's [1L] returns the first row as a data.table;
-  # as.list() unboxes it to a named list for caller convenience.
+  as.list(dt[1L])
 }
 
 
 # -----------------------------------------------------------------------------
 # fetch_risk_polygons()
 #
-# Returns the FGS risk polygons for a given statement and forecast day, as
-# an sf object suitable for leaflet::addPolygons().
+# Returns FGS risk polygons for a given statement-day as an sf object.
 #
-# Geometry is requested as WKT (ST_ASTEXT) rather than binary because:
-#   - the volume per statement-day is small (tens of polygons, not millions)
-#   - WKT survives ODBC trip without driver-specific binary handling
-#   - sf::st_as_sf parses WKT natively
+# Geometry is stored as GeoJSON strings in the Delta table, per the
+# pipeline-wide choice (GeoJSON from Delta through to Leaflet, no
+# conversion step). The string column is selected as-is and parsed in
+# R by geojsonsf::geojson_sfc.
 #
 # The six risk matrix columns (risk_x, risk_y, impact_label, likelihood_label,
 # risk_level, risk_colour) are pulled through directly so downstream filtering
@@ -139,42 +153,53 @@ fetch_risk_polygons <- function(statement_id, day_index) {
       likelihood_label,
       risk_level,
       risk_colour,
-      ST_ASTEXT(geometry) AS geometry_wkt
+      geometry
     FROM %s
-    WHERE statement_id = ?
-      AND day_index    = ?
-  ", TBL_RISK_POLYGONS),
-                 params = list(statement_id, day_index))
+    WHERE statement_id = %d
+      AND day_index    = %d
+  ", TBL_RISK_POLYGONS, as.integer(statement_id), as.integer(day_index)))
   
-  # Empty result -- return an empty sf object so callers can pattern-match on
-  # nrow() without separate NULL checks.
+  # Empty result: return an empty sf carrying the full attribute schema, so
+  # downstream code can read shape$risk_colour etc. without NULL errors.
+  # Quiet FGSs (no polygons today) are normal -- this is an expected state,
+  # not an error.
   if (nrow(dt) == 0L) {
-    return(sf::st_sf(geometry = sf::st_sfc(), crs = 4326))
+    return(sf::st_sf(
+      poly_id          = integer(),
+      source           = character(),
+      day_index        = integer(),
+      forecast_date    = as.Date(character()),
+      risk_x           = integer(),
+      risk_y           = integer(),
+      impact_label     = character(),
+      likelihood_label = character(),
+      risk_level       = character(),
+      risk_colour      = character(),
+      geometry         = sf::st_sfc(),
+      crs              = 4326
+    ))
   }
   
-  # sf::st_as_sf parses the WKT column and returns an sf object. CRS 4326
-  # (WGS84 lat/lon) is the FGS GeoJSON default and the CRS leaflet expects.
-  # We rename the parsed column to "geometry" so downstream code doesn't have
-  # to remember the column was called geometry_wkt at fetch time.
-  shape <- sf::st_as_sf(dt, wkt = "geometry_wkt", crs = 4326)
-  sf::st_geometry(shape) <- "geometry"
-  shape
+  # Geometry is stored as GeoJSON strings in the Delta table -- this is the
+  # pipeline-wide format choice, GeoJSON from Delta through to Leaflet.
+  # geojsonsf::geojson_sfc parses a character vector of GeoJSON strings into
+  # an sfc geometry column in one vectorised call. CRS 4326 (WGS84 lat/lon)
+  # is the GeoJSON default and what leaflet expects.
+  geom <- geojsonsf::geojson_sfc(dt$geometry)
+  dt[, geometry := NULL]
+  sf::st_sf(dt, geometry = geom, crs = 4326)
 }
 
 
 # -----------------------------------------------------------------------------
 # fetch_ea_areas_for_statement()
 #
-# Returns the EA flood areas (FWA/FAA) that intersect any risk polygon in the
-# given statement-day, ordered by risk descending then intersection size.
+# Returns EA flood areas (FWA/FAA) intersecting any risk polygon in the
+# statement-day, ordered by risk band descending then intersection size.
 #
-# The right-hand panel reads top-down, so the SQL does the sort rather than
-# leaving it to R -- the database is already touching the rows, and ORDER BY
-# in SQL is essentially free at this volume.
-#
-# CASE statement on risk_colour rather than ordering by risk_level numerically
-# because risk_level is text in the source table; using the colour ordinal
-# directly keeps the sort independent of any future relabelling.
+# The CASE expression on risk_colour gives a stable Red > Amber > Yellow >
+# Green sort that doesn't depend on the textual risk_level field. Better
+# done in SQL than in R because the database is already touching the rows.
 # -----------------------------------------------------------------------------
 
 fetch_ea_areas_for_statement <- function(statement_id, day_index) {
@@ -190,8 +215,8 @@ fetch_ea_areas_for_statement <- function(statement_id, day_index) {
       risk_y,
       intersection_pct
     FROM %s
-    WHERE statement_id = ?
-      AND day_index    = ?
+    WHERE statement_id = %d
+      AND day_index    = %d
     ORDER BY
       CASE risk_colour
         WHEN 'Red'    THEN 1
@@ -201,38 +226,169 @@ fetch_ea_areas_for_statement <- function(statement_id, day_index) {
         ELSE 5
       END,
       intersection_pct DESC
-  ", TBL_EA_INTERSECT),
-           params = list(statement_id, day_index))
+  ", TBL_EA_INTERSECT, as.integer(statement_id), as.integer(day_index)))
 }
 
 
 # -----------------------------------------------------------------------------
 # fetch_summary_counts()
 #
-# Returns three headline counts (polygons, EA areas, constituencies affected)
-# for the count cards at the top of the right-hand panel.
-#
-# One query with three correlated sub-selects rather than three separate round
-# trips. ODBC overhead per round trip is roughly 50-100ms over a corporate
-# network, so combining them visibly speeds up the initial render.
+# Three headline counts for the count cards: polygons, distinct EA areas,
+# distinct constituencies. One round trip rather than three; the REST API
+# overhead is modest but visible at startup if we make multiple calls.
 # -----------------------------------------------------------------------------
 
 fetch_summary_counts <- function(statement_id, day_index) {
+  
+  sid <- as.integer(statement_id)
+  did <- as.integer(day_index)
+  
   dt <- db_query(sprintf("
     SELECT
       (SELECT COUNT(*)
-         FROM %s WHERE statement_id = ? AND day_index = ?) AS polygon_count,
+         FROM %s WHERE statement_id = %d AND day_index = %d) AS polygon_count,
       (SELECT COUNT(DISTINCT ea_area_code)
-         FROM %s WHERE statement_id = ? AND day_index = ?) AS ea_area_count,
+         FROM %s WHERE statement_id = %d AND day_index = %d) AS ea_area_count,
       (SELECT COUNT(DISTINCT constituency_id)
-         FROM %s WHERE statement_id = ? AND day_index = ?) AS constituency_count
-  ", TBL_RISK_POLYGONS, TBL_EA_INTERSECT, TBL_CONST_INTERSECT),
-                 params = list(statement_id, day_index,
-                               statement_id, day_index,
-                               statement_id, day_index))
+         FROM %s WHERE statement_id = %d AND day_index = %d) AS constituency_count
+  ",
+                         TBL_RISK_POLYGONS,   sid, did,
+                         TBL_EA_INTERSECT,    sid, did,
+                         TBL_CONST_INTERSECT, sid, did))
   
   if (nrow(dt) == 0L) {
     return(list(polygon_count = 0L, ea_area_count = 0L, constituency_count = 0L))
   }
   as.list(dt[1L])
+}
+
+
+# -----------------------------------------------------------------------------
+# fetch_ea_geometry()
+#
+# Returns affected EA flood areas with their polygon geometry, ready to draw
+# on the map. Unions the FWA and FAA geometry tables so the layer shows both
+# types. The intersection table is the inner driver -- only areas affected
+# by the current statement-day appear.
+#
+# Sort and risk-colour come from the intersection table (the polygon's risk
+# colour, not the area's). One row per area per statement-day; if an area
+# overlaps multiple polygons, the join surfaces all rows but the map will
+# overdraw them so the strongest colour wins -- which is fine, the area
+# count panel already deduplicates by code for the headline number.
+# -----------------------------------------------------------------------------
+
+fetch_ea_geometry <- function(statement_id, day_index) {
+  
+  sid <- as.integer(statement_id)
+  did <- as.integer(day_index)
+  
+  dt <- db_query(sprintf("
+    WITH affected AS (
+      SELECT
+        i.ea_area_code,
+        i.ea_area_name,
+        i.ea_area_type,
+        i.risk_colour,
+        i.risk_level,
+        i.intersection_pct,
+        i.source
+      FROM %s i
+      WHERE i.statement_id = %d
+        AND i.day_index    = %d
+    )
+    SELECT
+      a.ea_area_code,
+      a.ea_area_name,
+      a.ea_area_type,
+      a.risk_colour,
+      a.risk_level,
+      a.intersection_pct,
+      a.source,
+      g.geometry
+    FROM affected a
+    LEFT JOIN (
+      SELECT ea_area_code, geometry FROM %s
+      UNION ALL
+      SELECT ea_area_code, geometry FROM %s
+    ) g
+      ON g.ea_area_code = a.ea_area_code
+    WHERE g.geometry IS NOT NULL
+  ",
+                         TBL_EA_INTERSECT, sid, did,
+                         TBL_EA_FWA,
+                         TBL_EA_FAA))
+  
+  if (nrow(dt) == 0L) {
+    # Return an empty sf with the full attribute schema, not just a geometry
+    # column. Downstream code reads shape$risk_colour etc.; an sf with only
+    # geometry causes those lookups to return NULL and the observer to error.
+    return(sf::st_sf(
+      ea_area_code     = character(),
+      ea_area_name     = character(),
+      ea_area_type     = character(),
+      risk_colour      = character(),
+      risk_level       = character(),
+      intersection_pct = numeric(),
+      source           = character(),
+      geometry         = sf::st_sfc(),
+      crs              = 4326
+    ))
+  }
+  
+  # Geometry comes back as GeoJSON strings, same as the risk polygons.
+  geom <- geojsonsf::geojson_sfc(dt$geometry)
+  dt[, geometry := NULL]
+  sf::st_sf(dt, geometry = geom, crs = 4326)
+}
+#
+# Returns affected parliamentary constituencies with their polygon geometry.
+# Same join pattern as fetch_ea_geometry -- intersection table for the
+# affected set, constituency table for the shapes.
+# -----------------------------------------------------------------------------
+
+fetch_constituency_geometry <- function(statement_id, day_index) {
+  
+  sid <- as.integer(statement_id)
+  did <- as.integer(day_index)
+  
+  dt <- db_query(sprintf("
+    WITH affected AS (
+      SELECT DISTINCT
+        i.constituency_id,
+        i.constituency_name,
+        i.risk_colour,
+        i.risk_level
+      FROM %s i
+      WHERE i.statement_id = %d
+        AND i.day_index    = %d
+    )
+    SELECT
+      a.constituency_id,
+      a.constituency_name,
+      a.risk_colour,
+      a.risk_level,
+      c.geometry
+    FROM affected a
+    LEFT JOIN %s c
+      ON c.constituency_id = a.constituency_id
+    WHERE c.geometry IS NOT NULL
+  ",
+                         TBL_CONST_INTERSECT, sid, did,
+                         TBL_CONSTITUENCIES))
+  
+  if (nrow(dt) == 0L) {
+    return(sf::st_sf(
+      constituency_id   = character(),
+      constituency_name = character(),
+      risk_colour       = character(),
+      risk_level        = character(),
+      geometry          = sf::st_sfc(),
+      crs               = 4326
+    ))
+  }
+  
+  geom <- geojsonsf::geojson_sfc(dt$geometry)
+  dt[, geometry := NULL]
+  sf::st_sf(dt, geometry = geom, crs = 4326)
 }

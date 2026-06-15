@@ -30,15 +30,15 @@
 # -----------------------------------------------------------------------------
 
 matrix_filter_ui <- function() {
-
+  
   # Build a list of styled div+checkbox elements, one per cell in the matrix.
   # lapply over row indices because data.table's row iteration is by-index;
   # this stays explicit about what we're iterating over.
   cells <- lapply(seq_len(nrow(RISK_MATRIX)), function(i) {
-
+    
     cell <- RISK_MATRIX[i]                          # one-row data.table
     default_ticked <- cell$colour %in% c("amber", "red")
-
+    
     tags$div(
       class    = paste("matrix-cell", cell$colour),  # e.g. "matrix-cell red"
       `data-x` = cell$x,                             # data-* attrs for any
@@ -50,7 +50,7 @@ matrix_filter_ui <- function() {
       )
     )
   })
-
+  
   # tagList holds a label, a hint, the grid itself, and an axis caption.
   # do.call(tags$div, ...) is the standard way to splat a list of children
   # into a single parent tag.
@@ -101,13 +101,20 @@ body { background: #f8f9fa; font-size: 14px; }
 
 /* --- 2. Stat cards -------------------------------------------------------- */
 
-.stat-card {
-  background: #fff; border: 1px solid #dee2e6; border-radius: 4px;
-  padding: 12px; text-align: center;
+div.stat-card {
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  padding: 12px;
+  text-align: center;
+  /* Explicit display block so this can't ever be picked up as an inline-block
+     or button by an over-eager Bootstrap rule. */
+  display: block;
+  cursor: default;
 }
-.stat-num { font-size: 24px; font-weight: 700; line-height: 1; color: #212529; }
-.stat-num.accent { color: #c8581f; }
-.stat-label {
+div.stat-card .stat-num { font-size: 24px; font-weight: 700; line-height: 1; color: #212529; }
+div.stat-card .stat-num.accent { color: #c8581f; }
+div.stat-card .stat-label {
   font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em;
   color: #6c757d; margin-top: 4px;
 }
@@ -128,16 +135,30 @@ body { background: #f8f9fa; font-size: 14px; }
 /* --- 3. Risk matrix grid -------------------------------------------------- */
 
 .risk-matrix-grid {
-  display: grid; grid-template-columns: repeat(4, 1fr);
-  gap: 2px; margin-bottom: 4px;
+  display: grid !important;
+  grid-template-columns: repeat(4, 36px) !important;
+  grid-auto-rows: 36px !important;
+  gap: 2px;
+  margin-bottom: 4px;
+  width: max-content !important;
 }
 .matrix-cell {
-  aspect-ratio: 1; position: relative;
-  display: flex; align-items: center; justify-content: center;
+  width: 36px !important;
+  height: 36px !important;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none !important;
 }
-.matrix-cell .form-group  { margin: 0; }
-.matrix-cell .form-check  { margin: 0; padding: 0; }
-.matrix-cell .form-check-input { margin: 0; cursor: pointer; }
+.matrix-cell .form-group     { margin: 0 !important; }
+.matrix-cell .form-check     { margin: 0 !important; padding: 0 !important; min-height: 0 !important; }
+.matrix-cell .form-check-input {
+  margin: 0;
+  cursor: pointer;
+  float: none;          /* Bootstrap 5 floats checkboxes by default; we don't want that */
+}
+.matrix-cell .form-check-label { display: none; }  /* hide the empty label that Shiny adds */
 .matrix-cell.green  { background: #4f9d4f; }
 .matrix-cell.yellow { background: #f0d040; }
 .matrix-cell.amber  { background: #e08020; }
@@ -146,6 +167,22 @@ body { background: #f8f9fa; font-size: 14px; }
 .matrix-axis-label {
   font-size: 10px; color: #495057; text-align: center; margin-top: 4px;
 }
+
+/* --- 4. Quiet-state notice ------------------------------------------------ */
+
+/* Shown above the map when the current statement-day has no risk polygons.
+   A neutral light-blue rather than warning-amber, because this is a normal
+   operational state. */
+.quiet-notice {
+  background: #e7f1f9;
+  border: 1px solid #b6d4ec;
+  color: #1f4f7a;
+  border-radius: 4px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+.quiet-notice strong { font-weight: 600; }
 "
 
 
@@ -160,24 +197,43 @@ body { background: #f8f9fa; font-size: 14px; }
 
 sidebar <- tags$div(
   class = "shiny-sidebar",
-
+  
+  h6("FGS statement"),
+  # Choices populated server-side once fetch_recent_statements() has run.
+  # Display labels show issue date/time; values are statement_ids so the
+  # filters() reactive in server.R picks the right rows.
+  selectInput("statement_id", NULL,
+              choices = NULL,         # populated by updateSelectInput in server
+              selectize = FALSE),
+  
   h6("Map layers"),
   checkboxInput("layer_polygons",       "FGS risk polygons", value = TRUE),
   checkboxInput("layer_ea_areas",       "EA flood areas",    value = TRUE),
   checkboxInput("layer_constituencies", "Constituencies",    value = FALSE),
-
+  
+  # Sub-control for the EA layer: pick which area types appear. Indented
+  # visually so it reads as a child of the EA layer toggle.
+  conditionalPanel(
+    condition = "input.layer_ea_areas == true",
+    tags$div(
+      style = "margin-left: 16px; margin-top: -4px;",
+      checkboxInput("ea_type_fwa", "Flood Warning Areas", value = TRUE),
+      checkboxInput("ea_type_faa", "Flood Alert Areas",   value = TRUE)
+    )
+  ),
+  
   h6("Risk source"),
   checkboxInput("src_river",   "River",       value = TRUE),
   checkboxInput("src_surface", "Surface",     value = TRUE),
   checkboxInput("src_coastal", "Coastal",     value = TRUE),
   checkboxInput("src_ground",  "Groundwater", value = FALSE),
-
+  
   matrix_filter_ui(),
-
+  
   h6("Intersection threshold"),
   sliderInput("intersect_threshold", NULL,
               min = 0, max = 100, value = 25, post = "%"),
-
+  
   h6("Forecast day"),
   selectInput("day_index", NULL,
               choices  = c("Day 1" = "1", "Day 2" = "2",
@@ -201,6 +257,10 @@ centre <- tags$div(
     h5(textOutput("map_title", inline = TRUE)),
     tags$small(textOutput("map_subtitle", inline = TRUE), class = "text-muted")
   ),
+  # Quiet-state notice. Shown when there are no FGS polygons for the current
+  # statement-day. A quiet FGS is operationally normal -- this is an
+  # expected state, not an error.
+  uiOutput("quiet_notice"),
   leaflet::leafletOutput("live_map", height = "500px")
 )
 
@@ -216,7 +276,7 @@ centre <- tags$div(
 
 right_panel <- tags$div(
   class = "p-3",
-
+  
   # Stat cards.
   tags$div(
     class = "mb-3",
@@ -224,18 +284,18 @@ right_panel <- tags$div(
              tags$div(textOutput("count_polygons", inline = TRUE),
                       class = "stat-num accent"),
              tags$div("FGS polygons", class = "stat-label")),
-
+    
     tags$div(class = "stat-card mt-2",
              tags$div(textOutput("count_ea_areas", inline = TRUE),
                       class = "stat-num"),
              tags$div("EA areas affected", class = "stat-label")),
-
+    
     tags$div(class = "stat-card mt-2",
              tags$div(textOutput("count_constituencies", inline = TRUE),
                       class = "stat-num"),
              tags$div("Constituencies", class = "stat-label"))
   ),
-
+  
   # Affected-areas list (server.R builds the row markup).
   tags$div(
     class = "panel-section",
@@ -253,21 +313,22 @@ right_panel <- tags$div(
 # we agreed on (live first, then analytics in order of operational usefulness).
 # -----------------------------------------------------------------------------
 
-ui <- fluidPage(
+ui <- bslib::page_fluid(
+  theme = bslib::bs_theme(version = 5),
   tags$head(tags$style(HTML(custom_css))),
   titlePanel("FGS Flood Guidance"),
-
+  
   tabsetPanel(
     id = "main_tabs",
-
+    
     tabPanel("Live view",
-      fluidRow(
-        column(2, sidebar),
-        column(7, centre),
-        column(3, right_panel)
-      )
+             fluidRow(
+               column(2, sidebar),
+               column(7, centre),
+               column(3, right_panel)
+             )
     ),
-
+    
     # Placeholders.
     tabPanel("Warning issue times",   tags$p("Coming soon.")),
     tabPanel("Forecast verification", tags$p("Coming soon.")),
