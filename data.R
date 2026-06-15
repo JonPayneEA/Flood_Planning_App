@@ -341,6 +341,10 @@ fetch_ea_geometry <- function(statement_id, day_index) {
   dt[, geometry := NULL]
   sf::st_sf(dt, geometry = geom, crs = 4326)
 }
+
+
+# -----------------------------------------------------------------------------
+# fetch_constituency_geometry()
 #
 # Returns affected parliamentary constituencies with their polygon geometry.
 # Same join pattern as fetch_ea_geometry -- intersection table for the

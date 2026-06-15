@@ -132,8 +132,8 @@ RISK_COLOUR_HEX <- c(
 RISK_MATRIX <- data.table(
   x      = c(1, 2, 3, 4,   1, 2, 3, 4,   1, 2, 3, 4,   1, 2, 3, 4),
   y      = c(4, 4, 4, 4,   3, 3, 3, 3,   2, 2, 2, 2,   1, 1, 1, 1),
-  colour = c("green",  "yellow", "amber",  "red",
-             "green",  "yellow", "amber",  "amber",
-             "green",  "green",  "yellow", "amber",
-             "green",  "green",  "yellow", "yellow")
+  colour = c("Green",  "Yellow", "Amber",  "Red",
+             "Green",  "Yellow", "Amber",  "Amber",
+             "Green",  "Green",  "Yellow", "Amber",
+             "Green",  "Green",  "Yellow", "Yellow")
 )
