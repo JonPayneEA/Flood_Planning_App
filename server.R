@@ -41,7 +41,7 @@ server <- function(input, output, session) {
   # Labels combine date/time and statement_id for an unambiguous read.
   # ---------------------------------------------------------------------------
   
-  recent <- fetch_recent_statements(20L)
+  recent <- fetch_recent_statements(100L)
   if (nrow(recent) > 0L) {
     labels <- sprintf("%s  (id %d)",
                       format(as.POSIXct(recent$issued_at), "%a %d %b %H:%M"),
