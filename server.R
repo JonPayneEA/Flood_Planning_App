@@ -105,7 +105,7 @@ server <- function(input, output, session) {
       if (isTRUE(input$src_river))   "river",
       if (isTRUE(input$src_surface)) "surface",
       if (isTRUE(input$src_coastal)) "coastal",
-      if (isTRUE(input$src_ground))  "ground"
+      if (isTRUE(input$src_ground))  "groundwater"
     )
     
     # Read every matrix checkbox. Each input id is mtx_{x}_{y}. We iterate
@@ -162,7 +162,7 @@ server <- function(input, output, session) {
     
     # Subset rows whose source is in the selected set. sf's [ ] subsetting
     # preserves the geometry column, so the result is still an sf object.
-    shape <- shape[shape$source %in% f$source_codes, ]
+    shape <- shape[tolower(shape$source) %in% f$source_codes, ]
     if (nrow(shape) == 0L) return(shape)
     
     # If the user has unticked every cell, return zero rows (an empty filter
@@ -200,8 +200,8 @@ server <- function(input, output, session) {
     areas <- fetch_ea_areas_for_statement(f$statement_id, f$day_index)
     # Three filters: source must be selected, area type must be ticked,
     # intersection must clear the threshold.
-    areas[source       %in% f$source_codes
-          & ea_area_type %in% f$ea_types
+    areas[tolower(source) %in% f$source_codes
+          & ea_area_type  %in% f$ea_types
           & intersection_pct >= f$min_intersection]
   })
   
@@ -224,8 +224,8 @@ server <- function(input, output, session) {
     shape <- fetch_ea_geometry(f$statement_id, f$day_index)
     if (nrow(shape) == 0L) return(shape)
     
-    shape <- shape[shape$source       %in% f$source_codes, ]
-    shape <- shape[shape$ea_area_type %in% f$ea_types,     ]
+    shape <- shape[tolower(shape$source) %in% f$source_codes, ]
+    shape <- shape[shape$ea_area_type  %in% f$ea_types,     ]
     shape[shape$intersection_pct >= f$min_intersection, ]
   })
   
