@@ -408,10 +408,10 @@ server <- function(input, output, session) {
     if (!isTRUE(input$layer_polygons))       return()
     if (is.null(shape) || nrow(shape) == 0L) return()
     
-    # Look up hex colours for each row's risk_colour band. Vectorised lookup
-    # via named-vector indexing -- no loop, no apply().
-    fill_hex <- RISK_COLOUR_HEX[tolower(shape$risk_colour)]
-    
+    # Look up hex colours for each row's risk_colour band.
+    fill_hex <- unname(RISK_COLOUR_HEX[trimws(tolower(shape$risk_colour))])
+    fill_hex[is.na(fill_hex)] <- "#ff00ff"   # magenta flags any unmatched colour values
+
     # Build a popup string per polygon. paste0() over the vector columns
     # produces a vector of length nrow(shape), which leaflet maps row-by-row
     # to each polygon.
@@ -457,8 +457,8 @@ server <- function(input, output, session) {
     shape <- ea_geometry()
     if (is.null(shape) || nrow(shape) == 0L) return()
     
-    fill_hex <- RISK_COLOUR_HEX[tolower(shape$risk_colour)]
-    
+    fill_hex <- unname(RISK_COLOUR_HEX[trimws(tolower(shape$risk_colour))])
+
     popup_html <- paste0(
       "<strong>", shape$ea_area_name, "</strong><br>",
       "<small>", shape$ea_area_type, " &middot; ", shape$source, "</small><br>",
