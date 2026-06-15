@@ -105,7 +105,7 @@ server <- function(input, output, session) {
       if (isTRUE(input$src_river))   "river",
       if (isTRUE(input$src_surface)) "surface",
       if (isTRUE(input$src_coastal)) "coastal",
-      if (isTRUE(input$src_ground))  "groundwater"
+      if (isTRUE(input$src_ground))  "ground"
     )
     
     # Read every matrix checkbox. Each input id is mtx_{x}_{y}. We iterate
@@ -122,8 +122,8 @@ server <- function(input, output, session) {
     # in the right-hand list. Stored as the codes the intersection table
     # uses, so the downstream filter is a direct %in% match.
     ea_types <- c(
-      if (isTRUE(input$ea_type_fwa)) "FWA",
-      if (isTRUE(input$ea_type_faa)) "FAA"
+      if (isTRUE(input$ea_type_fwa)) "flood_warning",
+      if (isTRUE(input$ea_type_faa)) "flood_alert"
     )
     
     list(
