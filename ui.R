@@ -37,10 +37,10 @@ matrix_filter_ui <- function() {
   cells <- lapply(seq_len(nrow(RISK_MATRIX)), function(i) {
     
     cell <- RISK_MATRIX[i]                          # one-row data.table
-    default_ticked <- cell$colour %in% c("amber", "red")
-    
+    default_ticked <- cell$colour %in% c("Amber", "Red")
+
     tags$div(
-      class    = paste("matrix-cell", cell$colour),  # e.g. "matrix-cell red"
+      class    = paste("matrix-cell", tolower(cell$colour)),  # e.g. "matrix-cell red"
       `data-x` = cell$x,                             # data-* attrs for any
       `data-y` = cell$y,                             # future JS hook
       checkboxInput(
