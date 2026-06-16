@@ -159,3 +159,7 @@ RISK_MATRIX <- data.table(
              "Green",  "Green",  "Yellow", "Amber",
              "Green",  "Green",  "Yellow", "Yellow")
 )
+
+# Axis labels for the matrix UI, indexed by x and y respectively (1-based).
+IMPACT_LABELS     <- c("Minimal", "Minor", "Significant", "Severe")
+LIKELIHOOD_LABELS <- c("Very Low", "Low", "Medium", "High")
