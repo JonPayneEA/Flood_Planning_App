@@ -77,8 +77,11 @@ db_query <- function(sql) {
 # statement picker dropdown. Caller composes display labels from issued_at
 # and statement_id.
 #
-# Used only when the app starts up (to populate the dropdown choices); not
-# called per reactive update.
+# Fetched once at session start (to populate the dropdown choices); also
+# doubles as the lookup table selected_statement() reads from on every
+# statement-picker change, so the per-source forecast text, the England-wide
+# forecast narrative, and the PDF link are all available with no extra
+# round trip.
 # -----------------------------------------------------------------------------
 
 fetch_recent_statements <- function(n = 20L) {
@@ -86,7 +89,13 @@ fetch_recent_statements <- function(n = 20L) {
     SELECT
       statement_id,
       issued_at,
-      headline
+      headline,
+      source_coastal,
+      source_surface,
+      source_ground,
+      source_fluvial,
+      england_forecast,
+      pdf_url
     FROM %s
     ORDER BY issued_at DESC
     LIMIT %d

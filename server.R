@@ -366,8 +366,90 @@ server <- function(input, output, session) {
             if (is.null(stmt)) "-" else stmt$statement_id,
             nrow(polygons()), uniqueN(ea_areas()$ea_area_code))
   })
-  
-  
+
+
+  # ---------------------------------------------------------------------------
+  # field_or_dash()
+  #
+  # Small helper shared by the headline notice and the source info boxes:
+  # statement text fields can be NA or empty depending on what the FGS
+  # pipeline filled in, and we want a calm "-" rather than blank space or an
+  # NA-coercion error in either case.
+  # ---------------------------------------------------------------------------
+
+  field_or_dash <- function(value) {
+    if (is.null(value) || isTRUE(is.na(value)) || !nzchar(value)) "-" else value
+  }
+
+
+  # ---------------------------------------------------------------------------
+  # Headline notice.
+  #
+  # Shown above the map for every loaded statement, mirroring the quiet-state
+  # notice's styling so the two read as the same family of "context banner
+  # above the map" rather than competing visual languages.
+  # ---------------------------------------------------------------------------
+
+  output$headline_notice <- renderUI({
+    stmt <- selected_statement()
+    if (is.null(stmt)) return(NULL)
+
+    headline <- field_or_dash(stmt$headline)
+    if (headline == "-") return(NULL)
+
+    tags$div(
+      class = "headline-notice",
+      tags$strong("Headline: "),
+      headline
+    )
+  })
+
+
+  # ---------------------------------------------------------------------------
+  # Statement info boxes (per-source forecast text, England-wide forecast,
+  # PDF link).
+  #
+  # All sourced from the statement row, not the filtered polygon data --
+  # these are the FGS pipeline's own narrative fields for the statement as a
+  # whole, not derived from what's currently ticked in the sidebar.
+  # ---------------------------------------------------------------------------
+
+  output$statement_info <- renderUI({
+    stmt <- selected_statement()
+    if (is.null(stmt)) return(NULL)
+
+    source_box <- function(label, value) {
+      tags$div(
+        class = "source-info-card",
+        tags$div(label, class = "source-info-label"),
+        tags$div(field_or_dash(value), class = "source-info-value")
+      )
+    }
+
+    pdf_url <- field_or_dash(stmt$pdf_url)
+
+    tagList(
+      tags$div(
+        class = "source-info-grid",
+        source_box("Coastal", stmt$source_coastal),
+        source_box("Surface", stmt$source_surface),
+        source_box("Ground",  stmt$source_ground),
+        source_box("Fluvial", stmt$source_fluvial)
+      ),
+      tags$div(
+        class = "panel-section mt-2",
+        tags$div("England forecast", class = "panel-h"),
+        tags$p(field_or_dash(stmt$england_forecast), class = "mb-0 mt-2")
+      ),
+      if (pdf_url != "-") {
+        tags$a(href = pdf_url, target = "_blank", rel = "noopener noreferrer",
+               class = "btn btn-sm btn-outline-secondary mt-2",
+               "View FGS PDF")
+      }
+    )
+  })
+
+
   # ---------------------------------------------------------------------------
   # Stat cards.
   #

@@ -258,6 +258,44 @@ div.stat-card .stat-label {
 @keyframes map-spin {
   to { transform: rotate(360deg); }
 }
+
+/* --- 6. Headline notice & statement info boxes ----------------------------- */
+
+.headline-notice {
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-left: 4px solid #c8581f;
+  border-radius: 4px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+.headline-notice strong { font-weight: 600; }
+
+.source-info-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+.source-info-card {
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  padding: 10px;
+  text-align: center;
+}
+.source-info-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6c757d;
+  margin-bottom: 4px;
+}
+.source-info-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #212529;
+}
 "
 
 
@@ -335,6 +373,10 @@ centre <- tags$div(
     h5(textOutput("map_title", inline = TRUE)),
     tags$small(textOutput("map_subtitle", inline = TRUE), class = "text-muted")
   ),
+  # Headline notice. Shown for every loaded statement, above the quiet-state
+  # notice -- statement-level context first, then the day-specific risk
+  # state, then the map itself.
+  uiOutput("headline_notice"),
   # Quiet-state notice. Shown when there are no FGS polygons for the current
   # statement-day. A quiet FGS is operationally normal -- this is an
   # expected state, not an error.
@@ -345,7 +387,9 @@ centre <- tags$div(
     style = "position: relative;",
     leaflet::leafletOutput("live_map", height = "500px"),
     uiOutput("map_loading_overlay")
-  )
+  ),
+  # Per-source forecast text, England-wide forecast, and PDF link.
+  uiOutput("statement_info")
 )
 
 
