@@ -277,16 +277,15 @@ fetch_summary_counts <- function(statement_id, day_index) {
 # overdraw them so the strongest colour wins -- which is fine, the area
 # count panel already deduplicates by code for the headline number.
 #
-# ta_name comes from the FWA/FAA tables' "ea_area" column -- the EA's
-# Target Area name, distinct from ea_area_name. Pulled through for the
-# map popup so forecasters see the TA alongside the area name.
+# ea_area_code doubles as the Target Area ID forecasters refer to, so the
+# map popup can show it directly with no extra join.
 # -----------------------------------------------------------------------------
 
 fetch_ea_geometry <- function(statement_id, day_index) {
-  
+
   sid <- as.integer(statement_id)
   did <- as.integer(day_index)
-  
+
   dt <- db_query(sprintf("
     WITH affected AS (
       SELECT
@@ -309,13 +308,12 @@ fetch_ea_geometry <- function(statement_id, day_index) {
       a.risk_level,
       a.intersection_pct,
       a.source,
-      g.ea_area AS ta_name,
       g.geometry
     FROM affected a
     LEFT JOIN (
-      SELECT ea_area_code, ea_area, geometry FROM %s
+      SELECT ea_area_code, geometry FROM %s
       UNION ALL
-      SELECT ea_area_code, ea_area, geometry FROM %s
+      SELECT ea_area_code, geometry FROM %s
     ) g
       ON g.ea_area_code = a.ea_area_code
     WHERE g.geometry IS NOT NULL
@@ -336,12 +334,11 @@ fetch_ea_geometry <- function(statement_id, day_index) {
       risk_level       = character(),
       intersection_pct = numeric(),
       source           = character(),
-      ta_name          = character(),
       geometry         = sf::st_sfc(),
       crs              = 4326
     ))
   }
-  
+
   # Geometry comes back as GeoJSON strings, same as the risk polygons.
   geom <- geojsonsf::geojson_sfc(dt$geometry)
   dt[, geometry := NULL]

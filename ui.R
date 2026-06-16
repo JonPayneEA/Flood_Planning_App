@@ -30,17 +30,19 @@
 # -----------------------------------------------------------------------------
 
 matrix_filter_ui <- function() {
-  
-  # Build a list of styled div+checkbox elements, one per cell in the matrix.
-  # lapply over row indices because data.table's row iteration is by-index;
-  # this stays explicit about what we're iterating over.
+
+  # Grid layout (columns: likelihood-label | row-labels | 4 cell columns;
+  # rows: column-labels | 4 cell rows | impact-label). Cell column/row is
+  # cell$x + 2 / 6 - cell$y so y = 4 (High) lands in the top data row,
+  # matching the FGS User Guide's matrix orientation.
   cells <- lapply(seq_len(nrow(RISK_MATRIX)), function(i) {
-    
+
     cell <- RISK_MATRIX[i]                          # one-row data.table
     default_ticked <- cell$colour %in% c("Amber", "Red")
 
     tags$div(
       class    = paste("matrix-cell", tolower(cell$colour)),  # e.g. "matrix-cell red"
+      style    = sprintf("grid-column: %d; grid-row: %d;", cell$x + 2, 6 - cell$y),
       `data-x` = cell$x,                             # data-* attrs for any
       `data-y` = cell$y,                             # future JS hook
       checkboxInput(
@@ -50,16 +52,44 @@ matrix_filter_ui <- function() {
       )
     )
   })
-  
-  # tagList holds a label, a hint, the grid itself, and an axis caption.
-  # do.call(tags$div, ...) is the standard way to splat a list of children
-  # into a single parent tag.
+
+  col_headers <- lapply(seq_len(4), function(x) {
+    tags$div(
+      class = "matrix-col-header",
+      style = sprintf("grid-column: %d; grid-row: 1;", x + 2),
+      IMPACT_LABELS[x]
+    )
+  })
+
+  row_headers <- lapply(seq_len(4), function(y) {
+    tags$div(
+      class = "matrix-row-header",
+      style = sprintf("grid-column: 2; grid-row: %d;", 6 - y),
+      LIKELIHOOD_LABELS[y]
+    )
+  })
+
+  likelihood_label <- tags$div(
+    class = "matrix-likelihood-label",
+    style = "grid-column: 1; grid-row: 2 / 6;",
+    "Likelihood"
+  )
+
+  impact_label <- tags$div(
+    class = "matrix-impact-label",
+    style = "grid-column: 3 / 7; grid-row: 6;",
+    "Impact"
+  )
+
+  grid_children <- c(col_headers, row_headers, cells, list(likelihood_label, impact_label))
+
+  # tagList holds a label, a hint, and the grid itself. do.call(tags$div, ...)
+  # is the standard way to splat a list of children into a single parent tag.
   tagList(
     h6("Risk matrix position"),
     tags$small("Tick cells to include - counts update live",
                class = "text-muted d-block mb-2"),
-    do.call(tags$div, c(list(class = "risk-matrix-grid"), cells)),
-    tags$div("up = Likelihood   .   Impact ->", class = "matrix-axis-label")
+    do.call(tags$div, c(list(class = "risk-matrix-wrap"), grid_children))
   )
 }
 
@@ -134,13 +164,14 @@ div.stat-card .stat-label {
 
 /* --- 3. Risk matrix grid -------------------------------------------------- */
 
-.risk-matrix-grid {
+.risk-matrix-wrap {
   display: grid !important;
-  grid-template-columns: repeat(4, 36px) !important;
-  grid-auto-rows: 36px !important;
+  grid-template-columns: 16px 64px repeat(4, 36px) !important;
+  grid-template-rows: 20px repeat(4, 36px) 18px !important;
   gap: 2px;
   margin-bottom: 4px;
   width: max-content !important;
+  align-items: center;
 }
 .matrix-cell {
   width: 36px !important;
@@ -164,8 +195,22 @@ div.stat-card .stat-label {
 .matrix-cell.amber  { background: #e08020; }
 .matrix-cell.red    { background: #b02020; }
 
-.matrix-axis-label {
-  font-size: 10px; color: #495057; text-align: center; margin-top: 4px;
+.matrix-col-header { font-size: 10px; color: #495057; text-align: center; }
+.matrix-row-header { font-size: 10px; color: #495057; text-align: right; padding-right: 4px; }
+
+.matrix-likelihood-label {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  text-align: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: #495057;
+}
+.matrix-impact-label {
+  text-align: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: #495057;
 }
 
 /* --- 4. Quiet-state notice ------------------------------------------------ */

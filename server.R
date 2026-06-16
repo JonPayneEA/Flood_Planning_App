@@ -532,7 +532,7 @@ server <- function(input, output, session) {
     popup_html <- paste0(
       "<strong>", shape$ea_area_name, "</strong><br>",
       "<small>", shape$ea_area_type, " &middot; ", shape$source, "</small><br>",
-      "TA name: ", shape$ta_name, "<br>",
+      "Target Area ID: ", shape$ea_area_code, "<br>",
       "Risk: ", shape$risk_level, "<br>",
       "Intersection: ", round(shape$intersection_pct * 100), "%"
     )
