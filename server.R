@@ -279,24 +279,28 @@ server <- function(input, output, session) {
   })
   
   output$map_subtitle <- renderText({
-    c    <- counts()
     stmt <- selected_statement()
-    sprintf("Statement %s - %d polygons - %d EA areas",
+    sprintf("Statement %s - %d polygons - %d EA Warnings",
             if (is.null(stmt)) "-" else stmt$statement_id,
-            c$polygon_count, c$ea_area_count)
+            nrow(polygons()), uniqueN(ea_areas()$ea_area_code))
   })
   
   
   # ---------------------------------------------------------------------------
   # Stat cards.
   #
+  # Polygons and EA Warnings count the filtered reactives so the headline
+  # number matches what's actually on the map -- not the raw statement-day
+  # total. Constituencies aren't subject to any user filter (see filters()),
+  # so that count is still the raw total from counts().
+  #
   # format() with big.mark = "," puts a comma thousand separator on the
   # constituency count once it gets big enough to need one. Cheap, and
   # avoids the dashboard looking amateur with "1247" instead of "1,247".
   # ---------------------------------------------------------------------------
-  
-  output$count_polygons       <- renderText(format(counts()$polygon_count,      big.mark = ","))
-  output$count_ea_areas       <- renderText(format(counts()$ea_area_count,      big.mark = ","))
+
+  output$count_polygons       <- renderText(format(nrow(polygons()), big.mark = ","))
+  output$count_ea_areas       <- renderText(format(uniqueN(ea_areas()$ea_area_code), big.mark = ","))
   output$count_constituencies <- renderText(format(counts()$constituency_count, big.mark = ","))
   
   
@@ -339,7 +343,7 @@ server <- function(input, output, session) {
     areas <- ea_areas()
     
     if (is.null(areas) || nrow(areas) == 0L) {
-      return(tags$p("No EA areas above threshold.", class = "text-muted small"))
+      return(tags$p("No EA Warnings above threshold.", class = "text-muted small"))
     }
     
     n_visible <- min(nrow(areas), 20L)
@@ -372,8 +376,52 @@ server <- function(input, output, session) {
     
     do.call(tagList, rows)
   })
-  
-  
+
+
+  # ---------------------------------------------------------------------------
+  # Affected-areas CSV export.
+  #
+  # Joins the currently filtered ea_areas() against the constituency/MP
+  # lookup so forecasters can hand the affected-area list to colleagues with
+  # MP contact details attached. The lookup is fetched fresh on each
+  # download rather than cached, since it's a small reference table and this
+  # button is clicked rarely.
+  #
+  # allow.cartesian = TRUE because an EA area can overlap more than one
+  # constituency -- the export should show one row per area/constituency
+  # pair, not silently drop the extra overlaps.
+  # ---------------------------------------------------------------------------
+
+  output$download_ea_areas <- downloadHandler(
+    filename = function() {
+      f <- filters()
+      sprintf("ea_warnings_statement_%d_day_%d.csv", f$statement_id, f$day_index)
+    },
+    content = function(file) {
+      areas  <- ea_areas()
+      lookup <- fetch_ea_constituency_mp()
+
+      # lookup[areas, on=...] looks up each area's matching lookup rows
+      # (expanded per match when an area spans more than one constituency).
+      # The j expression pulls area columns via the i. prefix and lookup
+      # columns directly, so both sides survive the join.
+      export <- lookup[areas, on = "ea_area_code", allow.cartesian = TRUE,
+                        .(ea_area_code     = i.ea_area_code,
+                          ea_area_name     = i.ea_area_name,
+                          ea_area_type     = i.ea_area_type,
+                          source           = i.source,
+                          risk_level       = i.risk_level,
+                          risk_colour      = i.risk_colour,
+                          intersection_pct = i.intersection_pct,
+                          constituency_name,
+                          constituency_overlap_pct,
+                          mp_name, mp_party, mp_email, mp_phone)]
+
+      fwrite(export, file)
+    }
+  )
+
+
   # ---------------------------------------------------------------------------
   # Map.
   #
@@ -484,6 +532,7 @@ server <- function(input, output, session) {
     popup_html <- paste0(
       "<strong>", shape$ea_area_name, "</strong><br>",
       "<small>", shape$ea_area_type, " &middot; ", shape$source, "</small><br>",
+      "TA name: ", shape$ta_name, "<br>",
       "Risk: ", shape$risk_level, "<br>",
       "Intersection: ", round(shape$intersection_pct * 100), "%"
     )

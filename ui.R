@@ -208,7 +208,7 @@ sidebar <- tags$div(
   
   h6("Map layers"),
   checkboxInput("layer_polygons", "FGS risk polygons", value = TRUE),
-  checkboxInput("layer_ea_areas", "EA flood areas",    value = TRUE),
+  checkboxInput("layer_ea_areas", "EA Warning Areas",  value = TRUE),
 
   # Sub-control for the EA layer: pick which area types appear. Indented
   # visually so it reads as a child of the EA layer toggle, and placed
@@ -291,7 +291,7 @@ right_panel <- tags$div(
     tags$div(class = "stat-card mt-2",
              tags$div(textOutput("count_ea_areas", inline = TRUE),
                       class = "stat-num"),
-             tags$div("EA areas affected", class = "stat-label")),
+             tags$div("Affected EA Warnings", class = "stat-label")),
     
     tags$div(class = "stat-card mt-2",
              tags$div(textOutput("count_constituencies", inline = TRUE),
@@ -302,7 +302,12 @@ right_panel <- tags$div(
   # Affected-areas list (server.R builds the row markup).
   tags$div(
     class = "panel-section",
-    h6("EA areas affected", class = "panel-h"),
+    tags$div(
+      class = "d-flex justify-content-between align-items-center",
+      h6("Affected EA Warnings", class = "panel-h"),
+      downloadButton("download_ea_areas", "Export CSV",
+                     class = "btn-sm btn-outline-secondary")
+    ),
     uiOutput("ea_area_list")
   )
 )
