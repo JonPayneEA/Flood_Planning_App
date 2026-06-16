@@ -122,6 +122,22 @@ RISK_COLOUR_HEX <- c(
 
 
 # -----------------------------------------------------------------------------
+# EA flood area palette.
+#
+# Fixed colours, independent of risk band. The EA layer is context, not the
+# primary signal -- FGS polygons carry the risk colour. FWA and FAA get
+# their own fixed hues so the two area types stay visually distinct from
+# each other and from the FGS layer regardless of which risk band they sit
+# in. Keyed on the pipeline's ea_area_type values (flood_warning/flood_alert).
+# -----------------------------------------------------------------------------
+
+EA_AREA_TYPE_HEX <- c(
+  flood_warning = "#1f4f7a",   # dark blue
+  flood_alert   = "#7a4f9d"    # purple
+)
+
+
+# -----------------------------------------------------------------------------
 # Risk matrix metadata.
 #
 # Sixteen cells in the 4x4 FGS matrix. x is impact (1 = Minimal, 4 = Severe),
