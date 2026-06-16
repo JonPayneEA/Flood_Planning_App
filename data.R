@@ -93,7 +93,7 @@ fetch_recent_statements <- function(n = 20L) {
       source_coastal,
       source_surface,
       source_ground,
-      source_fluvial,
+      source_river,
       england_forecast,
       pdf_url
     FROM %s

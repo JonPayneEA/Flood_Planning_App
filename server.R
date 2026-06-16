@@ -434,7 +434,7 @@ server <- function(input, output, session) {
         source_box("Coastal", stmt$source_coastal),
         source_box("Surface", stmt$source_surface),
         source_box("Ground",  stmt$source_ground),
-        source_box("Fluvial", stmt$source_fluvial)
+        source_box("Fluvial", stmt$source_river)
       ),
       tags$div(
         class = "panel-section mt-2",
