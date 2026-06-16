@@ -392,7 +392,23 @@ server <- function(input, output, session) {
   
   output$live_map <- leaflet::renderLeaflet({
     m <- leaflet::leaflet()
-    m <- leaflet::addProviderTiles(m, leaflet::providers$OpenStreetMap)
+
+    # Four base layers as named groups, switched via the layer control --
+    # only one base group is shown at a time, leaflet handles that natively.
+    # Street map default; satellite and terrain give forecasters context
+    # (river courses, contours) the street map doesn't show.
+    m <- leaflet::addProviderTiles(m, leaflet::providers$OpenStreetMap,    group = "Street")
+    m <- leaflet::addProviderTiles(m, leaflet::providers$CartoDB.Positron, group = "Light")
+    m <- leaflet::addProviderTiles(m, leaflet::providers$Esri.WorldImagery, group = "Satellite")
+    m <- leaflet::addProviderTiles(m, leaflet::providers$OpenTopoMap,      group = "Terrain")
+
+    m <- leaflet::addLayersControl(
+      m,
+      baseGroups    = c("Street", "Light", "Satellite", "Terrain"),
+      options       = leaflet::layersControlOptions(collapsed = TRUE),
+      position      = "topright"
+    )
+
     m <- leaflet::setView(m, lng = -2.0, lat = 53.2, zoom = 6)
     m
   })
@@ -479,11 +495,11 @@ server <- function(input, output, session) {
       color       = fill_hex,
       weight      = 1,
       fillColor   = fill_hex,
-      fillOpacity = 0.20,           # well below the FGS layer's 0.45
+      fillOpacity = 0.35,           # still below the FGS layer's 0.45
       popup       = popup_html,
       highlightOptions = leaflet::highlightOptions(
         weight       = 2,
-        fillOpacity  = 0.35,
+        fillOpacity  = 0.5,
         bringToFront = FALSE        # keep FGS polygons clickable on top
       )
     )
