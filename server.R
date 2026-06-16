@@ -735,9 +735,13 @@ server <- function(input, output, session) {
     matched <- shape[shape$ea_area_code == input$area_row_click, ]
     if (nrow(matched) == 0L) return()
 
-    union_geom <- sf::st_union(matched$geometry)
-    bbox       <- sf::st_bbox(union_geom)
-    centroid   <- sf::st_coordinates(sf::st_centroid(union_geom))
+    # st_make_valid repairs degenerate rings (e.g. duplicate vertices) that
+    # otherwise make s2_union_agg error out -- source GeoJSON occasionally
+    # contains these, and bbox alone doesn't need a union but the centroid
+    # does.
+    bbox       <- sf::st_bbox(matched)
+    valid_geom <- sf::st_make_valid(matched$geometry)
+    centroid   <- sf::st_coordinates(sf::st_centroid(sf::st_union(valid_geom)))
 
     popup_html <- paste0(
       "<strong>", matched$ea_area_name[1], "</strong><br>",
