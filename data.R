@@ -276,6 +276,10 @@ fetch_summary_counts <- function(statement_id, day_index) {
 # overlaps multiple polygons, the join surfaces all rows but the map will
 # overdraw them so the strongest colour wins -- which is fine, the area
 # count panel already deduplicates by code for the headline number.
+#
+# ta_name comes from the FWA/FAA tables' "ea_area" column -- the EA's
+# Target Area name, distinct from ea_area_name. Pulled through for the
+# map popup so forecasters see the TA alongside the area name.
 # -----------------------------------------------------------------------------
 
 fetch_ea_geometry <- function(statement_id, day_index) {
@@ -305,12 +309,13 @@ fetch_ea_geometry <- function(statement_id, day_index) {
       a.risk_level,
       a.intersection_pct,
       a.source,
+      g.ea_area AS ta_name,
       g.geometry
     FROM affected a
     LEFT JOIN (
-      SELECT ea_area_code, geometry FROM %s
+      SELECT ea_area_code, ea_area, geometry FROM %s
       UNION ALL
-      SELECT ea_area_code, geometry FROM %s
+      SELECT ea_area_code, ea_area, geometry FROM %s
     ) g
       ON g.ea_area_code = a.ea_area_code
     WHERE g.geometry IS NOT NULL
@@ -318,7 +323,7 @@ fetch_ea_geometry <- function(statement_id, day_index) {
                          TBL_EA_INTERSECT, sid, did,
                          TBL_EA_FWA,
                          TBL_EA_FAA))
-  
+
   if (nrow(dt) == 0L) {
     # Return an empty sf with the full attribute schema, not just a geometry
     # column. Downstream code reads shape$risk_colour etc.; an sf with only
@@ -331,6 +336,7 @@ fetch_ea_geometry <- function(statement_id, day_index) {
       risk_level       = character(),
       intersection_pct = numeric(),
       source           = character(),
+      ta_name          = character(),
       geometry         = sf::st_sfc(),
       crs              = 4326
     ))
