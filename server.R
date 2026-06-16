@@ -51,6 +51,22 @@ server <- function(input, output, session) {
                       choices  = choices,
                       selected = choices[1])
   }
+
+
+  # ---------------------------------------------------------------------------
+  # Constituency/MP reference data.
+  #
+  # ea_area_constituency_lookup and mp_contact_details are static reference
+  # tables, not statement-specific, so they're fetched once per session here
+  # rather than re-queried on every filter change. Used by the CSV export and
+  # by the area-list search box (constituency name as a search key).
+  # ---------------------------------------------------------------------------
+
+  ea_constituency_lookup <- fetch_ea_constituency_mp()
+  area_constituency_map <- ea_constituency_lookup[
+    , .(constituency_names = paste(unique(constituency_name), collapse = ", ")),
+    by = ea_area_code
+  ]
   
   
   # ===========================================================================
@@ -135,8 +151,35 @@ server <- function(input, output, session) {
       min_intersection = input$intersect_threshold / 100   # convert % to 0-1
     )
   })
-  
-  
+
+
+  # ---------------------------------------------------------------------------
+  # Map busy flags.
+  #
+  # Drive the spinner overlay shown above the map while the three layer
+  # observers are re-fetching from Databricks. Set TRUE whenever filters()
+  # changes (the trigger behind nearly every map redraw), then cleared
+  # individually by each layer observer once its own draw finishes -- so the
+  # spinner clears only when the slowest of the visible layers is done.
+  # ---------------------------------------------------------------------------
+
+  busy_polygons <- reactiveVal(FALSE)
+  busy_ea       <- reactiveVal(FALSE)
+  busy_const    <- reactiveVal(FALSE)
+
+  observeEvent(filters(), {
+    busy_polygons(TRUE)
+    busy_ea(isTRUE(input$layer_ea_areas))
+    busy_const(isTRUE(input$layer_constituencies))
+  })
+
+  output$map_loading_overlay <- renderUI({
+    if (isTRUE(busy_polygons()) || isTRUE(busy_ea()) || isTRUE(busy_const())) {
+      tags$div(class = "map-spinner-overlay", tags$div(class = "map-spinner"))
+    }
+  })
+
+
   # ---------------------------------------------------------------------------
   # polygons()
   #
@@ -374,21 +417,51 @@ server <- function(input, output, session) {
   # coloured bar + two lines of text) isn't a natural fit for a tabular
   # widget. We cap visible rows at 20 and show a "+ N more" footer so the
   # panel doesn't run the page to the floor in a major event.
+  #
+  # Each row carries an onclick that sets input$area_row_click to the area's
+  # code, picked up by the observeEvent() near the map code to fly there and
+  # open a popup. constituency_names is joined in purely for this output --
+  # the search box matches against it, but it's not part of ea_areas() since
+  # the count/subtitle outputs don't need it.
   # ---------------------------------------------------------------------------
-  
+
   output$ea_area_list <- renderUI({
     areas <- ea_areas()
-    
+
     if (is.null(areas) || nrow(areas) == 0L) {
       return(tags$p("No EA Warnings above threshold.", class = "text-muted small"))
     }
-    
+
+    areas <- area_constituency_map[areas, on = "ea_area_code",
+                                    .(ea_area_code     = i.ea_area_code,
+                                      ea_area_name     = i.ea_area_name,
+                                      ea_area_type     = i.ea_area_type,
+                                      source           = i.source,
+                                      risk_level       = i.risk_level,
+                                      risk_colour      = i.risk_colour,
+                                      intersection_pct = i.intersection_pct,
+                                      constituency_names)]
+    areas[is.na(constituency_names), constituency_names := ""]
+
+    search <- trimws(if (is.null(input$area_search)) "" else input$area_search)
+    if (nzchar(search)) {
+      areas <- areas[grepl(search, ea_area_name, ignore.case = TRUE, fixed = TRUE) |
+                       grepl(search, constituency_names, ignore.case = TRUE, fixed = TRUE)]
+    }
+
+    if (nrow(areas) == 0L) {
+      return(tags$p(sprintf("No EA Warnings match \"%s\".", search),
+                     class = "text-muted small"))
+    }
+
     n_visible <- min(nrow(areas), 20L)
-    
+
     rows <- lapply(seq_len(n_visible), function(i) {
       r <- areas[i]                             # one-row data.table
       tags$div(
-        class = "area-row",
+        class   = "area-row",
+        onclick = sprintf("Shiny.setInputValue('area_row_click', '%s', {priority: 'event'})",
+                           r$ea_area_code),
         tags$div(class = paste("risk-bar", tolower(r$risk_colour))),
         tags$div(
           tags$strong(r$ea_area_name),
@@ -402,7 +475,7 @@ server <- function(input, output, session) {
         )
       )
     })
-    
+
     # Footer when there are more rows than we're showing.
     if (nrow(areas) > n_visible) {
       rows[[length(rows) + 1L]] <- tags$small(
@@ -410,7 +483,7 @@ server <- function(input, output, session) {
         class = "text-muted d-block text-center mt-2"
       )
     }
-    
+
     do.call(tagList, rows)
   })
 
@@ -419,10 +492,9 @@ server <- function(input, output, session) {
   # Affected-areas CSV export.
   #
   # Joins the currently filtered ea_areas() against the constituency/MP
-  # lookup so forecasters can hand the affected-area list to colleagues with
-  # MP contact details attached. The lookup is fetched fresh on each
-  # download rather than cached, since it's a small reference table and this
-  # button is clicked rarely.
+  # lookup (fetched once per session, see ea_constituency_lookup above) so
+  # forecasters can hand the affected-area list to colleagues with MP
+  # contact details attached.
   #
   # allow.cartesian = TRUE because an EA area can overlap more than one
   # constituency -- the export should show one row per area/constituency
@@ -436,7 +508,7 @@ server <- function(input, output, session) {
     },
     content = function(file) {
       areas  <- ea_areas()
-      lookup <- fetch_ea_constituency_mp()
+      lookup <- ea_constituency_lookup
 
       # lookup[areas, on=...] looks up each area's matching lookup rows
       # (expanded per match when an area spans more than one constituency).
@@ -500,15 +572,15 @@ server <- function(input, output, session) {
   
   observe({
     shape <- polygons()
-    
+
     # Get a handle to the existing map and clear last render's polygons.
     proxy <- leaflet::leafletProxy("live_map")
     proxy <- leaflet::clearGroup(proxy, "polygons")
-    
+
     # If polygons should be hidden or there's nothing to draw, we're done.
-    if (!isTRUE(input$layer_polygons))       return()
-    if (is.null(shape) || nrow(shape) == 0L) return()
-    
+    if (!isTRUE(input$layer_polygons))       { busy_polygons(FALSE); return() }
+    if (is.null(shape) || nrow(shape) == 0L) { busy_polygons(FALSE); return() }
+
     # Look up hex colours for each row's risk_colour band.
     fill_hex <- unname(RISK_COLOUR_HEX[trimws(tolower(shape$risk_colour))])
     fill_hex[is.na(fill_hex)] <- "#ff00ff"   # magenta flags any unmatched colour values
@@ -537,6 +609,8 @@ server <- function(input, output, session) {
         bringToFront = TRUE
       )
     )
+
+    busy_polygons(FALSE)
   })
   
   
@@ -558,10 +632,10 @@ server <- function(input, output, session) {
     proxy <- leaflet::leafletProxy("live_map")
     proxy <- leaflet::clearGroup(proxy, "ea_areas")
 
-    if (!isTRUE(input$layer_ea_areas)) return()
+    if (!isTRUE(input$layer_ea_areas)) { busy_ea(FALSE); return() }
 
     shape <- ea_geometry()
-    if (is.null(shape) || nrow(shape) == 0L) return()
+    if (is.null(shape) || nrow(shape) == 0L) { busy_ea(FALSE); return() }
 
     fill_hex <- unname(EA_AREA_TYPE_HEX[trimws(tolower(shape$ea_area_type))])
     fill_hex[is.na(fill_hex)] <- "#808080"   # grey fallback for any unmatched type
@@ -589,6 +663,8 @@ server <- function(input, output, session) {
         bringToFront = FALSE        # keep FGS polygons clickable on top
       )
     )
+
+    busy_ea(FALSE)
   })
   
   
@@ -603,17 +679,17 @@ server <- function(input, output, session) {
   observe({
     proxy <- leaflet::leafletProxy("live_map")
     proxy <- leaflet::clearGroup(proxy, "constituencies")
-    
-    if (!isTRUE(input$layer_constituencies)) return()
-    
+
+    if (!isTRUE(input$layer_constituencies)) { busy_const(FALSE); return() }
+
     shape <- constituency_geometry()
-    if (is.null(shape) || nrow(shape) == 0L) return()
-    
+    if (is.null(shape) || nrow(shape) == 0L) { busy_const(FALSE); return() }
+
     popup_html <- paste0(
       "<strong>", shape$constituency_name, "</strong><br>",
       "Risk: ", shape$risk_level
     )
-    
+
     leaflet::addPolygons(
       proxy,
       data        = shape,
@@ -631,5 +707,54 @@ server <- function(input, output, session) {
         bringToFront = FALSE
       )
     )
+
+    busy_const(FALSE)
+  })
+
+
+  # ---------------------------------------------------------------------------
+  # Area-list row click -> map.
+  #
+  # Clicking a row in the Affected EA Warnings panel flies the map to that
+  # area's geometry and opens a popup at its centroid, turning on the EA
+  # layer first if it's currently off so the polygon is visible to fly to.
+  # Re-fetches geometry directly (rather than reusing ea_geometry(), which
+  # is gated on the layer toggle) since the clicked row may arrive before
+  # the layer is switched on.
+  # ---------------------------------------------------------------------------
+
+  observeEvent(input$area_row_click, {
+    f <- filters()
+    req(f)
+
+    if (!isTRUE(input$layer_ea_areas)) {
+      updateCheckboxInput(session, "layer_ea_areas", value = TRUE)
+    }
+
+    shape <- fetch_ea_geometry(f$statement_id, f$day_index)
+    matched <- shape[shape$ea_area_code == input$area_row_click, ]
+    if (nrow(matched) == 0L) return()
+
+    union_geom <- sf::st_union(matched$geometry)
+    bbox       <- sf::st_bbox(union_geom)
+    centroid   <- sf::st_coordinates(sf::st_centroid(union_geom))
+
+    popup_html <- paste0(
+      "<strong>", matched$ea_area_name[1], "</strong><br>",
+      "<small>", matched$ea_area_type[1], " &middot; ", matched$source[1], "</small><br>",
+      "Target Area ID: ", matched$ea_area_code[1], "<br>",
+      "Risk: ", matched$risk_level[1], "<br>",
+      "Intersection: ", round(matched$intersection_pct[1] * 100), "%"
+    )
+
+    proxy <- leaflet::leafletProxy("live_map")
+    proxy <- leaflet::flyToBounds(proxy,
+                                   lng1 = bbox[["xmin"]], lat1 = bbox[["ymin"]],
+                                   lng2 = bbox[["xmax"]], lat2 = bbox[["ymax"]])
+    leaflet::addPopups(proxy,
+                        lng     = centroid[1, 1],
+                        lat     = centroid[1, 2],
+                        popup   = popup_html,
+                        layerId = "area_click_popup")
   })
 }

@@ -155,8 +155,10 @@ div.stat-card .stat-label {
 .area-row {
   display: flex; align-items: center; padding: 6px 0;
   border-bottom: 1px solid #f1f3f5; font-size: 13px;
+  cursor: pointer;
 }
 .area-row:last-child { border-bottom: none; }
+.area-row:hover { background: #f8f9fa; }
 .risk-bar { width: 4px; height: 22px; margin-right: 10px; border-radius: 1px; }
 .risk-bar.red    { background: #b02020; }
 .risk-bar.amber  { background: #e08020; }
@@ -229,6 +231,33 @@ div.stat-card .stat-label {
   font-size: 13px;
 }
 .quiet-notice strong { font-weight: 600; }
+
+/* --- 5. Map loading overlay ------------------------------------------------ */
+
+/* Shown over the map while a layer redraw is fetching from Databricks.
+   Pointer-events none so the map stays interactive (pan/zoom) while it's
+   loading, rather than blocking input underneath. */
+.map-spinner-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(255, 255, 255, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  pointer-events: none;
+}
+.map-spinner {
+  width: 36px;
+  height: 36px;
+  border: 4px solid #dee2e6;
+  border-top-color: #c8581f;
+  border-radius: 50%;
+  animation: map-spin 0.8s linear infinite;
+}
+@keyframes map-spin {
+  to { transform: rotate(360deg); }
+}
 "
 
 
@@ -310,7 +339,13 @@ centre <- tags$div(
   # statement-day. A quiet FGS is operationally normal -- this is an
   # expected state, not an error.
   uiOutput("quiet_notice"),
-  leaflet::leafletOutput("live_map", height = "500px")
+  # position: relative so the loading overlay (absolutely positioned) covers
+  # exactly the map area, not the whole centre column.
+  tags$div(
+    style = "position: relative;",
+    leaflet::leafletOutput("live_map", height = "500px"),
+    uiOutput("map_loading_overlay")
+  )
 )
 
 
@@ -354,6 +389,8 @@ right_panel <- tags$div(
       downloadButton("download_ea_areas", "Export CSV",
                      class = "btn-sm btn-outline-secondary")
     ),
+    textInput("area_search", NULL,
+              placeholder = "Search by area or constituency..."),
     uiOutput("ea_area_list")
   )
 )
