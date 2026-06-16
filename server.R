@@ -41,7 +41,7 @@ server <- function(input, output, session) {
   # Labels combine date/time and statement_id for an unambiguous read.
   # ---------------------------------------------------------------------------
   
-  recent <- fetch_recent_statements(20L)
+  recent <- fetch_recent_statements(100L)
   if (nrow(recent) > 0L) {
     labels <- sprintf("%s  (id %d)",
                       format(as.POSIXct(recent$issued_at), "%a %d %b %H:%M"),
@@ -527,9 +527,9 @@ server <- function(input, output, session) {
       data        = shape,
       group       = "polygons",
       color       = fill_hex,
-      weight      = 1.5,
+      weight      = 3,
       fillColor   = fill_hex,
-      fillOpacity = 0.45,
+      fillOpacity = 0.60,
       popup       = popup_html,
       highlightOptions = leaflet::highlightOptions(
         weight       = 3,
@@ -578,10 +578,10 @@ server <- function(input, output, session) {
       proxy,
       data        = shape,
       group       = "ea_areas",
-      color       = fill_hex,
+      color       = "#000000",
       weight      = 1,
       fillColor   = fill_hex,
-      fillOpacity = 0.35,           # still below the FGS layer's 0.45
+      fillOpacity = 0.35,           # still below the FGS layer's 0.6
       popup       = popup_html,
       highlightOptions = leaflet::highlightOptions(
         weight       = 2,
@@ -620,11 +620,13 @@ server <- function(input, output, session) {
       group       = "constituencies",
       color       = "#2c3e50",      # dark grey outline
       weight      = 1,
-      fill        = FALSE,
+      # fill        = FALSE,
+      fillColor   = "#2c3e50",
+      fillOpacity = 0.40,           # still below the FGS layer's 0.60
       popup       = popup_html,
       highlightOptions = leaflet::highlightOptions(
         weight       = 2.5,
-        fillOpacity  = 0.10,
+        fillOpacity  = 0.30,
         fillColor    = "#2c3e50",
         bringToFront = FALSE
       )

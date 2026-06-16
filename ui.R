@@ -38,7 +38,8 @@ matrix_filter_ui <- function() {
   cells <- lapply(seq_len(nrow(RISK_MATRIX)), function(i) {
 
     cell <- RISK_MATRIX[i]                          # one-row data.table
-    default_ticked <- cell$colour %in% c("Amber", "Red")
+    # default_ticked <- cell$colour %in% c("Amber", "Red")
+    default_ticked <- cell$x >1
 
     tags$div(
       class    = paste("matrix-cell", tolower(cell$colour)),  # e.g. "matrix-cell red"

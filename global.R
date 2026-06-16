@@ -138,8 +138,8 @@ RISK_COLOUR_HEX <- c(
 # -----------------------------------------------------------------------------
 
 EA_AREA_TYPE_HEX <- c(
-  flood_warning = "#1f4f7a",   # dark blue
-  flood_alert   = "#7a4f9d"    # purple
+  flood_warning = "#BE0553",   # EA brand Pantone 227
+  flood_alert   = "#54BCE7"    # EA brand Pantone 2985
 )
 
 
