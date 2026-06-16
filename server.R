@@ -231,19 +231,58 @@ server <- function(input, output, session) {
   
   
   # ---------------------------------------------------------------------------
+  # constituencies()
+  #
+  # Affected parliamentary constituencies after the source, matrix-cell, and
+  # threshold filters -- metadata only, no geometry, so it's cheap enough to
+  # back the stat card regardless of whether the constituency map layer is
+  # switched on. Mirrors ea_areas().
+  # ---------------------------------------------------------------------------
+
+  constituencies <- reactive({
+    f <- filters()
+    req(f)
+
+    areas <- fetch_constituencies_for_statement(f$statement_id, f$day_index)
+    areas <- areas[tolower(source) %in% f$source_codes & intersection_pct >= f$min_intersection]
+
+    if (nrow(f$selected_cells) == 0L) return(areas[0])
+    areas[f$selected_cells, on = c("risk_x" = "x", "risk_y" = "y"), nomatch = NULL]
+  })
+
+
+  # ---------------------------------------------------------------------------
   # constituency_geometry()
   #
-  # Affected parliamentary constituencies with polygon geometry. Constituency
-  # intersections aren't subject to the user's source filter or threshold --
-  # the intersection table is already filtered server-side at pipeline time.
+  # Affected parliamentary constituencies with polygon geometry, after the
+  # same source, matrix-cell, and threshold filters as constituencies().
+  # Kept separate because the geometry query is more expensive and should
+  # only fire when the constituency layer is toggled on.
   # ---------------------------------------------------------------------------
-  
+
   constituency_geometry <- reactive({
     f <- filters()
     req(f)
     req(isTRUE(input$layer_constituencies))
-    
-    fetch_constituency_geometry(f$statement_id, f$day_index)
+
+    shape <- fetch_constituency_geometry(f$statement_id, f$day_index)
+    if (nrow(shape) == 0L) return(shape)
+
+    shape <- shape[tolower(shape$source) %in% f$source_codes
+                   & shape$intersection_pct >= f$min_intersection, ]
+    if (nrow(shape) == 0L) return(shape)
+
+    if (nrow(f$selected_cells) == 0L) return(shape[0, ])
+
+    # Same sf row_idx workaround as polygons() -- sf's [ ] subsetting can't
+    # be driven directly by a data.table i-join, so the join runs on a plain
+    # data.table of the keys and the resulting row positions are used to
+    # subset the sf object, keeping the geometry column intact.
+    keys <- as.data.table(sf::st_drop_geometry(shape)[, c("risk_x", "risk_y")])
+    keys[, row_idx := .I]
+    kept <- keys[f$selected_cells, on = c("risk_x" = "x", "risk_y" = "y"), nomatch = NULL]
+
+    shape[kept$row_idx, ]
   })
   
   
@@ -289,19 +328,17 @@ server <- function(input, output, session) {
   # ---------------------------------------------------------------------------
   # Stat cards.
   #
-  # Polygons and EA Warnings count the filtered reactives so the headline
-  # number matches what's actually on the map -- not the raw statement-day
-  # total. Constituencies aren't subject to any user filter (see filters()),
-  # so that count is still the raw total from counts().
+  # All three counts come from the filtered reactives so the headline number
+  # matches what's actually on the map -- not the raw statement-day total.
   #
   # format() with big.mark = "," puts a comma thousand separator on the
-  # constituency count once it gets big enough to need one. Cheap, and
-  # avoids the dashboard looking amateur with "1247" instead of "1,247".
+  # counts once they get big enough to need one. Cheap, and avoids the
+  # dashboard looking amateur with "1247" instead of "1,247".
   # ---------------------------------------------------------------------------
 
   output$count_polygons       <- renderText(format(nrow(polygons()), big.mark = ","))
   output$count_ea_areas       <- renderText(format(uniqueN(ea_areas()$ea_area_code), big.mark = ","))
-  output$count_constituencies <- renderText(format(counts()$constituency_count, big.mark = ","))
+  output$count_constituencies <- renderText(format(uniqueN(constituencies()$constituency_id), big.mark = ","))
   
   
   # ---------------------------------------------------------------------------

@@ -352,20 +352,29 @@ fetch_ea_geometry <- function(statement_id, day_index) {
 # Returns affected parliamentary constituencies with their polygon geometry.
 # Same join pattern as fetch_ea_geometry -- intersection table for the
 # affected set, constituency table for the shapes.
+#
+# source, risk_x, risk_y and intersection_pct are pulled through (not just
+# risk_colour/risk_level) so server.R can apply the same source, matrix-cell,
+# and threshold filters used for polygons and EA areas, rather than showing
+# every constituency touched by any polygon in the statement-day.
 # -----------------------------------------------------------------------------
 
 fetch_constituency_geometry <- function(statement_id, day_index) {
-  
+
   sid <- as.integer(statement_id)
   did <- as.integer(day_index)
-  
+
   dt <- db_query(sprintf("
     WITH affected AS (
       SELECT DISTINCT
         i.constituency_id,
         i.constituency_name,
+        i.source,
+        i.risk_x,
+        i.risk_y,
         i.risk_colour,
-        i.risk_level
+        i.risk_level,
+        i.intersection_pct
       FROM %s i
       WHERE i.statement_id = %d
         AND i.day_index    = %d
@@ -373,8 +382,12 @@ fetch_constituency_geometry <- function(statement_id, day_index) {
     SELECT
       a.constituency_id,
       a.constituency_name,
+      a.source,
+      a.risk_x,
+      a.risk_y,
       a.risk_colour,
       a.risk_level,
+      a.intersection_pct,
       c.geometry
     FROM affected a
     LEFT JOIN %s c
@@ -383,13 +396,17 @@ fetch_constituency_geometry <- function(statement_id, day_index) {
   ",
                          TBL_CONST_INTERSECT, sid, did,
                          TBL_CONSTITUENCIES))
-  
+
   if (nrow(dt) == 0L) {
     return(sf::st_sf(
       constituency_id   = character(),
       constituency_name = character(),
+      source            = character(),
+      risk_x            = integer(),
+      risk_y            = integer(),
       risk_colour       = character(),
       risk_level        = character(),
+      intersection_pct  = numeric(),
       geometry          = sf::st_sfc(),
       crs               = 4326
     ))
@@ -398,6 +415,34 @@ fetch_constituency_geometry <- function(statement_id, day_index) {
   geom <- geojsonsf::geojson_sfc(dt$geometry)
   dt[, geometry := NULL]
   sf::st_sf(dt, geometry = geom, crs = 4326)
+}
+
+
+# -----------------------------------------------------------------------------
+# fetch_constituencies_for_statement()
+#
+# Metadata-only counterpart to fetch_constituency_geometry() -- no geometry
+# join, so it's cheap enough to run on every filter change rather than only
+# when the constituency map layer is switched on. Backs the constituency
+# stat card, mirroring how fetch_ea_areas_for_statement() backs the EA area
+# count independently of the EA map layer toggle.
+# -----------------------------------------------------------------------------
+
+fetch_constituencies_for_statement <- function(statement_id, day_index) {
+  db_query(sprintf("
+    SELECT
+      constituency_id,
+      constituency_name,
+      source,
+      risk_x,
+      risk_y,
+      risk_colour,
+      risk_level,
+      intersection_pct
+    FROM %s
+    WHERE statement_id = %d
+      AND day_index    = %d
+  ", TBL_CONST_INTERSECT, as.integer(statement_id), as.integer(day_index)))
 }
 
 
