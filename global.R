@@ -103,6 +103,12 @@ TBL_EA_FWA          <- paste(CAT, SCH, "ea_flood_warning_areas",         sep = "
 TBL_EA_FAA          <- paste(CAT, SCH, "ea_flood_alert_areas",           sep = ".")
 TBL_CONSTITUENCIES  <- paste(CAT, SCH, "parliamentary_constituencies",   sep = ".")
 
+# Reference tables for the EA Warnings export (MP details + constituency per
+# area). Joined in fetch_ea_constituency_mp() on constituency_name -- the two
+# tables share no ID column.
+TBL_EA_CONSTITUENCY_LOOKUP <- paste(CAT, SCH, "ea_area_constituency_lookup", sep = ".")
+TBL_MP_CONTACTS            <- paste(CAT, SCH, "mp_contact_details",         sep = ".")
+
 
 # -----------------------------------------------------------------------------
 # FGS colour palette.

@@ -376,8 +376,52 @@ server <- function(input, output, session) {
     
     do.call(tagList, rows)
   })
-  
-  
+
+
+  # ---------------------------------------------------------------------------
+  # Affected-areas CSV export.
+  #
+  # Joins the currently filtered ea_areas() against the constituency/MP
+  # lookup so forecasters can hand the affected-area list to colleagues with
+  # MP contact details attached. The lookup is fetched fresh on each
+  # download rather than cached, since it's a small reference table and this
+  # button is clicked rarely.
+  #
+  # allow.cartesian = TRUE because an EA area can overlap more than one
+  # constituency -- the export should show one row per area/constituency
+  # pair, not silently drop the extra overlaps.
+  # ---------------------------------------------------------------------------
+
+  output$download_ea_areas <- downloadHandler(
+    filename = function() {
+      f <- filters()
+      sprintf("ea_warnings_statement_%d_day_%d.csv", f$statement_id, f$day_index)
+    },
+    content = function(file) {
+      areas  <- ea_areas()
+      lookup <- fetch_ea_constituency_mp()
+
+      # lookup[areas, on=...] looks up each area's matching lookup rows
+      # (expanded per match when an area spans more than one constituency).
+      # The j expression pulls area columns via the i. prefix and lookup
+      # columns directly, so both sides survive the join.
+      export <- lookup[areas, on = "ea_area_code", allow.cartesian = TRUE,
+                        .(ea_area_code     = i.ea_area_code,
+                          ea_area_name     = i.ea_area_name,
+                          ea_area_type     = i.ea_area_type,
+                          source           = i.source,
+                          risk_level       = i.risk_level,
+                          risk_colour      = i.risk_colour,
+                          intersection_pct = i.intersection_pct,
+                          constituency_name,
+                          constituency_overlap_pct,
+                          mp_name, mp_party, mp_email, mp_phone)]
+
+      fwrite(export, file)
+    }
+  )
+
+
   # ---------------------------------------------------------------------------
   # Map.
   #

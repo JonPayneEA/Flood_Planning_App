@@ -397,8 +397,36 @@ fetch_constituency_geometry <- function(statement_id, day_index) {
       crs               = 4326
     ))
   }
-  
+
   geom <- geojsonsf::geojson_sfc(dt$geometry)
   dt[, geometry := NULL]
   sf::st_sf(dt, geometry = geom, crs = 4326)
+}
+
+
+# -----------------------------------------------------------------------------
+# fetch_ea_constituency_mp()
+#
+# Returns, for every EA flood area, the constituency(ies) it overlaps and
+# that constituency's MP contact details. Backs the "Export CSV" button on
+# the Affected EA Warnings panel.
+#
+# The two source tables share no ID column -- ea_area_constituency_lookup
+# and mp_contact_details are joined on constituency_name.
+# -----------------------------------------------------------------------------
+
+fetch_ea_constituency_mp <- function() {
+  db_query(sprintf("
+    SELECT
+      l.ea_area_code,
+      l.constituency_name,
+      l.intersection_pct AS constituency_overlap_pct,
+      m.name              AS mp_name,
+      m.party             AS mp_party,
+      m.email             AS mp_email,
+      m.phone             AS mp_phone
+    FROM %s l
+    LEFT JOIN %s m
+      ON m.constituency_name = l.constituency_name
+  ", TBL_EA_CONSTITUENCY_LOOKUP, TBL_MP_CONTACTS))
 }

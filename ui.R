@@ -302,7 +302,12 @@ right_panel <- tags$div(
   # Affected-areas list (server.R builds the row markup).
   tags$div(
     class = "panel-section",
-    h6("Affected EA Warnings", class = "panel-h"),
+    tags$div(
+      class = "d-flex justify-content-between align-items-center",
+      h6("Affected EA Warnings", class = "panel-h"),
+      downloadButton("download_ea_areas", "Export CSV",
+                     class = "btn-sm btn-outline-secondary")
+    ),
     uiOutput("ea_area_list")
   )
 )
