@@ -207,12 +207,13 @@ sidebar <- tags$div(
               selectize = FALSE),
   
   h6("Map layers"),
-  checkboxInput("layer_polygons",       "FGS risk polygons", value = TRUE),
-  checkboxInput("layer_ea_areas",       "EA flood areas",    value = TRUE),
-  checkboxInput("layer_constituencies", "Constituencies",    value = FALSE),
-  
+  checkboxInput("layer_polygons", "FGS risk polygons", value = TRUE),
+  checkboxInput("layer_ea_areas", "EA flood areas",    value = TRUE),
+
   # Sub-control for the EA layer: pick which area types appear. Indented
-  # visually so it reads as a child of the EA layer toggle.
+  # visually so it reads as a child of the EA layer toggle, and placed
+  # directly under it (not after the constituencies toggle) so it reads
+  # as belonging to EA areas rather than constituencies.
   conditionalPanel(
     condition = "input.layer_ea_areas == true",
     tags$div(
@@ -221,7 +222,9 @@ sidebar <- tags$div(
       checkboxInput("ea_type_faa", "Flood Alert Areas",   value = TRUE)
     )
   ),
-  
+
+  checkboxInput("layer_constituencies", "Constituencies", value = FALSE),
+
   h6("Risk source"),
   checkboxInput("src_river",   "River",       value = TRUE),
   checkboxInput("src_surface", "Surface",     value = TRUE),

@@ -446,18 +446,24 @@ server <- function(input, output, session) {
   # context, with the FGS polygons sitting clearly on top. The layer group
   # is named separately so clearGroup() can drop it without disturbing the
   # FGS polygons.
+  #
+  # Colour comes from ea_area_type (fixed FWA/FAA palette), not risk_colour --
+  # the EA layer's job is to show which areas exist, not to repeat the risk
+  # signal the FGS layer already carries. Using risk_colour here made FWAs
+  # and FAAs indistinguishable from FGS polygons on the map.
   # ---------------------------------------------------------------------------
-  
+
   observe({
     proxy <- leaflet::leafletProxy("live_map")
     proxy <- leaflet::clearGroup(proxy, "ea_areas")
-    
+
     if (!isTRUE(input$layer_ea_areas)) return()
-    
+
     shape <- ea_geometry()
     if (is.null(shape) || nrow(shape) == 0L) return()
-    
-    fill_hex <- unname(RISK_COLOUR_HEX[trimws(tolower(shape$risk_colour))])
+
+    fill_hex <- unname(EA_AREA_TYPE_HEX[trimws(tolower(shape$ea_area_type))])
+    fill_hex[is.na(fill_hex)] <- "#808080"   # grey fallback for any unmatched type
 
     popup_html <- paste0(
       "<strong>", shape$ea_area_name, "</strong><br>",
