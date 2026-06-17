@@ -285,6 +285,7 @@ div.stat-card .stat-label {
 .source-info-card {
   background: #fff;
   border: 1px solid #dee2e6;
+  border-left: 4px solid #dee2e6;  /* width fixed; colour overridden inline per card */
   border-radius: 4px;
   padding: 10px 14px;
 }
