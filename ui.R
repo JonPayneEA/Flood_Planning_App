@@ -206,6 +206,7 @@ div.stat-card .stat-label {
   white-space: nowrap;
   position: relative;
   z-index: 10;
+  align-self: end;
 }
 .matrix-row-header { font-size: 10px; color: #495057; text-align: right; padding-right: 4px; }
 
@@ -272,7 +273,7 @@ div.stat-card .stat-label {
 .headline-notice {
   background: #fff;
   border: 1px solid #dee2e6;
-  border-left: 4px solid #c8581f;
+  border-left: 4px solid #dee2e6;  /* colour overridden inline from risk keyword */
   border-radius: 4px;
   padding: 10px 14px;
   margin-bottom: 12px;

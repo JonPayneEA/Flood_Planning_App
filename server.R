@@ -381,6 +381,14 @@ server <- function(input, output, session) {
     if (is.null(value) || isTRUE(is.na(value)) || !nzchar(value)) "-" else value
   }
 
+  risk_border_colour <- function(value) {
+    if (grepl("HIGH",   value, fixed = TRUE)) return(unname(RISK_COLOUR_HEX["red"]))
+    if (grepl("MEDIUM", value, fixed = TRUE)) return(unname(RISK_COLOUR_HEX["amber"]))
+    if (grepl("(?<!VERY )LOW", value, perl = TRUE)) return(unname(RISK_COLOUR_HEX["yellow"]))
+    if (grepl("VERY LOW",      value, fixed = TRUE)) return(unname(RISK_COLOUR_HEX["green"]))
+    "#dee2e6"
+  }
+
 
   # ---------------------------------------------------------------------------
   # Headline notice.
@@ -399,6 +407,7 @@ server <- function(input, output, session) {
 
     tags$div(
       class = "headline-notice",
+      style = paste0("border-left-color: ", risk_border_colour(headline), ";"),
       tags$strong("Headline: "),
       headline
     )
@@ -418,19 +427,9 @@ server <- function(input, output, session) {
     stmt <- selected_statement()
     if (is.null(stmt)) return(NULL)
 
-    risk_border_colour <- function(value) {
-      # "Very Low" must be checked before "Low" to avoid the substring matching first.
-      if (grepl("HIGH",     value, fixed = TRUE)) return(unname(RISK_COLOUR_HEX["red"]))
-      if (grepl("MEDIUM",   value, fixed = TRUE)) return(unname(RISK_COLOUR_HEX["amber"]))
-      # Use a lookbehind so "LOW" in "VERY LOW" doesn't match as standalone LOW.
-      if (grepl("(?<!VERY )LOW", value, perl = TRUE)) return(unname(RISK_COLOUR_HEX["yellow"]))
-      if (grepl("VERY LOW",      value, fixed = TRUE)) return(unname(RISK_COLOUR_HEX["green"]))
-      "#dee2e6"   # neutral when no risk keyword found
-    }
-
-    source_box <- function(label, value) {
+    source_box <- function(label, value, colour = NULL) {
       display <- field_or_dash(value)
-      border  <- risk_border_colour(display)
+      border  <- if (!is.null(colour)) colour else risk_border_colour(display)
       tags$div(
         class = "source-info-card",
         style = paste0("border-left-color: ", border, ";"),
@@ -444,7 +443,7 @@ server <- function(input, output, session) {
     tagList(
       tags$div(
         class = "source-info-stack mt-2",
-        source_box("England forecast", stmt$england_forecast),
+        source_box("England forecast", stmt$england_forecast, colour = "#1f6aa5"),
         source_box("River",   stmt$source_river),
         source_box("Coastal", stmt$source_coastal),
         source_box("Surface", stmt$source_surface),
