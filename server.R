@@ -418,11 +418,23 @@ server <- function(input, output, session) {
     stmt <- selected_statement()
     if (is.null(stmt)) return(NULL)
 
+    risk_border_colour <- function(value) {
+      # "Very Low" must be checked before "Low" to avoid the substring matching first.
+      if (grepl("Very Low", value, fixed = TRUE)) return(unname(RISK_COLOUR_HEX["green"]))
+      if (grepl("High",     value, fixed = TRUE)) return(unname(RISK_COLOUR_HEX["red"]))
+      if (grepl("Medium",   value, fixed = TRUE)) return(unname(RISK_COLOUR_HEX["amber"]))
+      if (grepl("Low",      value, fixed = TRUE)) return(unname(RISK_COLOUR_HEX["yellow"]))
+      "#dee2e6"   # neutral when no risk keyword found
+    }
+
     source_box <- function(label, value) {
+      display <- field_or_dash(value)
+      border  <- risk_border_colour(display)
       tags$div(
         class = "source-info-card",
+        style = paste0("border-left-color: ", border, ";"),
         tags$div(label, class = "source-info-label"),
-        tags$div(field_or_dash(value), class = "source-info-value")
+        tags$div(display, class = "source-info-value")
       )
     }
 
@@ -436,11 +448,6 @@ server <- function(input, output, session) {
         source_box("Coastal", stmt$source_coastal),
         source_box("Surface", stmt$source_surface),
         source_box("Ground",  stmt$source_ground)
-      ),
-      tags$div(
-        class = "panel-section mt-2",
-        tags$div("England forecast", class = "panel-h"),
-        tags$p(field_or_dash(stmt$england_forecast), class = "mb-0 mt-2")
       ),
       if (pdf_url != "-") {
         tags$a(href = pdf_url, target = "_blank", rel = "noopener noreferrer",

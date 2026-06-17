@@ -198,7 +198,12 @@ div.stat-card .stat-label {
 .matrix-cell.amber  { background: #e08020; }
 .matrix-cell.red    { background: #b02020; }
 
-.matrix-col-header { font-size: 10px; color: #495057; text-align: center; }
+.matrix-col-header {
+  font-size: 10px; color: #495057; text-align: left;
+  transform: rotate(-35deg);
+  transform-origin: bottom left;
+  white-space: nowrap;
+}
 .matrix-row-header { font-size: 10px; color: #495057; text-align: right; padding-right: 4px; }
 
 .matrix-likelihood-label {
@@ -280,6 +285,7 @@ div.stat-card .stat-label {
 .source-info-card {
   background: #fff;
   border: 1px solid #dee2e6;
+  border-left: 4px solid #dee2e6;  /* width fixed; colour overridden inline per card */
   border-radius: 4px;
   padding: 10px 14px;
 }
