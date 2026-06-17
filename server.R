@@ -420,10 +420,10 @@ server <- function(input, output, session) {
 
     risk_border_colour <- function(value) {
       # "Very Low" must be checked before "Low" to avoid the substring matching first.
-      if (grepl("Very Low", value, fixed = TRUE)) return(unname(RISK_COLOUR_HEX["green"]))
-      if (grepl("High",     value, fixed = TRUE)) return(unname(RISK_COLOUR_HEX["red"]))
-      if (grepl("Medium",   value, fixed = TRUE)) return(unname(RISK_COLOUR_HEX["amber"]))
-      if (grepl("Low",      value, fixed = TRUE)) return(unname(RISK_COLOUR_HEX["yellow"]))
+      if (grepl("VERY LOW", value, fixed = TRUE)) return(unname(RISK_COLOUR_HEX["green"]))
+      if (grepl("HIGH",     value, fixed = TRUE)) return(unname(RISK_COLOUR_HEX["red"]))
+      if (grepl("MEDIUM",   value, fixed = TRUE)) return(unname(RISK_COLOUR_HEX["amber"]))
+      if (grepl("LOW",      value, fixed = TRUE)) return(unname(RISK_COLOUR_HEX["yellow"]))
       "#dee2e6"   # neutral when no risk keyword found
     }
 

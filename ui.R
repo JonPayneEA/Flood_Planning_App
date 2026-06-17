@@ -172,6 +172,7 @@ div.stat-card .stat-label {
   grid-template-columns: 16px 64px repeat(4, 36px) !important;
   grid-template-rows: 20px repeat(4, 36px) 18px !important;
   gap: 2px;
+  margin-top: 20px;
   margin-bottom: 4px;
   width: max-content !important;
   align-items: center;
@@ -200,7 +201,7 @@ div.stat-card .stat-label {
 
 .matrix-col-header {
   font-size: 10px; color: #495057; text-align: left;
-  transform: rotate(-35deg);
+  transform: rotate(35deg);
   transform-origin: bottom left;
   white-space: nowrap;
 }
