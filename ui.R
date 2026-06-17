@@ -1,6 +1,6 @@
 # =============================================================================
 # ui.R
-# Declarative UI for the FGS Flood Guidance dashboard.
+# Declarative UI for the Flood Intelligence Tool dashboard.
 #
 # Three-column layout for the Live view tab: a left sidebar of controls, a
 # centre column holding the map and a small title block, and a right column
@@ -460,12 +460,12 @@ right_panel <- tags$div(
 ui <- bslib::page_fluid(
   theme = bslib::bs_theme(version = 5),
   tags$head(tags$style(HTML(custom_css))),
-  titlePanel("FGS Flood Guidance"),
+  titlePanel("Flood Intelligence Tool"),
   
   tabsetPanel(
     id = "main_tabs",
     
-    tabPanel("Live view",
+    tabPanel("FGS Interrogator",
              fluidRow(
                column(2, sidebar),
                column(7, centre),
