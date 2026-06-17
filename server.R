@@ -430,16 +430,12 @@ server <- function(input, output, session) {
 
     tagList(
       tags$div(
-        class = "source-info-grid",
+        class = "source-info-stack mt-2",
+        source_box("England forecast", stmt$england_forecast),
+        source_box("River",   stmt$source_fluvial),
         source_box("Coastal", stmt$source_coastal),
         source_box("Surface", stmt$source_surface),
-        source_box("Ground",  stmt$source_ground),
-        source_box("Fluvial", stmt$source_fluvial)
-      ),
-      tags$div(
-        class = "panel-section mt-2",
-        tags$div("England forecast", class = "panel-h"),
-        tags$p(field_or_dash(stmt$england_forecast), class = "mb-0 mt-2")
+        source_box("Ground",  stmt$source_ground)
       ),
       if (pdf_url != "-") {
         tags$a(href = pdf_url, target = "_blank", rel = "noopener noreferrer",
