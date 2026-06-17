@@ -272,17 +272,16 @@ div.stat-card .stat-label {
 }
 .headline-notice strong { font-weight: 600; }
 
-.source-info-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
+.source-info-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 .source-info-card {
   background: #fff;
   border: 1px solid #dee2e6;
   border-radius: 4px;
-  padding: 10px;
-  text-align: center;
+  padding: 10px 14px;
 }
 .source-info-label {
   font-size: 10px;
@@ -292,9 +291,9 @@ div.stat-card .stat-label {
   margin-bottom: 4px;
 }
 .source-info-value {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13px;
   color: #212529;
+  line-height: 1.4;
 }
 "
 

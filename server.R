@@ -430,11 +430,12 @@ server <- function(input, output, session) {
 
     tagList(
       tags$div(
-        class = "source-info-grid",
+        class = "source-info-stack mt-2",
+        source_box("England forecast", stmt$england_forecast),
+        source_box("River",   stmt$source_river),
         source_box("Coastal", stmt$source_coastal),
         source_box("Surface", stmt$source_surface),
-        source_box("Ground",  stmt$source_ground),
-        source_box("Fluvial", stmt$source_river)
+        source_box("Ground",  stmt$source_ground)
       ),
       tags$div(
         class = "panel-section mt-2",
