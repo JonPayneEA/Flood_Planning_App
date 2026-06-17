@@ -327,6 +327,9 @@ sidebar <- tags$div(
   selectInput("statement_id", NULL,
               choices = NULL,         # populated by updateSelectInput in server
               selectize = FALSE),
+  actionButton("refresh_data", "Refresh statements",
+               class = "btn-sm btn-outline-secondary w-100 mb-2",
+               icon  = icon("rotate-right")),
   
   h6("Map layers"),
   checkboxInput("layer_polygons", "FGS risk polygons", value = TRUE),

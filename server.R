@@ -34,23 +34,35 @@ source("data.R", local = TRUE)
 server <- function(input, output, session) {
   
   # ---------------------------------------------------------------------------
-  # Statement picker: populate the dropdown with the last 20 statements.
+  # Statement list: fetched on session start and on each Refresh click.
   #
-  # Runs once when a session starts. The newest statement is selected by
-  # default so the app opens on what an operator most likely wants to see.
-  # Labels combine date/time and statement_id for an unambiguous read.
+  # recent_rv is a reactiveVal so selected_statement() invalidates whenever
+  # the list is refreshed, picking up any new statements Databricks has
+  # ingested since the session opened.
   # ---------------------------------------------------------------------------
-  
-  recent <- fetch_recent_statements(100L)
-  if (nrow(recent) > 0L) {
-    labels <- sprintf("%s  (id %d)",
-                      format(as.POSIXct(recent$issued_at), "%a %d %b %H:%M"),
-                      recent$statement_id)
-    choices <- setNames(as.character(recent$statement_id), labels)
-    updateSelectInput(session, "statement_id",
-                      choices  = choices,
-                      selected = choices[1])
+
+  recent_rv <- reactiveVal(data.table())
+
+  load_statements <- function(keep_selected = FALSE) {
+    dt <- fetch_recent_statements(100L)
+    recent_rv(dt)
+    if (nrow(dt) == 0L) return()
+    labels  <- sprintf("%s  (id %d)",
+                       format(as.POSIXct(dt$issued_at), "%a %d %b %H:%M"),
+                       dt$statement_id)
+    choices <- setNames(as.character(dt$statement_id), labels)
+    # On refresh keep the currently selected statement if it still exists,
+    # otherwise default to the newest.
+    current <- isolate(input$statement_id)
+    sel <- if (keep_selected && !is.null(current) && current %in% choices) current else choices[1]
+    updateSelectInput(session, "statement_id", choices = choices, selected = sel)
   }
+
+  load_statements()
+
+  observeEvent(input$refresh_data, {
+    load_statements(keep_selected = TRUE)
+  })
 
 
   # ---------------------------------------------------------------------------
@@ -89,7 +101,7 @@ server <- function(input, output, session) {
   selected_statement <- reactive({
     sid <- as.integer(input$statement_id)
     req(sid)
-    row <- recent[statement_id == sid]
+    row <- recent_rv()[statement_id == sid]
     if (nrow(row) == 0L) return(NULL)
     as.list(row[1L])
   })
