@@ -170,9 +170,9 @@ div.stat-card .stat-label {
 .risk-matrix-wrap {
   display: grid !important;
   grid-template-columns: 16px 64px repeat(4, 36px) !important;
-  grid-template-rows: 20px repeat(4, 36px) 18px !important;
+  grid-template-rows: 30px repeat(4, 36px) 18px !important;
   gap: 2px;
-  margin-top: 20px;
+  margin-top: 8px;
   margin-bottom: 4px;
   width: max-content !important;
   align-items: center;
@@ -204,6 +204,8 @@ div.stat-card .stat-label {
   transform: rotate(35deg);
   transform-origin: bottom left;
   white-space: nowrap;
+  position: relative;
+  z-index: 10;
 }
 .matrix-row-header { font-size: 10px; color: #495057; text-align: right; padding-right: 4px; }
 
