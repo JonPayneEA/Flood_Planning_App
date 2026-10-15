@@ -44,6 +44,10 @@ matrix_filter_ui <- function() {
     tags$div(
       class    = paste("matrix-cell", tolower(cell$colour)),  # e.g. "matrix-cell red"
       style    = sprintf("grid-column: %d; grid-row: %d;", cell$x + 2, 6 - cell$y),
+      # Hover text spells the cell out: both axes, the band and the risk level.
+      title    = sprintf("Impact: %s | Likelihood: %s (%s) | Risk: %s",
+                         IMPACT_LABELS[cell$x], LIKELIHOOD_LABELS[cell$y],
+                         LIKELIHOOD_BANDS[cell$y], RISK_LEVEL_BY_COLOUR[[cell$colour]]),
       `data-x` = cell$x,                             # data-* attrs for any
       `data-y` = cell$y,                             # future JS hook
       checkboxInput(
@@ -66,7 +70,8 @@ matrix_filter_ui <- function() {
     tags$div(
       class = "matrix-row-header",
       style = sprintf("grid-column: 2; grid-row: %d;", 6 - y),
-      LIKELIHOOD_LABELS[y]
+      tags$div(class = "name", LIKELIHOOD_LABELS[y]),
+      tags$div(class = "band", LIKELIHOOD_BANDS[y])
     )
   })
 
@@ -169,7 +174,7 @@ div.stat-card .stat-label {
 
 .risk-matrix-wrap {
   display: grid !important;
-  grid-template-columns: 16px 64px repeat(4, 36px) !important;
+  grid-template-columns: 16px 76px repeat(4, 36px) !important;
   grid-template-rows: 40px repeat(4, 36px) 18px !important;
   gap: 2px;
   margin-top: 8px;
@@ -208,7 +213,8 @@ div.stat-card .stat-label {
   z-index: 10;
   align-self: start;
 }
-.matrix-row-header { font-size: 10px; color: #495057; text-align: right; padding-right: 4px; }
+.matrix-row-header { font-size: 10px; color: #495057; text-align: right; padding-right: 4px; line-height: 1.15; }
+.matrix-row-header .band { font-size: 9px; color: #868e96; }
 
 .matrix-likelihood-label {
   writing-mode: vertical-rl;

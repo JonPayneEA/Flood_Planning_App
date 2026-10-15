@@ -191,6 +191,10 @@ RISK_MATRIX <- data.table(
 # README (risk matrix labels).
 IMPACT_LABELS     <- c("Minor", "Moderate", "Significant", "Extreme")
 LIKELIHOOD_LABELS <- c("Low", "Medium", "High", "Very High")
+# Probability band behind each likelihood label (FGS Public API documentation).
+LIKELIHOOD_BANDS  <- c("10-25%", "25-50%", "50-75%", ">75%")
+# Overall risk level for each colour band, as in the pipeline's RISK_MATRIX.
+RISK_LEVEL_BY_COLOUR <- c(Green = "Very Low", Yellow = "Low", Amber = "Medium", Red = "High")
 
 # Forecast risk rank used by the constituency products (jobs 18 to 21).
 # 0 means nothing flagged. Colours reuse the FGS band palette.
