@@ -1005,7 +1005,7 @@ server <- function(input, output, session) {
         tags$td(r$constituency_name),
         tags$td(format(as.Date(r$forecast_date), "%a %d %b")),
         tags$td(r$source),
-        tags$td(sprintf("%s → %s", rank_label(r$previous_rank), rank_label(r$new_rank))),
+        tags$td(rank_label(r$previous_rank), HTML(" &rarr; "), rank_label(r$new_rank)),
         tags$td(sub("_", "-", r$change_type, fixed = TRUE))
       )
     })
@@ -1015,7 +1015,7 @@ server <- function(input, output, session) {
       tags$summary(
         tags$span("Since the previous statement: "),
         tags$span(class = "chg-count chg-up",   sprintf("%d up", up)),
-        tags$span(" · "),
+        tags$span(HTML(" &middot; ")),
         tags$span(class = "chg-count chg-down", sprintf("%d down", down)),
         tags$span(class = "text-muted", " (constituencies)")
       ),
@@ -1094,7 +1094,9 @@ server <- function(input, output, session) {
                      columnDefs = list(list(targets = targets, render = render_js))),
       caption = sprintf("%d constituencies", nrow(tbl))
     ) |>
-      DT::formatStyle(rank_cols, backgroundColor = DT::styleEqual(0:4, RANK_HEX))
+      DT::formatStyle(rank_cols,
+                      backgroundColor = DT::styleEqual(0:4, RANK_HEX),
+                      color           = DT::styleEqual(0:4, c("#212529", "#ffffff", "#212529", "#212529", "#ffffff")))
   })
 
   output$download_situation <- downloadHandler(
@@ -1182,7 +1184,10 @@ server <- function(input, output, session) {
     cov_of  <- setNames(covered$days_covered, covered$month)
     vmax    <- max(e[constituency_id %in% totals$constituency_id, value], 1, na.rm = TRUE)
     ramp    <- grDevices::colorRampPalette(c("#fff3bf", "#e08020", "#b02020"))(100L)
-    cell_bg <- function(v) if (is.na(v) || v <= 0) "#f1f3f5" else ramp[max(1L, ceiling(100 * v / vmax))]
+    cell_idx <- function(v) max(1L, ceiling(100 * v / vmax))
+    cell_bg  <- function(v) if (is.na(v) || v <= 0) "#f1f3f5" else ramp[cell_idx(v)]
+    # White text once the fill is dark enough to need it.
+    cell_fg  <- function(v) if (!is.na(v) && v > 0 && cell_idx(v) > 60L) "#ffffff" else "#212529"
 
     header <- tags$tr(
       tags$th(""),
@@ -1199,7 +1204,7 @@ server <- function(input, output, session) {
         tags$td(class = "name", totals$constituency_name[i]),
         lapply(months, function(m) {
           v <- cell_rows[month == m, sum(value, na.rm = TRUE)]
-          tags$td(class = "cell", style = paste0("background:", cell_bg(v), ";"),
+          tags$td(class = "cell", style = paste0("background:", cell_bg(v), ";color:", cell_fg(v), ";"),
                   if (v > 0) v else "")
         }),
         tags$td(class = "total", totals$total[i])

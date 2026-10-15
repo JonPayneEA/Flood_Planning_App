@@ -347,7 +347,7 @@ div.stat-card .stat-label {
   padding: 1px 6px; border-radius: 3px; font-size: 11px; color: #212529;
 }
 .exposure-grid { border-collapse: collapse; font-size: 12px; }
-.exposure-grid th { font-weight: 500; padding: 2px 6px; text-align: center; }
+.exposure-grid th { font-weight: 500; padding: 2px 6px; text-align: center; white-space: nowrap; }
 .exposure-grid td.name { text-align: left; padding: 2px 10px 2px 0; white-space: nowrap; }
 .exposure-grid td.cell { width: 44px; height: 24px; text-align: center; border: 2px solid #f8f9fa; }
 .exposure-grid td.total { padding-left: 10px; font-weight: 600; }
