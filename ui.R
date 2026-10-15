@@ -305,6 +305,56 @@ div.stat-card .stat-label {
   color: #212529;
   line-height: 1.4;
 }
+
+/* --- 5. Header, health badge, changes strip ------------------------------ */
+
+.app-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 15px 8px 15px;
+}
+.app-header h2 { margin: 0; font-size: 1.6rem; }
+.health-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 10px; border-radius: 12px; font-size: 12px;
+  border: 1px solid transparent; background: none; cursor: pointer;
+}
+.health-badge .dot { width: 9px; height: 9px; border-radius: 50%; }
+.health-ok   { color: #1e6b1e; border-color: #4f9d4f; background: #eaf5ea; }
+.health-ok   .dot { background: #4f9d4f; }
+.health-warn { color: #8a5a00; border-color: #e08020; background: #fdf1e2; }
+.health-warn .dot { background: #e08020; }
+.health-fail { color: #8b1a1a; border-color: #b02020; background: #f9e5e5; }
+.health-fail .dot { background: #b02020; }
+.health-unknown { color: #495057; border-color: #adb5bd; background: #f1f3f5; }
+.health-unknown .dot { background: #adb5bd; }
+
+.changes-strip {
+  background: #fff; border: 1px solid #dee2e6; border-radius: 6px;
+  padding: 8px 12px; margin-bottom: 12px; font-size: 13px;
+}
+.changes-strip summary { cursor: pointer; }
+.changes-strip .chg-count { font-weight: 600; }
+.changes-strip .chg-up   { color: #b02020; }
+.changes-strip .chg-down { color: #1e6b1e; }
+.changes-strip table { width: 100%; margin-top: 8px; font-size: 12px; }
+.changes-strip td, .changes-strip th { padding: 2px 6px; }
+.changes-strip .chg-scroll { max-height: 220px; overflow-y: auto; }
+
+/* --- 6. Rank chips, exposure grid, briefing text ------------------------ */
+
+.rank-chip {
+  display: inline-block; min-width: 54px; text-align: center;
+  padding: 1px 6px; border-radius: 3px; font-size: 11px; color: #212529;
+}
+.exposure-grid { border-collapse: collapse; font-size: 12px; }
+.exposure-grid th { font-weight: 500; padding: 2px 6px; text-align: center; }
+.exposure-grid td.name { text-align: left; padding: 2px 10px 2px 0; white-space: nowrap; }
+.exposure-grid td.cell { width: 44px; height: 24px; text-align: center; border: 2px solid #f8f9fa; }
+.exposure-grid td.total { padding-left: 10px; font-weight: 600; }
+.briefing-body {
+  white-space: pre-wrap; background: #fff; border: 1px solid #dee2e6;
+  border-radius: 6px; padding: 12px; font-size: 13px;
+}
 "
 
 
@@ -389,6 +439,8 @@ centre <- tags$div(
   # notice -- statement-level context first, then the day-specific risk
   # state, then the map itself.
   uiOutput("headline_notice"),
+  # What changed against the previous statement (pipeline job 18).
+  uiOutput("changes_strip"),
   # Quiet-state notice. Shown when there are no FGS polygons for the current
   # statement-day. A quiet FGS is operationally normal -- this is an
   # expected state, not an error.
@@ -453,6 +505,68 @@ right_panel <- tags$div(
 
 
 # -----------------------------------------------------------------------------
+# Constituency situation tab.
+#
+# One row per constituency from constituency_flood_situation (job 19). The
+# table always reflects the pipeline's latest complete statement, not the
+# statement picked on the Interrogator tab; the note under the filters says
+# which statement that is. Selecting a row shows the MP briefing draft, if
+# one exists. The drafts are text only: nothing is sent from here.
+# -----------------------------------------------------------------------------
+
+situation_tab <- tags$div(
+  class = "p-3",
+  uiOutput("situation_note"),
+  fluidRow(
+    column(3, selectInput("sit_min_rank", "Minimum forecast risk",
+                          choices  = c("Any" = "0", "Very Low" = "1", "Low" = "2",
+                                       "Medium" = "3", "High" = "4"),
+                          selected = "3")),
+    column(3, tags$div(style = "margin-top: 30px;",
+                       checkboxInput("sit_escalated", "Escalated only", FALSE))),
+    column(3, tags$div(style = "margin-top: 30px;",
+                       checkboxInput("sit_warning", "Warning or alert in force", FALSE))),
+    column(3, tags$div(style = "margin-top: 25px;",
+                       downloadButton("download_situation", "Export CSV",
+                                      class = "btn-sm btn-outline-secondary")))
+  ),
+  DT::dataTableOutput("situation_table"),
+  tags$hr(),
+  uiOutput("briefing_panel")
+)
+
+
+# -----------------------------------------------------------------------------
+# Exposure history tab.
+#
+# Heat grid from fgs_constituency_exposure (job 21): the constituencies with
+# most days at or above a chosen risk over the last 12 months, by month.
+# -----------------------------------------------------------------------------
+
+exposure_tab <- tags$div(
+  class = "p-3",
+  fluidRow(
+    column(3, selectInput("exp_source", "Flood source",
+                          choices  = c("Any source" = "any", "River" = "river",
+                                       "Surface" = "surface", "Coastal" = "coastal",
+                                       "Groundwater" = "ground"),
+                          selected = "any")),
+    column(3, selectInput("exp_metric", "Measure",
+                          choices  = c("Days at Medium or above" = "days_medium_or_above",
+                                       "Days at any flagged risk" = "days_flagged"),
+                          selected = "days_medium_or_above")),
+    column(3, sliderInput("exp_top_n", "Constituencies shown",
+                          min = 10, max = 50, value = 25, step = 5))
+  ),
+  tags$small(class = "text-muted d-block mb-2",
+             "Counts one day per date (day 1 of the last statement issued that date). ",
+             "A blank cell means no flagged day that month, not missing data. ",
+             "Days with no statement are not counted as quiet."),
+  uiOutput("exposure_grid")
+)
+
+
+# -----------------------------------------------------------------------------
 # Top-level UI.
 #
 # tabsetPanel with the live view active; the five analytics tabs are
@@ -463,7 +577,11 @@ right_panel <- tags$div(
 ui <- bslib::page_fluid(
   theme = bslib::bs_theme(version = 5),
   tags$head(tags$style(HTML(custom_css))),
-  titlePanel("Flood Intelligence Tool"),
+  tags$div(
+    class = "app-header",
+    tags$h2("Flood Intelligence Tool"),
+    uiOutput("health_badge")
+  ),
   
   tabsetPanel(
     id = "main_tabs",
@@ -476,11 +594,14 @@ ui <- bslib::page_fluid(
              )
     ),
     
-    # Placeholders.
+    tabPanel("Constituency situation", situation_tab),
+    tabPanel("Exposure history",       exposure_tab),
+
+    # Placeholders. These need data the pipeline does not hold yet
+    # (observed gauge levels, the Met Office licence decision).
     tabPanel("Warning issue times",   tags$p("Coming soon.")),
     tabPanel("Forecast verification", tags$p("Coming soon.")),
     tabPanel("Event playback",        tags$p("Coming soon.")),
-    tabPanel("Coverage gaps",         tags$p("Coming soon.")),
     tabPanel("MP audit log",          tags$p("Coming soon."))
   )
 )

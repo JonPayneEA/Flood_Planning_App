@@ -224,8 +224,9 @@ fetch_ea_areas_for_statement <- function(statement_id, day_index) {
       risk_y,
       intersection_pct
     FROM %s
-    WHERE statement_id = %d
-      AND day_index    = %d
+    WHERE statement_id    = %d
+      AND day_index       = %d
+      AND geometry_source = '%s'
     ORDER BY
       CASE risk_colour
         WHEN 'Red'    THEN 1
@@ -235,7 +236,8 @@ fetch_ea_areas_for_statement <- function(statement_id, day_index) {
         ELSE 5
       END,
       intersection_pct DESC
-  ", TBL_EA_INTERSECT, as.integer(statement_id), as.integer(day_index)))
+  ", TBL_EA_INTERSECT, as.integer(statement_id), as.integer(day_index),
+     GEOMETRY_SOURCE))
 }
 
 
@@ -257,13 +259,15 @@ fetch_summary_counts <- function(statement_id, day_index) {
       (SELECT COUNT(*)
          FROM %s WHERE statement_id = %d AND day_index = %d) AS polygon_count,
       (SELECT COUNT(DISTINCT ea_area_code)
-         FROM %s WHERE statement_id = %d AND day_index = %d) AS ea_area_count,
+         FROM %s WHERE statement_id = %d AND day_index = %d
+          AND geometry_source = '%s') AS ea_area_count,
       (SELECT COUNT(DISTINCT constituency_id)
-         FROM %s WHERE statement_id = %d AND day_index = %d) AS constituency_count
+         FROM %s WHERE statement_id = %d AND day_index = %d
+          AND geometry_source = '%s') AS constituency_count
   ",
                          TBL_RISK_POLYGONS,   sid, did,
-                         TBL_EA_INTERSECT,    sid, did,
-                         TBL_CONST_INTERSECT, sid, did))
+                         TBL_EA_INTERSECT,    sid, did, GEOMETRY_SOURCE,
+                         TBL_CONST_INTERSECT, sid, did, GEOMETRY_SOURCE))
   
   if (nrow(dt) == 0L) {
     return(list(polygon_count = 0L, ea_area_count = 0L, constituency_count = 0L))
@@ -306,8 +310,9 @@ fetch_ea_geometry <- function(statement_id, day_index) {
         i.intersection_pct,
         i.source
       FROM %s i
-      WHERE i.statement_id = %d
-        AND i.day_index    = %d
+      WHERE i.statement_id    = %d
+        AND i.day_index       = %d
+        AND i.geometry_source = '%s'
     )
     SELECT
       a.ea_area_code,
@@ -327,7 +332,7 @@ fetch_ea_geometry <- function(statement_id, day_index) {
       ON g.ea_area_code = a.ea_area_code
     WHERE g.geometry IS NOT NULL
   ",
-                         TBL_EA_INTERSECT, sid, did,
+                         TBL_EA_INTERSECT, sid, did, GEOMETRY_SOURCE,
                          TBL_EA_FWA,
                          TBL_EA_FAA))
 
@@ -385,8 +390,9 @@ fetch_constituency_geometry <- function(statement_id, day_index) {
         i.risk_level,
         i.intersection_pct
       FROM %s i
-      WHERE i.statement_id = %d
-        AND i.day_index    = %d
+      WHERE i.statement_id    = %d
+        AND i.day_index       = %d
+        AND i.geometry_source = '%s'
     )
     SELECT
       a.constituency_id,
@@ -403,7 +409,7 @@ fetch_constituency_geometry <- function(statement_id, day_index) {
       ON c.constituency_id = a.constituency_id
     WHERE c.geometry IS NOT NULL
   ",
-                         TBL_CONST_INTERSECT, sid, did,
+                         TBL_CONST_INTERSECT, sid, did, GEOMETRY_SOURCE,
                          TBL_CONSTITUENCIES))
 
   if (nrow(dt) == 0L) {
@@ -449,9 +455,11 @@ fetch_constituencies_for_statement <- function(statement_id, day_index) {
       risk_level,
       intersection_pct
     FROM %s
-    WHERE statement_id = %d
-      AND day_index    = %d
-  ", TBL_CONST_INTERSECT, as.integer(statement_id), as.integer(day_index)))
+    WHERE statement_id    = %d
+      AND day_index       = %d
+      AND geometry_source = '%s'
+  ", TBL_CONST_INTERSECT, as.integer(statement_id), as.integer(day_index),
+     GEOMETRY_SOURCE))
 }
 
 
@@ -480,4 +488,158 @@ fetch_ea_constituency_mp <- function() {
     LEFT JOIN %s m
       ON m.constituency_name = l.constituency_name
   ", TBL_EA_CONSTITUENCY_LOOKUP, TBL_MP_CONTACTS))
+}
+
+
+
+# =============================================================================
+# PIPELINE PRODUCTS (FGS_Notebooks jobs 18 to 22)
+#
+# Plain tables built by the pipeline, so these queries do no spatial work and
+# no geometry parsing. Ranks: 1 Very Low, 2 Low, 3 Medium, 4 High, 0 nothing.
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# fetch_pipeline_health()
+#
+# One row per health check plus an `overall` row (job 22). Backs the status
+# badge in the header. The table is rebuilt on every poll, so it is tiny.
+# -----------------------------------------------------------------------------
+
+fetch_pipeline_health <- function() {
+  db_query(sprintf("
+    SELECT check_name, status, value, detail, checked_at
+    FROM %s
+  ", TBL_HEALTH))
+}
+
+
+# -----------------------------------------------------------------------------
+# fetch_changes()
+#
+# What changed in a statement against the one before it (job 18), per
+# constituency, forecast day and flood source. Unchanged cells are not
+# stored. History is kept, so the statement_id picks the right batch. Rows
+# are limited to the active geometry source.
+# -----------------------------------------------------------------------------
+
+fetch_changes <- function(statement_id) {
+  db_query(sprintf("
+    SELECT
+      constituency_id,
+      constituency_name,
+      forecast_date,
+      day_index,
+      source,
+      previous_rank,
+      new_rank,
+      rank_change,
+      change_type
+    FROM %s
+    WHERE statement_id    = %d
+      AND geometry_source = '%s'
+    ORDER BY new_rank DESC, rank_change DESC, constituency_name
+  ", TBL_CHANGES, as.integer(statement_id), GEOMETRY_SOURCE))
+}
+
+
+# -----------------------------------------------------------------------------
+# fetch_situation()
+#
+# One row per constituency (job 19): worst forecast risk over five days, risk
+# by day, escalation flag, warnings and alerts in force, and the MP. The
+# table holds the pipeline's latest complete statement only, whichever
+# statement the picker shows, so the caller should say so on screen.
+# Forecast and warnings stay in separate columns by design; no combined score.
+# -----------------------------------------------------------------------------
+
+fetch_situation <- function() {
+  db_query(sprintf("
+    SELECT
+      constituency_id,
+      constituency_name,
+      mp_matched,
+      mp_name,
+      mp_party,
+      mp_email,
+      mp_phone,
+      fgs_statement_id,
+      fgs_issued_at,
+      fgs_worst_rank,
+      fgs_worst_level,
+      fgs_worst_date,
+      fgs_worst_sources,
+      fgs_rank_day1, fgs_rank_day2, fgs_rank_day3, fgs_rank_day4, fgs_rank_day5,
+      fgs_changed,
+      fgs_escalated,
+      severe_warnings,
+      warnings,
+      alerts,
+      has_active_warning
+    FROM %s
+  ", TBL_SITUATION))
+}
+
+
+# -----------------------------------------------------------------------------
+# fetch_briefing_drafts()
+#
+# DRAFT briefings for MPs whose constituency reaches the pipeline's minimum
+# risk (job 20). Nothing is sent from here or from the pipeline: the app only
+# displays the text so a person can review and send it by their own route.
+# Returns the newest batch (highest statement_id) for the active geometry
+# source.
+# -----------------------------------------------------------------------------
+
+fetch_briefing_drafts <- function() {
+  db_query(sprintf("
+    SELECT
+      statement_id,
+      constituency_id,
+      constituency_name,
+      mp_name,
+      mp_email,
+      worst_rank,
+      worst_level,
+      worst_date,
+      is_escalation,
+      has_active_warning,
+      subject,
+      body,
+      status,
+      reviewed_by
+    FROM %s
+    WHERE geometry_source = '%s'
+      AND statement_id = (SELECT MAX(statement_id) FROM %s
+                          WHERE geometry_source = '%s')
+    ORDER BY worst_rank DESC, constituency_name
+  ", TBL_BRIEFINGS, GEOMETRY_SOURCE, TBL_BRIEFINGS, GEOMETRY_SOURCE))
+}
+
+
+# -----------------------------------------------------------------------------
+# fetch_exposure()
+#
+# Days each constituency sat at each risk rank, by calendar month and flood
+# source (job 21; source = 'any' is the worst across sources). Sparse: a
+# month with no flagged day has no row, and days_covered is the denominator.
+# Counts day 1 of the last statement issued on each date, so each date is
+# counted once. Limited to the last n_months calendar months.
+# -----------------------------------------------------------------------------
+
+fetch_exposure <- function(n_months = 12L) {
+  db_query(sprintf("
+    SELECT
+      constituency_id,
+      constituency_name,
+      month,
+      source,
+      days_medium_or_above,
+      days_flagged,
+      worst_rank,
+      days_covered
+    FROM %s
+    WHERE month >= date_format(add_months(current_date(), -%d), 'yyyy-MM')
+  ", TBL_EXPOSURE, as.integer(n_months) - 1L))
 }

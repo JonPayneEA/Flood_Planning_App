@@ -2,8 +2,9 @@
 
 R Shiny version of the FGS dashboard. Reads from Databricks Delta tables via
 **brickster's DBI driver** against a SQL warehouse. Designed for deployment
-to Posit Connect. First version covers only the Live View tab; analytics
-tabs are placeholders.
+to Posit Connect. Tabs: the FGS Interrogator (map and filters), Constituency
+situation, and Exposure history. The remaining analytics tabs are placeholders
+that wait on data the pipeline does not hold yet.
 
 ## Stack
 
@@ -12,6 +13,7 @@ tabs are placeholders.
 - **brickster** for Databricks SQL connectivity via the SQL Statement
   Execution API (no ODBC driver required, no Python dependency)
 - **DBI** as the standard database interface brickster plugs into
+- **DT** for the sortable constituency table
 - **sf** for the polygon geometry
 - **leaflet** for the map widget, with `leafletProxy()` for in-place updates
 - **htmltools** for the custom HTML chunks
@@ -54,7 +56,7 @@ R 4.2 or later. Required packages:
 ```r
 install.packages(c(
   "shiny", "data.table", "brickster", "DBI",
-  "sf", "leaflet", "htmltools", "dotenv"
+  "sf", "leaflet", "htmltools", "dotenv", "DT"
 ))
 ```
 
@@ -78,6 +80,10 @@ pak::pak("databrickslabs/brickster")
      the warehouse ID is `abc123`.
    - `FGS_CATALOG`, `FGS_SCHEMA` -- the Unity Catalog location of the
      FGS tables.
+   - `FGS_GEOMETRY_SOURCE` -- optional, `risk_areas` (default) or `aoc`.
+     Must match `FGS_GEOMETRY_SOURCE` in the pipeline's `config.py`. The
+     intersection tables can hold both sources, and the app reads only this
+     one, so a mismatch shows the wrong set or an empty map.
 
 2. Open the project in RStudio (or VS Code with the R extension). Click
    *Run App*, or call:
@@ -98,12 +104,12 @@ rsconnect::deployApp(
 )
 ```
 
-Set the five environment variables under the deployed app's *Vars* tab.
+Set the environment variables under the deployed app's *Vars* tab.
 Do not deploy `.env`; `.rscignore` already excludes it.
 
 ## Data dependencies
 
-Reads from four Delta tables in the configured catalog/schema:
+Reads from these Delta tables in the configured catalog/schema:
 
 - `fgs_statements`
 - `fgs_risk_polygons` with the six risk matrix columns: `risk_x`,
@@ -112,15 +118,34 @@ Reads from four Delta tables in the configured catalog/schema:
   columns from the polygon table
 - `fgs_constituency_intersections`
 
-If your intersection tables still use the older `risk_level_min` /
-`risk_level_max` schema, queries in `data.R` will need adjustment.
+Both intersection tables carry `geometry_source`, and every query filters on
+it (see `FGS_GEOMETRY_SOURCE` above). If your intersection tables still use the
+older `risk_level_min` / `risk_level_max` schema, queries in `data.R` will need
+adjustment.
+
+Pipeline products (FGS_Notebooks jobs 18 to 22), all plain tables:
+
+| Table | Used for |
+|---|---|
+| `pipeline_health` | Status badge in the header; click for each check. |
+| `fgs_constituency_changes` | "Since the previous statement" strip on the Interrogator. Follows the statement picker. |
+| `constituency_flood_situation` | Constituency situation tab: one row per constituency. Always the pipeline's latest complete statement. |
+| `mp_briefing_drafts` | Briefing draft shown when a constituency row is selected. Read only: nothing is sent. |
+| `fgs_constituency_exposure` | Exposure history tab: heat grid of constituencies by month, 12 months. |
+
+Each product is fetched defensively. If a table is missing or unreadable the
+view says so and the rest of the app carries on.
+
+The risk matrix labels follow the pipeline README: impact Minor to Extreme,
+likelihood Low to Very High.
 
 ## Known gaps for v1
 
-- EA flood area markers listed in the right-hand panel but not yet plotted
-  on the map. Requires joining the intersection table to the FWA / FAA
-  geometry tables.
-- Constituency layer toggle has no rendering yet.
+- Observed gauge levels are not in the constituency view yet. The pipeline
+  has not turned the readings and thresholds tables into events.
+- Warning issue times, forecast verification and event playback are
+  placeholders. Verification and playback depend on the Met Office licence
+  decision.
 - Public OpenStreetMap basemap. If the EA proxy blocks tile servers,
   swap the `providers$OpenStreetMap` reference in `server.R` for an
   internal tile URL.

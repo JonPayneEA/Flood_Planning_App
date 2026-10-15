@@ -40,6 +40,7 @@ library(geojsonsf)    # Parse GeoJSON strings to sf objects (storage format
 # way through to Leaflet)
 library(leaflet)
 library(htmltools)
+library(DT)           # Sortable, searchable tables for the constituency views
 library(dotenv)
 
 
@@ -109,6 +110,31 @@ TBL_CONSTITUENCIES  <- paste(CAT, SCH, "parliamentary_constituencies",   sep = "
 TBL_EA_CONSTITUENCY_LOOKUP <- paste(CAT, SCH, "ea_area_constituency_lookup", sep = ".")
 TBL_MP_CONTACTS            <- paste(CAT, SCH, "mp_contact_details",         sep = ".")
 
+# Pipeline products (FGS_Notebooks jobs 18 to 22). Plain tables, no geometry.
+TBL_CHANGES   <- paste(CAT, SCH, "fgs_constituency_changes",    sep = ".")  # 18
+TBL_SITUATION <- paste(CAT, SCH, "constituency_flood_situation", sep = ".")  # 19
+TBL_BRIEFINGS <- paste(CAT, SCH, "mp_briefing_drafts",          sep = ".")  # 20
+TBL_EXPOSURE  <- paste(CAT, SCH, "fgs_constituency_exposure",   sep = ".")  # 21
+TBL_HEALTH    <- paste(CAT, SCH, "pipeline_health",             sep = ".")  # 22
+
+
+# -----------------------------------------------------------------------------
+# Geometry source.
+#
+# The pipeline intersects either the risk-area polygons or the Areas of
+# Concern (FGS_GEOMETRY_SOURCE in FGS_Notebooks/config.py) and tags every
+# intersection row with `geometry_source`. The two can coexist in the same
+# table, so the app must read only the source the pipeline is currently
+# built on, or counts double. Set FGS_GEOMETRY_SOURCE to the same value as
+# the pipeline. Optional: defaults to "risk_areas", the pipeline default.
+# -----------------------------------------------------------------------------
+
+GEOMETRY_SOURCE <- Sys.getenv("FGS_GEOMETRY_SOURCE", unset = "risk_areas")
+if (!GEOMETRY_SOURCE %in% c("risk_areas", "aoc")) {
+  stop("FGS_GEOMETRY_SOURCE must be 'risk_areas' or 'aoc', not '",
+       GEOMETRY_SOURCE, "'.")
+}
+
 
 # -----------------------------------------------------------------------------
 # FGS colour palette.
@@ -161,5 +187,12 @@ RISK_MATRIX <- data.table(
 )
 
 # Axis labels for the matrix UI, indexed by x and y respectively (1-based).
-IMPACT_LABELS     <- c("Minimal", "Minor", "Significant", "Severe")
-LIKELIHOOD_LABELS <- c("Very Low", "Low", "Medium", "High")
+# Aligned with the FGS Public API documentation as recorded in the pipeline
+# README (risk matrix labels).
+IMPACT_LABELS     <- c("Minor", "Moderate", "Significant", "Extreme")
+LIKELIHOOD_LABELS <- c("Low", "Medium", "High", "Very High")
+
+# Forecast risk rank used by the constituency products (jobs 18 to 21).
+# 0 means nothing flagged. Colours reuse the FGS band palette.
+RANK_LABELS <- c("None", "Very Low", "Low", "Medium", "High")
+RANK_HEX    <- c("#e9ecef", "#4f9d4f", "#f0d040", "#e08020", "#b02020")
