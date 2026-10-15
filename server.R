@@ -47,7 +47,7 @@ server <- function(input, output, session) {
     dt <- fetch_recent_statements(100L)
     recent_rv(dt)
     if (nrow(dt) == 0L) return()
-    labels  <- sprintf("%s  (id %d)",
+    labels  <- sprintf("%s  (#%d)",
                        format(as.POSIXct(dt$issued_at), "%a %d %b %H:%M"),
                        dt$statement_id)
     choices <- setNames(as.character(dt$statement_id), labels)
@@ -932,12 +932,9 @@ server <- function(input, output, session) {
         n_bad  <- sum(checks$status %in% c("warn", "fail"))
         text <- switch(status,
           ok   = "Pipeline healthy",
-          warn = sprintf("Pipeline: %d check%s need attention", n_bad, if (n_bad == 1L) "" else "s"),
+          warn = sprintf("Pipeline: %d check%s attention", n_bad, if (n_bad == 1L) " needs" else "s need"),
           fail = sprintf("Pipeline: %d check%s failing", n_bad, if (n_bad == 1L) "" else "s"),
           "Pipeline status unavailable")
-        if (nrow(overall) > 0L && !is.na(overall$checked_at[1L])) {
-          text <- paste0(text, " (", short_ts(overall$checked_at[1L]), " UTC)")
-        }
       }
     }
     tags$button(
@@ -986,50 +983,131 @@ server <- function(input, output, session) {
     safe_fetch(fetch_changes, stmt$statement_id)
   })
 
+  # Shared helpers for the views below.
+  rank_chip <- function(r) {
+    r <- suppressWarnings(as.integer(r)); r[is.na(r) | r < 0L | r > 4L] <- 0L
+    tags$span(class = "rank-chip",
+              style = sprintf("background:%s;color:%s;", RANK_HEX[r + 1L],
+                              if (r %in% c(1L, 4L)) "#ffffff" else "#212529"),
+              RANK_LABELS[r + 1L])
+  }
+
+  # Safe inline handler: jump to a constituency on the map. The id is reduced
+  # to safe characters because it lands inside an HTML attribute.
+  goto_js <- function(cid) {
+    sprintf("Shiny.setInputValue('goto_constituency','%s',{priority:'event'});",
+            gsub("[^A-Za-z0-9_-]", "", as.character(cid)))
+  }
+
+  # ---------------------------------------------------------------------------
+  # "Data as of" in the header: when the pipeline last checked itself and
+  # which statement the constituency views are built on.
+  # ---------------------------------------------------------------------------
+
+  output$data_asof <- renderUI({
+    h <- health_rv(); sit <- situation_rv()
+    bits <- character()
+    if (!is.null(h) && nrow(h) > 0L && "overall" %in% h$check_name) {
+      bits <- c(bits, paste0("Pipeline checked ", substr(short_ts(h[check_name == "overall"]$checked_at[1L]), 12L, 16L), " UTC"))
+    }
+    if (!is.null(sit) && nrow(sit) > 0L) {
+      bits <- c(bits, paste0("Latest statement #", sit$fgs_statement_id[1L], ", ",
+                             short_ts(sit$fgs_issued_at[1L]), " UTC"))
+    }
+    if (length(bits) == 0L) return(NULL)
+    tags$span(class = "asof", paste(bits, collapse = " | "))
+  })
+
+
+  # ---------------------------------------------------------------------------
+  # Changes since the previous statement, one row per constituency.
+  #
+  # The pipeline stores one row per constituency, day and source. People talk
+  # about a constituency ("Carlisle went from Medium to High on Friday"), so
+  # each is reduced to its highest new risk, with a count of other changes.
+  # Collapsed by default and drawn over the map when opened, so it never
+  # pushes the map down. A row jumps to the constituency on the map.
+  # ---------------------------------------------------------------------------
+
   output$changes_strip <- renderUI({
     ch <- changes()
     if (is.null(ch)) return(NULL)
     if (nrow(ch) == 0L) {
-      return(tags$div(class = "changes-strip text-muted",
-        "No changes recorded against the previous statement ",
-        "(or this is the first complete statement)."))
+      return(tags$div(class = "changes-wrap",
+        tags$div(class = "changes-strip text-muted",
+          "No changes recorded against the previous statement (or this is the first complete one).")))
     }
-    n_by <- function(types) ch[change_type %in% types, uniqueN(constituency_id)]
-    up   <- n_by(c("new", "escalated"))
-    down <- n_by(c("de_escalated", "cleared"))
+    per <- ch[order(-new_rank, forecast_date)][, .(
+      constituency_name = constituency_name[1L],
+      forecast_date     = forecast_date[1L],
+      source            = source[1L],
+      previous_rank     = previous_rank[1L],
+      new_rank          = new_rank[1L],
+      up                = change_type[1L] %in% c("new", "escalated"),
+      n_cells           = .N
+    ), by = constituency_id]
+    per <- per[order(-up, -new_rank, constituency_name)]
+    n_up <- sum(per$up); n_down <- sum(!per$up)
 
-    shown <- head(ch[order(-new_rank, -rank_change, constituency_name)], 150L)
-    rows <- lapply(seq_len(nrow(shown)), function(i) {
-      r <- shown[i]
+    row_html <- function(r) {
       tags$tr(
+        class = "chg-row", onclick = goto_js(r$constituency_id),
         tags$td(r$constituency_name),
-        tags$td(format(as.Date(r$forecast_date), "%a %d %b")),
-        tags$td(r$source),
-        tags$td(rank_label(r$previous_rank), HTML(" &rarr; "), rank_label(r$new_rank)),
-        tags$td(sub("_", "-", r$change_type, fixed = TRUE))
+        tags$td(rank_chip(r$previous_rank), HTML(" &rarr; "), rank_chip(r$new_rank)),
+        tags$td(format(as.Date(r$forecast_date), "%a %d %b"), " ", tags$span(class = "text-muted", r$source)),
+        tags$td(if (r$n_cells > 1L) tags$span(class = "chg-more", sprintf("+%d more", r$n_cells - 1L)))
       )
-    })
+    }
+    group_rows <- function(d, title) {
+      if (nrow(d) == 0L) return(NULL)
+      c(list(tags$tr(class = "chg-group", tags$td(colspan = 4, title))),
+        lapply(seq_len(nrow(d)), function(i) row_html(d[i])))
+    }
 
-    tags$details(
-      class = "changes-strip",
-      tags$summary(
-        tags$span("Since the previous statement: "),
-        tags$span(class = "chg-count chg-up",   sprintf("%d up", up)),
-        tags$span(HTML(" &middot; ")),
-        tags$span(class = "chg-count chg-down", sprintf("%d down", down)),
-        tags$span(class = "text-muted", " (constituencies)")
-      ),
-      tags$div(class = "chg-scroll",
-        tags$table(
-          tags$thead(tags$tr(tags$th("Constituency"), tags$th("Day"), tags$th("Source"),
-                             tags$th("Risk"), tags$th("Change"))),
-          tags$tbody(rows)
+    tags$div(class = "changes-wrap",
+      tags$details(
+        class = "changes-strip",
+        tags$summary(
+          tags$span("Since the previous statement: "),
+          tags$span(class = "chg-count chg-up",   sprintf("%d up", n_up)),
+          tags$span(HTML(" &middot; ")),
+          tags$span(class = "chg-count chg-down", sprintf("%d down", n_down)),
+          tags$span(class = "text-muted", " (constituencies)")
         ),
-        if (nrow(ch) > nrow(shown))
-          tags$small(class = "text-muted",
-                     sprintf("Showing the first %d of %d rows.", nrow(shown), nrow(ch)))
+        tags$div(class = "chg-scroll",
+          tags$table(tags$tbody(group_rows(per[up == TRUE], "Risk up"),
+                                group_rows(per[up == FALSE], "Risk down"))),
+          tags$div(class = "chg-hint", "Click a row to see the constituency on the map.")
+        )
       )
     )
+  })
+
+
+  # ---------------------------------------------------------------------------
+  # Jump to a constituency on the map (from the changes strip, the situation
+  # table or the exposure history). Switches to the Interrogator, draws the
+  # boundary and flies to it. Messages reach the browser in order, so the tab
+  # is showing before the map moves.
+  # ---------------------------------------------------------------------------
+
+  observeEvent(input$goto_constituency, {
+    removeModal()
+    shape <- safe_fetch(fetch_constituency_shape, input$goto_constituency)
+    if (is.null(shape) || nrow(shape) == 0L) {
+      showNotification("That constituency's boundary could not be loaded.", type = "warning")
+      return()
+    }
+    updateTabsetPanel(session, "main_tabs", selected = "FGS Interrogator")
+    bbox  <- sf::st_bbox(shape)
+    proxy <- leaflet::leafletProxy("live_map")
+    proxy <- leaflet::clearGroup(proxy, "goto")
+    proxy <- leaflet::addPolygons(proxy, data = shape, group = "goto",
+                                  color = "#0b5cad", weight = 3, fill = FALSE,
+                                  label = shape$constituency_name[1L])
+    leaflet::flyToBounds(proxy,
+                         lng1 = bbox[["xmin"]], lat1 = bbox[["ymin"]],
+                         lng2 = bbox[["xmax"]], lat2 = bbox[["ymax"]])
   })
 
 
@@ -1037,17 +1115,26 @@ server <- function(input, output, session) {
   # Constituency situation tab (jobs 19 and 20).
   # ---------------------------------------------------------------------------
 
-  situation_filtered <- reactive({
+  situation_clean <- reactive({
     d <- situation_rv()
     req(d)
     d <- copy(d)
-    d[, `:=`(fgs_worst_rank = as.integer(fgs_worst_rank),
-             fgs_escalated  = as.logical(fgs_escalated),
+    d[, `:=`(fgs_worst_rank     = as.integer(fgs_worst_rank),
+             fgs_escalated      = as.logical(fgs_escalated),
              has_active_warning = as.logical(has_active_warning))]
-    min_rank <- as.integer(input$sit_min_rank)
-    keep <- d$fgs_worst_rank >= min_rank
+    d[]
+  })
+
+  situation_filtered <- reactive({
+    d <- situation_clean()
+    keep <- d$fgs_worst_rank >= as.integer(input$sit_min_rank)
     if (isTRUE(input$sit_escalated)) keep <- keep & d$fgs_escalated
     if (isTRUE(input$sit_warning))   keep <- keep & d$has_active_warning
+    q <- trimws(if (is.null(input$sit_search)) "" else input$sit_search)
+    if (nzchar(q)) {
+      keep <- keep & (grepl(q, d$constituency_name, fixed = TRUE, ignore.case = TRUE) |
+                      grepl(q, fifelse(is.na(d$mp_name), "", d$mp_name), fixed = TRUE, ignore.case = TRUE))
+    }
     d[keep][order(-fgs_worst_rank, -severe_warnings, -warnings, constituency_name)]
   })
 
@@ -1060,39 +1147,61 @@ server <- function(input, output, session) {
     tags$div(class = "text-muted mb-2",
       sprintf("Latest complete statement: id %s, issued %s UTC. This view does not follow the statement picker. ",
               d$fgs_statement_id[1L], short_ts(d$fgs_issued_at[1L])),
-      "Forecast and warnings are separate measures and are not combined. ",
-      "Set the minimum risk to Any to see constituencies with only a warning or alert in force.")
+      "Forecast and warnings are separate measures and are not combined.")
+  })
+
+  output$situation_kpis <- renderUI({
+    d <- tryCatch(situation_clean(), error = function(e) NULL)
+    if (is.null(d)) return(NULL)
+    card <- function(n, label, accent = FALSE) {
+      tags$div(class = "stat-card",
+               tags$div(class = paste("stat-num", if (accent) "accent"), n),
+               tags$div(class = "stat-label", label))
+    }
+    tags$div(class = "kpi-row",
+      card(sum(d$fgs_worst_rank >= 3L, na.rm = TRUE), "Forecast Medium or above", TRUE),
+      card(sum(d$fgs_escalated, na.rm = TRUE),        "Escalated since last statement"),
+      card(sum(d$has_active_warning, na.rm = TRUE),   "Warning or alert in force"))
+  })
+
+  output$rank_legend <- renderUI({
+    tags$div(class = "legend-row", tags$span("Forecast risk:"),
+             lapply(0:4, rank_chip),
+             tags$span("The five day columns are forecast days, counted from the statement date."))
   })
 
   output$situation_table <- DT::renderDataTable({
     d <- situation_filtered()
+    base_date <- tryCatch(as.Date(substr(situation_rv()$fgs_issued_at[1L], 1L, 10L)), error = function(e) NA)
+    day_names <- if (is.na(base_date)) paste0("D", 1:5) else format(base_date + 0:4, "%a %d")
     tbl <- d[, .(
       Constituency = constituency_name,
       MP           = fifelse(is.na(mp_name), "(vacant or unmatched)", mp_name),
       Party        = mp_party,
       Worst        = fgs_worst_rank,
-      On           = as.character(fgs_worst_date),
+      On           = format(as.Date(fgs_worst_date), "%a %d %b"),
       Sources      = fgs_worst_sources,
-      D1 = fgs_rank_day1, D2 = fgs_rank_day2, D3 = fgs_rank_day3,
-      D4 = fgs_rank_day4, D5 = fgs_rank_day5,
+      d1 = fgs_rank_day1, d2 = fgs_rank_day2, d3 = fgs_rank_day3,
+      d4 = fgs_rank_day4, d5 = fgs_rank_day5,
       Escalated    = fifelse(as.logical(fgs_escalated), "Yes", ""),
       Severe       = severe_warnings,
       Warnings     = warnings,
       Alerts       = alerts
     )]
-    rank_cols <- c("Worst", "D1", "D2", "D3", "D4", "D5")
+    setnames(tbl, c("d1", "d2", "d3", "d4", "d5"), day_names)
+    rank_cols <- c("Worst", day_names)
     labels_js <- jsonlite::toJSON(RANK_LABELS, auto_unbox = FALSE)
     render_js <- DT::JS(sprintf(
       "function(data, type) { var L = %s; return type === 'display' ? L[data] || L[0] : data; }",
       labels_js))
-    # columnDefs targets are 0-based.
-    targets <- match(rank_cols, names(tbl)) - 1L
+    targets <- match(rank_cols, names(tbl)) - 1L   # columnDefs targets are 0-based
 
     DT::datatable(
       tbl, rownames = FALSE, selection = "single",
-      options = list(pageLength = 25, scrollX = TRUE,
-                     columnDefs = list(list(targets = targets, render = render_js))),
-      caption = sprintf("%d constituencies", nrow(tbl))
+      options = list(pageLength = 25, scrollX = TRUE, dom = "tip", ordering = TRUE,
+                     language = list(info = "Showing _START_ to _END_ of _TOTAL_ constituencies",
+                                     emptyTable = "No constituency matches these filters."),
+                     columnDefs = list(list(targets = targets, render = render_js)))
     ) |>
       DT::formatStyle(rank_cols,
                       backgroundColor = DT::styleEqual(0:4, RANK_HEX),
@@ -1123,17 +1232,20 @@ server <- function(input, output, session) {
     cname <- d$constituency_name[row]
     b  <- briefing_rv()
     draft <- if (is.null(b)) NULL else b[constituency_id == cid]
+    map_btn <- tags$button(type = "button", class = "btn btn-sm btn-outline-secondary",
+                           onclick = goto_js(cid), icon("map-location-dot"), " Show on map")
 
     if (is.null(draft) || nrow(draft) == 0L) {
       return(tags$div(
-        tags$h6(cname),
+        tags$div(class = "d-flex justify-content-between align-items-center", tags$h6(cname), map_btn),
         tags$p(class = "text-muted",
                "No briefing draft. The constituency is below the pipeline's briefing ",
                "threshold, or the seat has no matched MP.")))
     }
     draft <- draft[1L]
     tags$div(
-      tags$h6(sprintf("%s: briefing draft for %s", cname, draft$mp_name)),
+      tags$div(class = "d-flex justify-content-between align-items-center",
+               tags$h6(sprintf("%s: briefing draft for %s", cname, draft$mp_name)), map_btn),
       tags$p(class = "text-muted mb-1",
              sprintf("Status: %s%s. To: %s. DRAFT ONLY, nothing has been sent.",
                      draft$status,
@@ -1149,45 +1261,68 @@ server <- function(input, output, session) {
   # ---------------------------------------------------------------------------
   # Exposure history tab (job 21).
   #
-  # Heat grid: constituencies (rows) by calendar month (columns), coloured by
-  # the chosen measure. The table is sparse, so absent months are zero days,
-  # while days_covered (the denominator) is shown in each column header's
-  # tooltip so a thin month is not mistaken for a quiet one.
+  # Heat grid: constituencies (rows) by calendar month (columns). The table is
+  # sparse, so absent months are zero days, and days_covered (the denominator)
+  # sits in each column header's tooltip. "Share" divides by days_covered so a
+  # thin month is not mistaken for a quiet one. A row click opens that
+  # constituency's history.
   # ---------------------------------------------------------------------------
 
-  output$exposure_grid <- renderUI({
+  exposure_prepared <- reactive({
     e <- exposure_rv()
-    if (is.null(e)) {
+    req(e)
+    e <- e[source == input$exp_source]
+    if (nrow(e) == 0L) return(NULL)
+    e <- copy(e)
+    e[, covered := as.numeric(days_covered)]
+    e[, base := as.numeric(if (input$exp_metric == "days_flagged") days_flagged else days_medium_or_above)]
+    e[, value := if (input$exp_metric == "share") 100 * base / pmax(covered, 1) else base]
+    this_month <- as.Date(format(Sys.Date(), "%Y-%m-01"))
+    months <- rev(format(seq(this_month, by = "-1 month", length.out = 12L), "%Y-%m"))
+    list(e = e, months = months)
+  })
+
+  output$exposure_legend <- renderUI({
+    p <- tryCatch(exposure_prepared(), error = function(e) NULL)
+    if (is.null(p)) return(NULL)
+    top <- max(p$e$value, 1, na.rm = TRUE)
+    unit <- if (input$exp_metric == "share") "%" else " days"
+    tags$div(class = "legend-row", tags$span("0"), tags$span(class = "legend-bar"),
+             tags$span(paste0(round(top), unit)), tags$span("(darkest cell shown)"))
+  })
+
+  output$exposure_grid <- renderUI({
+    e0 <- exposure_rv()
+    if (is.null(e0)) {
       return(tags$div(class = "alert alert-warning",
         "fgs_constituency_exposure could not be read. Check the pipeline health badge."))
     }
-    metric <- input$exp_metric
-    e <- e[source == input$exp_source]
-    if (nrow(e) == 0L) {
-      return(tags$p(class = "text-muted", "No flagged days in the last 12 months for this source."))
+    p <- exposure_prepared()
+    if (is.null(p)) {
+      return(tags$div(class = "empty-state",
+        "No flagged days in the last 12 months for this source."))
     }
-    e[, value := as.numeric(get(metric))]
+    e <- p$e; months <- p$months
+    share <- input$exp_metric == "share"
 
-    # Last 12 calendar months, oldest first, so empty months still show.
-    this_month <- as.Date(format(Sys.Date(), "%Y-%m-01"))
-    months <- format(seq(this_month, by = "-1 month", length.out = 12L), "%Y-%m")
-    months <- rev(months)
+    cov_of <- e[, .(c = max(covered, na.rm = TRUE)), by = month]
+    cov_of <- setNames(cov_of$c, cov_of$month)
 
-    totals <- e[, .(total = sum(value, na.rm = TRUE)), by = .(constituency_id, constituency_name)]
+    totals <- e[, .(base = sum(base, na.rm = TRUE)), by = .(constituency_id, constituency_name)]
+    all_cov <- sum(cov_of[months], na.rm = TRUE)
+    totals[, total := if (share) 100 * base / pmax(all_cov, 1) else base]
     totals <- head(totals[order(-total, constituency_name)], input$exp_top_n)
     totals <- totals[total > 0]
     if (nrow(totals) == 0L) {
-      return(tags$p(class = "text-muted", "No constituency reached this measure in the last 12 months."))
+      return(tags$div(class = "empty-state", "No constituency reached this measure in the last 12 months."))
     }
 
-    covered <- e[, .(days_covered = max(as.numeric(days_covered), na.rm = TRUE)), by = month]
-    cov_of  <- setNames(covered$days_covered, covered$month)
-    vmax    <- max(e[constituency_id %in% totals$constituency_id, value], 1, na.rm = TRUE)
-    ramp    <- grDevices::colorRampPalette(c("#fff3bf", "#e08020", "#b02020"))(100L)
+    vmax <- max(e[constituency_id %in% totals$constituency_id, value], 1, na.rm = TRUE)
+    ramp <- grDevices::colorRampPalette(c("#fff3bf", "#e08020", "#b02020"))(100L)
     cell_idx <- function(v) max(1L, ceiling(100 * v / vmax))
     cell_bg  <- function(v) if (is.na(v) || v <= 0) "#f1f3f5" else ramp[cell_idx(v)]
-    # White text once the fill is dark enough to need it.
     cell_fg  <- function(v) if (!is.na(v) && v > 0 && cell_idx(v) > 60L) "#ffffff" else "#212529"
+    fmt <- function(v) if (share) sprintf("%d%%", round(v)) else as.character(round(v))
 
     header <- tags$tr(
       tags$th(""),
@@ -1195,23 +1330,57 @@ server <- function(input, output, session) {
         tags$th(title = if (!is.na(cov_of[m])) sprintf("%s days with a statement", cov_of[m]) else "No statement history",
                 format(as.Date(paste0(m, "-01")), "%b %y"))
       }),
-      tags$th("Total")
+      tags$th(if (share) "Overall" else "Total")
     )
     rows <- lapply(seq_len(nrow(totals)), function(i) {
       cid <- totals$constituency_id[i]
       cell_rows <- e[constituency_id == cid]
       tags$tr(
+        onclick = sprintf("Shiny.setInputValue('exp_pick','%s',{priority:'event'});", gsub("[^A-Za-z0-9_-]", "", cid)),
         tags$td(class = "name", totals$constituency_name[i]),
         lapply(months, function(m) {
           v <- cell_rows[month == m, sum(value, na.rm = TRUE)]
           tags$td(class = "cell", style = paste0("background:", cell_bg(v), ";color:", cell_fg(v), ";"),
-                  if (v > 0) v else "")
+                  if (v > 0) fmt(v) else "")
         }),
-        tags$td(class = "total", totals$total[i])
+        tags$td(class = "total", fmt(totals$total[i]))
       )
     })
-
     tags$div(style = "overflow-x: auto;",
              tags$table(class = "exposure-grid", tags$thead(header), tags$tbody(rows)))
+  })
+
+  # Row click: that constituency's month-by-month history in a pop-up.
+  observeEvent(input$exp_pick, {
+    p <- exposure_prepared()
+    req(p)
+    e <- exposure_rv()[source == input$exp_source & constituency_id == input$exp_pick]
+    if (nrow(e) == 0L) return()
+    cname <- e$constituency_name[1L]
+    cov <- as.numeric(e$days_covered); names(cov) <- e$month
+    hist <- data.table(month = p$months)
+    hist <- merge(hist, e[, .(month, med = as.numeric(days_medium_or_above), any = as.numeric(days_flagged), cov = as.numeric(days_covered))],
+                  by = "month", all.x = TRUE, sort = FALSE)
+    hist <- hist[match(p$months, month)]
+    hist[is.na(med), `:=`(med = 0, any = 0)]
+    rows <- lapply(seq_len(nrow(hist)), function(i) {
+      h <- hist[i]
+      pct <- if (!is.na(h$cov) && h$cov > 0) 100 * h$med / h$cov else NA_real_
+      tags$tr(tags$td(format(as.Date(paste0(h$month, "-01")), "%b %Y")),
+              tags$td(h$med), tags$td(h$any),
+              tags$td(if (is.na(h$cov)) "no statements" else h$cov),
+              tags$td(style = "width:35%;",
+                      if (!is.na(pct)) tags$div(class = "exp-bar", style = sprintf("width:%d%%;", round(pct)))))
+    })
+    showModal(modalDialog(
+      title = paste0(cname, ": exposure, last 12 months"), size = "l", easyClose = TRUE,
+      tags$table(class = "table table-sm",
+        tags$thead(tags$tr(tags$th("Month"), tags$th("Medium or above"), tags$th("Any risk"),
+                           tags$th("Days covered"), tags$th("Share at Medium or above"))),
+        tags$tbody(rows)),
+      footer = tagList(
+        tags$button(type = "button", class = "btn btn-outline-secondary",
+                    onclick = goto_js(input$exp_pick), "Show on map"),
+        modalButton("Close"))))
   })
 }

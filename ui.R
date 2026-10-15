@@ -338,7 +338,7 @@ div.stat-card .stat-label {
 .changes-strip .chg-down { color: #1e6b1e; }
 .changes-strip table { width: 100%; margin-top: 8px; font-size: 12px; }
 .changes-strip td, .changes-strip th { padding: 2px 6px; }
-.changes-strip .chg-scroll { max-height: 220px; overflow-y: auto; }
+.changes-strip .chg-scroll { max-height: 340px; overflow-y: auto; }
 
 /* --- 6. Rank chips, exposure grid, briefing text ------------------------ */
 
@@ -349,8 +349,52 @@ div.stat-card .stat-label {
 .exposure-grid { border-collapse: collapse; font-size: 12px; }
 .exposure-grid th { font-weight: 500; padding: 2px 6px; text-align: center; white-space: nowrap; }
 .exposure-grid td.name { text-align: left; padding: 2px 10px 2px 0; white-space: nowrap; }
-.exposure-grid td.cell { width: 44px; height: 24px; text-align: center; border: 2px solid #f8f9fa; }
+.exposure-grid td.cell { min-width: 40px; height: 24px; text-align: center; border: 2px solid #f8f9fa; }
 .exposure-grid td.total { padding-left: 10px; font-weight: 600; }
+/* --- 7. Header group, changes overlay, KPI row, legends ------------------ */
+
+.header-right { display: flex; align-items: center; gap: 12px; }
+.asof { font-size: 12px; color: #6c757d; }
+
+.changes-wrap { position: relative; height: 42px; margin-bottom: 10px; z-index: 1100; }
+.changes-wrap .changes-strip {
+  position: absolute; top: 0; left: 0; right: 0; margin: 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+.changes-strip .chg-row { cursor: pointer; }
+.changes-strip .chg-row:hover { background: #eef3f8; }
+.changes-strip .chg-group td {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em;
+  color: #6c757d; padding-top: 8px;
+}
+.changes-strip .chg-hint { font-size: 11px; color: #6c757d; margin-top: 4px; }
+.changes-strip .chg-more { color: #6c757d; font-size: 11px; }
+
+.kpi-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.kpi-row .stat-card { flex: 1 1 180px; margin: 0; }
+
+.legend-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+              font-size: 11px; color: #6c757d; margin: 8px 0; }
+.legend-bar { width: 160px; height: 10px; border-radius: 2px;
+              background: linear-gradient(to right, #fff3bf, #e08020, #b02020); }
+
+.filter-row { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 8px; }
+.filter-row .form-group { margin-bottom: 0; }
+.filter-row .checkbox { margin: 0 0 6px 0; }
+
+.exposure-grid { width: 100%; }
+.exposure-grid tbody tr { cursor: pointer; }
+.exposure-grid tbody tr:hover td.name { text-decoration: underline; }
+.exp-bar { height: 8px; background: #e08020; border-radius: 2px; }
+
+.empty-state {
+  padding: 32px; text-align: center; color: #6c757d; background: #fff;
+  border: 1px dashed #ced4da; border-radius: 6px;
+}
+
+/* Planned tabs sit in a quiet dropdown rather than as four dead tabs. */
+.nav-tabs .dropdown-toggle { color: #868e96; }
+
 .briefing-body {
   white-space: pre-wrap; background: #fff; border: 1px solid #dee2e6;
   border-radius: 6px; padding: 12px; font-size: 13px;
@@ -517,20 +561,21 @@ right_panel <- tags$div(
 situation_tab <- tags$div(
   class = "p-3",
   uiOutput("situation_note"),
-  fluidRow(
-    column(3, selectInput("sit_min_rank", "Minimum forecast risk",
-                          choices  = c("Any" = "0", "Very Low" = "1", "Low" = "2",
-                                       "Medium" = "3", "High" = "4"),
-                          selected = "3")),
-    column(3, tags$div(style = "margin-top: 30px;",
-                       checkboxInput("sit_escalated", "Escalated only", FALSE))),
-    column(3, tags$div(style = "margin-top: 30px;",
-                       checkboxInput("sit_warning", "Warning or alert in force", FALSE))),
-    column(3, tags$div(style = "margin-top: 25px;",
-                       downloadButton("download_situation", "Export CSV",
-                                      class = "btn-sm btn-outline-secondary")))
+  uiOutput("situation_kpis"),
+  tags$div(
+    class = "filter-row",
+    selectInput("sit_min_rank", "Minimum forecast risk",
+                choices  = c("Any" = "0", "Very Low" = "1", "Low" = "2",
+                             "Medium" = "3", "High" = "4"),
+                selected = "3", width = "180px"),
+    textInput("sit_search", "Search", placeholder = "Constituency or MP", width = "220px"),
+    checkboxInput("sit_escalated", "Escalated only", FALSE),
+    checkboxInput("sit_warning", "Warning or alert in force", FALSE),
+    downloadButton("download_situation", "Export CSV",
+                   class = "btn-sm btn-outline-secondary")
   ),
   DT::dataTableOutput("situation_table"),
+  uiOutput("rank_legend"),
   tags$hr(),
   uiOutput("briefing_panel")
 )
@@ -553,15 +598,17 @@ exposure_tab <- tags$div(
                           selected = "any")),
     column(3, selectInput("exp_metric", "Measure",
                           choices  = c("Days at Medium or above" = "days_medium_or_above",
-                                       "Days at any flagged risk" = "days_flagged"),
+                                       "Days at any flagged risk" = "days_flagged",
+                                       "Share of days covered at Medium or above" = "share"),
                           selected = "days_medium_or_above")),
     column(3, sliderInput("exp_top_n", "Constituencies shown",
                           min = 10, max = 50, value = 25, step = 5))
   ),
   tags$small(class = "text-muted d-block mb-2",
              "Counts one day per date (day 1 of the last statement issued that date). ",
-             "A blank cell means no flagged day that month, not missing data. ",
+             "A blank cell means no flagged day that month, not missing data. Click a row for its history. ",
              "Days with no statement are not counted as quiet."),
+  uiOutput("exposure_legend"),
   uiOutput("exposure_grid")
 )
 
@@ -580,28 +627,35 @@ ui <- bslib::page_fluid(
   tags$div(
     class = "app-header",
     tags$h2("Flood Intelligence Tool"),
-    uiOutput("health_badge")
+    tags$div(class = "header-right",
+             uiOutput("data_asof"),
+             uiOutput("health_badge"))
   ),
   
   tabsetPanel(
     id = "main_tabs",
     
     tabPanel("FGS Interrogator",
-             fluidRow(
-               column(2, sidebar),
-               column(7, centre),
-               column(3, right_panel)
+             # Stacks on small screens: sidebar and map first, counts below.
+             tags$div(
+               class = "row",
+               tags$div(class = "col-12 col-md-4 col-xl-3", sidebar),
+               tags$div(class = "col-12 col-md-8 col-xl-6", centre),
+               tags$div(class = "col-12 col-xl-3",          right_panel)
              )
     ),
     
     tabPanel("Constituency situation", situation_tab),
     tabPanel("Exposure history",       exposure_tab),
 
-    # Placeholders. These need data the pipeline does not hold yet
-    # (observed gauge levels, the Met Office licence decision).
-    tabPanel("Warning issue times",   tags$p("Coming soon.")),
-    tabPanel("Forecast verification", tags$p("Coming soon.")),
-    tabPanel("Event playback",        tags$p("Coming soon.")),
-    tabPanel("MP audit log",          tags$p("Coming soon."))
+    # Planned. These need data the pipeline does not hold yet (observed gauge
+    # levels, the Met Office licence decision), so they sit in one menu.
+    navbarMenu(
+      "Planned",
+      tabPanel("Warning issue times",   tags$p(class = "p-3 text-muted", "Planned. Needs warning issue history.")),
+      tabPanel("Forecast verification", tags$p(class = "p-3 text-muted", "Planned. Needs observed gauge levels and a decision on the Met Office licence.")),
+      tabPanel("Event playback",        tags$p(class = "p-3 text-muted", "Planned. Needs observed gauge levels and a decision on the Met Office licence.")),
+      tabPanel("MP audit log",          tags$p(class = "p-3 text-muted", "Planned. Needs a record of who sent what."))
+    )
   )
 )

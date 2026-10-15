@@ -643,3 +643,26 @@ fetch_exposure <- function(n_months = 12L) {
     WHERE month >= date_format(add_months(current_date(), -%d), 'yyyy-MM')
   ", TBL_EXPOSURE, as.integer(n_months) - 1L))
 }
+
+
+# -----------------------------------------------------------------------------
+# fetch_constituency_shape()
+#
+# One constituency's boundary, for the "show on map" jump from the pipeline
+# views. The id comes from a browser input, so it is reduced to safe
+# characters before it goes into the SQL.
+# -----------------------------------------------------------------------------
+
+fetch_constituency_shape <- function(constituency_id) {
+  cid <- gsub("[^A-Za-z0-9_-]", "", as.character(constituency_id))
+  dt <- db_query(sprintf("
+    SELECT constituency_id, name AS constituency_name, geometry
+    FROM %s
+    WHERE constituency_id = '%s'
+      AND geometry IS NOT NULL
+  ", TBL_CONSTITUENCIES, cid))
+  if (nrow(dt) == 0L) return(NULL)
+  geom <- geojsonsf::geojson_sfc(dt$geometry)
+  dt[, geometry := NULL]
+  sf::st_sf(dt, geometry = geom, crs = 4326)
+}
