@@ -44,12 +44,12 @@ GUIDE_TABLES <- data.frame(
   table = c("fgs_statements", "fgs_risk_polygons", "fgs_ea_area_intersections", "fgs_constituency_intersections",
             "ea_flood_warning_areas", "ea_flood_alert_areas", "parliamentary_constituencies",
             "ea_area_constituency_lookup", "mp_contact_details",
-            "fgs_constituency_changes", "constituency_flood_situation", "mp_briefing_drafts",
+            "fgs_constituency_changes", "fgs_changes_log", "constituency_flood_situation", "mp_briefing_drafts",
             "fgs_constituency_exposure", "pipeline_health"),
-  notebook = c("01", "01", "07", "07", "03", "03", "05", "06", "04", "18", "19", "20", "21", "22"),
+  notebook = c("01", "01", "07", "07", "03", "03", "05", "06", "04", "18", "18", "19", "20", "21", "22"),
   refresh = c("Each FGS issue or amendment", "Each FGS issue or amendment", "Each FGS issue", "Each FGS issue",
               "Weekly", "Weekly", "Quarterly, or after an election", "Weekly and quarterly", "Weekly",
-              "Every poll", "Every poll", "Every poll", "Daily", "Every poll"),
+              "Every poll", "Every poll", "Every poll", "Every poll", "Daily", "Every poll"),
   holds = c("One row per statement: the headline and the forecast text.",
             "One row per risk polygon, flood source and day, with impact, likelihood and risk level.",
             "Each FGS shape that overlaps an EA flood warning or alert area.",
@@ -60,6 +60,7 @@ GUIDE_TABLES <- data.frame(
             "Which EA areas overlap which constituencies.",
             "Current MPs and their contact details.",
             "What changed in the forecast against the previous statement. History is kept.",
+            "One row per statement that was compared, with the number of differences. Tells \"nothing moved\" from \"not compared yet\".",
             "One row per constituency: the forecast, the warnings in force and the MP. The latest statement only.",
             "Draft briefings for MPs. Nothing is sent. Older statements' drafts are kept.",
             "Days each constituency sat at each risk level, by month. Sparse.",
@@ -199,12 +200,13 @@ guide_products <- function(s) {
     list(
       id = "changes", title = "Changed since the previous statement", where = "FGS Interrogator",
       answers = "What is different from the last statement?",
-      tables = c("fgs_constituency_changes"),
+      tables = c("fgs_constituency_changes", "fgs_changes_log"),
       steps = c(
         "The pipeline takes the two newest complete statements.",
         "It compares only the dates both cover. Day 1 of the newer statement is day 2 of the older one, so a day that rolls off the end, or is newly added, is never reported as a change.",
         sprintf("For each constituency, date and flood source it takes the worst risk in each statement. Polygons covering less than %s of a constituency are ignored.", guide_pct(th$contact_min_pct)),
         "It stores every difference and nothing else. A change is new (nothing before, a risk now), escalated (the rank rose), de-escalated (the rank fell but a risk remains) or cleared (a risk before, none now).",
+        "It also writes one row to a log for each comparison, including when nothing changed, so an empty result can be told from a comparison that has not run yet.",
         "This app reduces the rows to one per constituency: its highest new risk, with a count of other cells that changed. Rises come first. Up means new or escalated; down means de-escalated or cleared."
       ),
       read = c(
@@ -219,14 +221,16 @@ guide_products <- function(s) {
 
     list(
       id = "situation", title = "Constituency situation", where = "Constituency situation",
-      answers = "For every constituency: what is the forecast, what is in force, and who is the MP?",
-      tables = c("constituency_flood_situation", "fgs_constituency_changes", "mp_contact_details", "parliamentary_constituencies"),
+      answers = "For every constituency: what is the forecast, what could be issued, what is in force, and who is the MP?",
+      tables = c("constituency_flood_situation", "fgs_constituency_changes", "mp_contact_details", "parliamentary_constituencies",
+                 "fgs_ea_area_intersections", "ea_area_constituency_lookup"),
       steps = c(
         "Every constituency has a row, so a constituency with nothing flagged is shown as None.",
         sprintf("For each constituency the pipeline takes the worst risk on each day, across all flood sources. Polygons covering less than %s of the constituency are ignored.", guide_pct(th$contact_min_pct)),
         "Worst is the highest of those five. On is the first date it occurs. Sources are the flood sources at that worst risk, taken across all days.",
         "The five day columns show the worst risk on each day. Escalated is yes if the forecast rose against the previous statement on any day or source.",
-        "Severe, Warnings and Alerts count the Severe Flood Warnings, Flood Warnings and Flood Alerts in force that overlap the constituency. An area that spans several constituencies is counted once in each.",
+        "The in force columns count the Severe Flood Warnings, Flood Warnings and Flood Alerts in force that overlap the constituency. An area that spans several constituencies is counted once in each.",
+        sprintf("Warning areas and alert areas under the forecast are the potential ones: flood warning areas and flood alert areas that sit under a risk polygon of the statement, on any of the five days. An area counts when at least %s of it lies inside the constituency, and counts once however many days or polygons cover it. The minimum forecast risk filter also sets which polygons count: at Medium, only areas under Medium or High polygons are counted. These are places where a warning or alert could be issued. None of them need be in force.", guide_pct(th$warning_min_pct)),
         "The MP is matched to the constituency on a normalised name (lower case, accents folded, \"&\" as \"and\"). A seat with no match is shown as vacant or unmatched."
       ),
       read = c(
@@ -236,6 +240,7 @@ guide_products <- function(s) {
       limits = c(
         "The table holds the latest complete statement, whatever is picked on the map.",
         "Forecast and warnings are separate columns on purpose. There is no combined score.",
+        "With the minimum risk on Any, an area under a Very Low polygon counts the same as one under a High polygon, so broad low-risk polygons raise the counts. Raise the minimum risk to count only areas under higher-risk polygons. Severe does not apply to a potential warning.",
         "A vacancy and a name that fails to match look the same. The pipeline's health check watches for a jump in unmatched seats."
       )
     ),
@@ -332,14 +337,14 @@ guide_products <- function(s) {
       steps = c(
         "The situation table holds the latest statement only. For an earlier statement the app rebuilds it from the overlaps the pipeline keeps for every statement.",
         sprintf("It applies the same rules as the pipeline: polygons covering less than %s of a constituency are ignored, then the worst risk per day, then the worst of the five, with its first date and sources.", guide_pct(s$contact_min_pct)),
-        "Escalation comes from the changes table for that statement. Briefing drafts come from the drafts the pipeline kept for it.",
+        "Escalation comes from the changes table for that statement. Briefing drafts come from the drafts the pipeline kept for it. The warning and alert areas under the forecast are rebuilt from the area overlaps kept for every statement, so they work for any past date.",
         "Choosing the newest statement gives the live table, with its warnings."
       ),
       read = c(
         "A box above the table says when a look-back is on."
       ),
       limits = c(
-        "Warnings and alerts in force are not kept for past statements, so they show not available.",
+        "Warnings and alerts in force are not kept for past statements, so they show not available. The areas under the forecast are kept, and are shown.",
         "MP details are today's, matched on a normalised name.",
         "If the changes table does not exist, escalation shows not available. It does not show none.",
         "Reviews cannot be recorded against a past statement.",

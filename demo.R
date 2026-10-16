@@ -620,6 +620,27 @@ fetch_pipeline_health <- function() demo_health(demo_current()$problem)
 
 fetch_changes <- function(statement_id) demo_changes_for(demo_current()$scenario, as.integer(statement_id))
 
+fetch_changes_log <- function(statement_id) {
+  st <- demo_statements_table(demo_current()$scenario)
+  idx <- match(as.integer(statement_id), st$statement_id)
+  if (is.na(idx) || idx == 1L) return(data.table())      # the oldest has nothing before it, so is never compared
+  ch <- demo_changes_for(demo_current()$scenario, as.integer(statement_id))
+  data.table(statement_id = as.integer(statement_id), previous_statement_id = st$statement_id[idx - 1L],
+             previous_issued_at = st$issued_at[idx - 1L], days_compared_from = NA_character_,
+             days_compared_to = NA_character_, n_changes = nrow(ch), status = "compared")
+}
+
+fetch_potential_areas <- function(statement_id, min_rank = 0L) {
+  scn <- demo_current()$scenario; sid <- as.integer(statement_id)
+  ea <- rbindlist(lapply(1:5, function(d) { x <- demo_ea_inter(scn, sid, d); x[match(risk_level, RANK_LABELS) - 1L >= min_rank, .(ea_area_code, ea_area_type)] }))
+  g <- demo_geometry()
+  lk <- fetch_ea_constituency_mp()[constituency_overlap_pct >= TARGET_AREA_MIN_PCT, .(ea_area_code, constituency_name)]
+  m <- merge(unique(ea), lk, by = "ea_area_code")
+  m[, constituency_id := g$table$constituency_id[match(constituency_name, g$table$constituency_name)]]
+  m[, .(warning_areas = uniqueN(ea_area_code[ea_area_type == "flood_warning"]),
+        alert_areas   = uniqueN(ea_area_code[ea_area_type == "flood_alert"])), by = constituency_id]
+}
+
 fetch_situation <- function() copy(demo_situation(demo_current()$scenario))
 
 fetch_briefing_drafts <- function(statement_id = NULL) {

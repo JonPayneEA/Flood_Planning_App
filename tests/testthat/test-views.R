@@ -49,7 +49,7 @@ make_server_env <- function(overrides = list(), auto_refresh = 30) {
     fetch_recent_statements = function(n) { env$calls$statements <- env$calls$statements + 1L; fake$statements(n) },
     fetch_pipeline_health = function() { env$calls$health <- env$calls$health + 1L; fake$health() },
     fetch_situation = fake$situation, fetch_briefing_drafts = fake$briefings,
-    fetch_exposure = fake$exposure, fetch_changes = fake$changes,
+    fetch_exposure = fake$exposure, fetch_changes = fake$changes, fetch_changes_log = function(sid) NULL,
     fetch_ea_constituency_mp = function() data.table(ea_area_code = "a", constituency_name = "X", constituency_overlap_pct = 1,
                                                     mp_name = "m", mp_party = "p", mp_email = "e", mp_phone = "t"),
     fetch_summary_counts = function(...) list(polygon_count = 0L, ea_area_count = 0L, constituency_count = 0L),
@@ -383,4 +383,90 @@ test_that("the Guide on the live server names the warehouse, and flags a table t
     expect_match(g, "Not built yet in this warehouse")                      # the changes card, because that table is missing
     expect_false(grepl("This demonstration", g))
   })
+})
+
+# ---- the changes log: 'nothing moved' versus 'not compared yet' ------------------------
+
+no_changes <- function(sid) data.table(constituency_id = character(), constituency_name = character(), forecast_date = character(),
+  day_index = integer(), source = character(), previous_rank = integer(), new_rank = integer(), rank_change = integer(),
+  change_type = character())
+
+log_row <- function(n = 0L, status = "compared")
+  data.table(statement_id = 7L, previous_statement_id = 6L, previous_issued_at = "2026-10-14T09:30:00",
+             days_compared_from = "2026-10-15", days_compared_to = "2026-10-18", n_changes = n, status = status)
+
+changes_text <- function(log) {
+  env <- make_server_env(list(fetch_changes = no_changes, fetch_changes_log = function(sid) log))
+  out <- NULL
+  testServer(env$server, {
+    do.call(session$setInputs, base_inputs)
+    out <<- c(ov = html_of(output$ov_changes), strip = html_of(output$changes_strip))
+  })
+  out
+}
+
+test_that("a logged comparison with no differences says nothing moved, and against what", {
+  t <- changes_text(log_row(0L))
+  expect_match(t[["ov"]], "No change since statement #6 \\(issued Wed 14 Oct 09:30, Thu 15 to Sun 18\\)")
+  expect_match(t[["strip"]], "No change since statement #6")
+})
+
+test_that("no log row means the comparison has not run, and the panel says so", {
+  t <- changes_text(log_row()[0])
+  expect_match(t[["ov"]], "Not yet compared with statement #6")
+  expect_match(t[["strip"]], "Notebook 18 has not run")
+  expect_false(grepl("No change since", t[["ov"]]))
+})
+
+test_that("statements sharing no days are reported as not compared", {
+  expect_match(changes_text(log_row(0L, "no_shared_days"))[["ov"]], "share no forecast days")
+})
+
+test_that("an unavailable log table falls back to trusting the empty result, with no data gap", {
+  env <- make_server_env(list(fetch_changes = no_changes, fetch_changes_log = function(sid) stop(sub("fgs_constituency_changes", "fgs_changes_log", missing_changes))))
+  testServer(env$server, {
+    do.call(session$setInputs, base_inputs)
+    expect_match(html_of(output$ov_changes), "No change since statement #6")
+    expect_false(any(grepl("fgs_changes_log", html_of(output$data_gaps_banner))))
+  })
+})
+
+# ---- potential warning and alert areas on Constituency situation ----------------------
+
+potential_cells <- function(fetch) {
+  env <- make_server_env(list(fetch_potential_areas = fetch))
+  out <- NULL
+  testServer(env$server, {
+    do.call(session$setInputs, base_inputs)
+    session$setInputs(sit_min_rank = "0")
+    out <<- situation_clean()[, .(constituency_id, pot_warning_areas, pot_alert_areas)]
+  })
+  out
+}
+
+test_that("areas under the forecast are attached per constituency, zero where none", {
+  r <- potential_cells(function(sid, ...) data.table(constituency_id = c("c1", "c3"), warning_areas = c(2L, 0L), alert_areas = c(5L, 1L)))
+  expect_equal(r$pot_warning_areas[r$constituency_id == "c1"], 2L)
+  expect_equal(r$pot_alert_areas[r$constituency_id == "c3"], 1L)
+  expect_equal(r$pot_warning_areas[r$constituency_id == "c2"], 0L)          # c2 is under no polygon
+  expect_equal(r$pot_alert_areas[r$constituency_id == "c2"], 0L)
+})
+
+test_that("an empty result means none under any polygon, and a failed read shows n/a", {
+  none <- potential_cells(function(sid, ...) data.table(constituency_id = character(), warning_areas = integer(), alert_areas = integer()))
+  expect_true(all(none$pot_warning_areas == 0L))
+  failed <- suppressMessages(potential_cells(function(sid, ...) stop(missing_changes)))
+  expect_true(all(is.na(failed$pot_warning_areas)))
+})
+
+test_that("the minimum forecast risk filter is passed to the potential-areas query", {
+  seen <- NULL
+  env <- make_server_env(list(fetch_potential_areas = function(sid, min_rank = 0L) { seen <<- c(seen, min_rank); data.table(constituency_id = character(), warning_areas = integer(), alert_areas = integer()) }))
+  testServer(env$server, {
+    do.call(session$setInputs, base_inputs)          # base sit_min_rank is "3"
+    situation_clean()
+    session$setInputs(sit_min_rank = "0")
+    situation_clean()
+  })
+  expect_equal(seen, c(3L, 0L))
 })

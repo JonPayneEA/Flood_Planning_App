@@ -592,6 +592,67 @@ fetch_changes <- function(statement_id) {
 
 
 # -----------------------------------------------------------------------------
+# fetch_changes_log()
+#
+# One row if job 18 compared this statement with the one before it, none if it
+# has not. n_changes = 0 is a real "nothing moved". The table is newer than the
+# rest, so a caller treats an error (table missing) as "unknown", not a gap.
+# -----------------------------------------------------------------------------
+
+fetch_changes_log <- function(statement_id) {
+  db_query(sprintf("
+    SELECT
+      statement_id,
+      previous_statement_id,
+      previous_issued_at,
+      days_compared_from,
+      days_compared_to,
+      n_changes,
+      status
+    FROM %s
+    WHERE statement_id    = %d
+      AND geometry_source = '%s'
+  ", TBL_CHANGES_LOG, as.integer(statement_id), GEOMETRY_SOURCE))
+}
+
+
+# -----------------------------------------------------------------------------
+# fetch_potential_areas()
+#
+# The flood warning and flood alert areas that sit under the statement's risk
+# polygons, counted per constituency. These are POTENTIAL warnings and alerts:
+# places where one could be issued, not ones in force. Works for any statement,
+# because fgs_ea_area_intersections keeps every statement's rows (EA areas with
+# less than 25% covered are already dropped there). An area is linked to a
+# constituency when at least TARGET_AREA_MIN_PCT of the area lies inside it, the
+# same rule the pipeline uses for warning contacts. An area spanning several
+# constituencies counts once in each; an area under several days or polygons
+# counts once. min_rank keeps only areas under polygons at that risk rank or
+# above (0 keeps all; 1 Very Low, 2 Low, 3 Medium, 4 High).
+# -----------------------------------------------------------------------------
+
+fetch_potential_areas <- function(statement_id, min_rank = 0L) {
+  db_query(sprintf("
+    SELECT
+      l.constituency_id,
+      COUNT(DISTINCT CASE WHEN LOWER(e.ea_area_type) = 'flood_warning' THEN e.ea_area_code END) AS warning_areas,
+      COUNT(DISTINCT CASE WHEN LOWER(e.ea_area_type) = 'flood_alert'   THEN e.ea_area_code END) AS alert_areas
+    FROM (
+      SELECT DISTINCT ea_area_code, ea_area_type
+      FROM %s
+      WHERE statement_id    = %d
+        AND geometry_source = '%s'
+        AND CASE risk_level WHEN 'Very Low' THEN 1 WHEN 'Low' THEN 2 WHEN 'Medium' THEN 3 WHEN 'High' THEN 4 ELSE 0 END >= %d
+    ) e
+    JOIN %s l ON l.ea_area_code = e.ea_area_code
+    WHERE l.intersection_pct >= %s
+    GROUP BY l.constituency_id
+  ", TBL_EA_INTERSECT, as.integer(statement_id), GEOMETRY_SOURCE, as.integer(min_rank),
+     TBL_EA_CONSTITUENCY_LOOKUP, format(TARGET_AREA_MIN_PCT, scientific = FALSE)))
+}
+
+
+# -----------------------------------------------------------------------------
 # fetch_situation()
 #
 # One row per constituency (job 19): worst forecast risk over five days, risk
@@ -910,6 +971,8 @@ fetch_ea_geometry                  <- with_cache(fetch_ea_geometry,             
 fetch_constituency_geometry        <- with_cache(fetch_constituency_geometry,        "const_geometry")
 fetch_constituencies_for_statement <- with_cache(fetch_constituencies_for_statement, "const_meta")
 fetch_changes                      <- with_cache(fetch_changes,                      "changes")
+fetch_potential_areas              <- with_cache(fetch_potential_areas,              "potential_areas")
+fetch_changes_log                  <- with_cache(fetch_changes_log,                  "changes_log", ttl = min(CACHE_TTL_SECONDS, 60))
 fetch_constituency_shape           <- with_cache(fetch_constituency_shape,           "const_shape")
 fetch_all_constituencies           <- with_cache(fetch_all_constituencies,           "all_constituencies", ttl = max(CACHE_TTL_SECONDS, 0) * 6)  # POC-ONLY
 fetch_mp_lookup                    <- with_cache(fetch_mp_lookup,                    "mp_lookup")                                                 # POC-ONLY

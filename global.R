@@ -133,6 +133,7 @@ TBL_MP_CONTACTS            <- paste(CAT, SCH, "mp_contact_details",         sep 
 
 # Pipeline products (FGS_Notebooks jobs 18 to 22). Plain tables, no geometry.
 TBL_CHANGES   <- paste(CAT, SCH, "fgs_constituency_changes",    sep = ".")  # 18
+TBL_CHANGES_LOG <- paste(CAT, SCH, "fgs_changes_log",             sep = ".")  # 18 (one row per comparison made)
 TBL_SITUATION <- paste(CAT, SCH, "constituency_flood_situation", sep = ".")  # 19
 TBL_BRIEFINGS <- paste(CAT, SCH, "mp_briefing_drafts",          sep = ".")  # 20
 TBL_EXPOSURE  <- paste(CAT, SCH, "fgs_constituency_exposure",   sep = ".")  # 21
@@ -193,6 +194,11 @@ POC_FEATURES <- tolower(Sys.getenv("FGS_POC_FEATURES", unset = "1")) %in% c("1",
 # pipeline's FGS_CONTACT_MIN_PCT in config.py (0.01 = 1%). Used only to rebuild
 # the situation table for a past statement (POC-ONLY look-back).
 CONTACT_MIN_PCT <- env_number("FGS_CONTACT_MIN_PCT", 0.01)
+
+# A flood warning or alert area counts as "under the forecast" for a constituency
+# when at least this share of the AREA lies inside the constituency. Mirrors the
+# pipeline's WARNING_CONTACT_MIN_PCT in config.py (0.01 = 1%).
+TARGET_AREA_MIN_PCT <- env_number("FGS_WARNING_CONTACT_MIN_PCT", 0.01)
 
 AUTO_REFRESH_SECONDS <- env_number("FGS_AUTO_REFRESH_SECONDS", 120)
 if (AUTO_REFRESH_SECONDS > 0 && AUTO_REFRESH_SECONDS < 30) {
