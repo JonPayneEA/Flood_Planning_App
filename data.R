@@ -515,7 +515,7 @@ fetch_constituencies_for_statement <- function(statement_id, day_index) {
 #
 # Returns, for every EA flood area, the constituency(ies) it overlaps and
 # that constituency's MP contact details. Backs the "Export CSV" button on
-# the Affected EA Warnings panel.
+# the Affected Target Areas panel.
 #
 # The two source tables share no ID column -- ea_area_constituency_lookup
 # and mp_contact_details are joined on constituency_name.

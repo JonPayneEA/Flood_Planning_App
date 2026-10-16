@@ -82,6 +82,29 @@ fmt_statement_time <- function(x, format = "%a %d %b %H:%M") {
 
 
 # -----------------------------------------------------------------------------
+# group_statement_choices()   POC-ONLY: remove with the look-back picker.
+#
+# Choices for the look-back picker, older statements only. A day with several
+# statements becomes a group headed "Thu 02 Oct (3 statements)", so a busy day
+# reads as one block. A day with one statement stays a flat entry.
+# -----------------------------------------------------------------------------
+group_statement_choices <- function(older) {
+  if (nrow(older) == 0L) return(list())
+  t    <- as_utc(older$issued_at)
+  day  <- ifelse(is.na(t), "unknown date", base::format(t, "%a %d %b"))
+  lab  <- sprintf("%s (#%d)", fmt_statement_time(older$issued_at), older$statement_id)
+  ids  <- as.character(older$statement_id)
+  out  <- list()
+  for (d in unique(day)) {
+    k <- which(day == d)
+    if (length(k) == 1L) out[[lab[k]]] <- ids[k]
+    else out[[sprintf("%s (%d statements)", d, length(k))]] <- setNames(ids[k], lab[k])
+  }
+  out
+}
+
+
+# -----------------------------------------------------------------------------
 # stale_status()
 #
 # Decide what the stale-data banner should say, from the pipeline_health

@@ -103,7 +103,7 @@ guide_foundations <- function(s) {
       paragraphs = c(
         "A forecast says what may happen over the next five days. A warning says what the Environment Agency expects, and has issued. They measure different things, so this app keeps them apart and never combines them into one score.",
         "Warnings come in three levels in force: Severe Flood Warning, Flood Warning and Flood Alert. A fourth state, a warning that has ended, is kept in the data so that a closing warning stays visible. It is not counted as in force.",
-        "The map's list titled \"Affected EA Warnings\" is not a list of warnings in force. It lists the flood warning areas and flood alert areas that the forecast overlaps: places where a warning or alert could be issued. The warnings actually in force are counted on the Overview and on Constituency situation."
+        "The map's list titled \"Affected Target Areas\" is not a list of warnings in force. It lists the flood warning areas and flood alert areas that the forecast overlaps: places where a warning or alert could be issued. The warnings actually in force are counted on the Overview and on Constituency situation."
       ),
       limits = c(
         "Observed river and sea levels from the gauges are not part of any figure yet. The pipeline has not turned the readings and thresholds tables into events."
@@ -187,7 +187,7 @@ guide_products <- function(s) {
         "Export CSV joins each affected flood area to the constituencies it overlaps and their sitting MPs. An area that spans several constituencies gets one row for each."
       ),
       read = c(
-        "The list titled \"Affected EA Warnings\" is flood areas the forecast overlaps. It is not a list of warnings in force.",
+        "The list titled \"Affected Target Areas\" is flood areas the forecast overlaps. It is not a list of warnings in force.",
         "Click a row in that list to fly to the area on the map."
       ),
       limits = c(

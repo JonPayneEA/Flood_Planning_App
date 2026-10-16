@@ -313,3 +313,14 @@ test_that("a long error message is shortened in the log, not dumped", {
   r <- outage_failure(outage_new(), t0, paste(rep("word", 200), collapse = " "))
   expect_lte(nchar(r$log), 240)
 })
+
+test_that("look-back choices group a busy day and leave a quiet day flat", {
+  older <- data.table(statement_id = c(5L, 4L, 3L),
+                      issued_at = c("2026-10-02T09:30:00", "2026-10-02T15:00:00", "2026-10-01T09:30:00"))
+  ch <- group_statement_choices(older)
+  expect_equal(length(ch), 2L)
+  expect_match(names(ch)[1], "02 Oct \\(2 statements\\)")
+  expect_equal(unname(unlist(ch[[1]])), c("5", "4"))
+  expect_equal(unname(ch[[2]]), "3")
+  expect_equal(length(group_statement_choices(older[0])), 0L)
+})
