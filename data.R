@@ -6,13 +6,15 @@
 # perspective it's a standard DBI driver: dbConnect, dbGetQuery, dbDisconnect.
 # Authentication uses DATABRICKS_HOST and DATABRICKS_TOKEN from the environment.
 #
-# One function per query. Each:
-#   - opens a connection via brickster's DBI driver
-#   - runs one SQL statement
-#   - closes the connection on exit
-# Per-query connections rather than a shared one because the REST API has no
-# per-connection setup cost worth amortising, and per-query connections
-# survive Posit Connect's idle-app suspension cleanly.
+# One function per query. Each runs one SQL statement through db_query().
+#
+# The connection is built once and reused. brickster opens every connection by
+# sending a "SELECT 1 as test_connection" first, so a connection per query
+# doubled the requests (the warehouse's query history shows the pair for every
+# call), added about 300 ms to each, and doubled the chance of a network drop.
+# The Statement Execution API is stateless, so one connection is safe to share.
+# It is rebuilt after a network error and after DB_CONN_MAX_AGE seconds, and a
+# network error is retried (see with_retries in helpers.R). The app only reads.
 #
 # All returned tables are data.tables. Geometry is parsed into sf before
 # returning so leaflet can plot it directly.
@@ -20,45 +22,88 @@
 
 
 # -----------------------------------------------------------------------------
-# db_connection()
+# The connection and the query function
 #
-# Opens a DBI connection to the configured SQL warehouse. The warehouse_id
-# argument tells brickster which warehouse to run the statement on; host
-# and token are picked up automatically from DATABRICKS_HOST and
-# DATABRICKS_TOKEN. We could pass them explicitly but env-var auth is the
-# documented pattern and keeps credentials out of any error trace.
+# db_connector, db_run, db_close and db_sleep are separate, tiny functions so a
+# test can replace them. In normal use they are the obvious one-liners.
 # -----------------------------------------------------------------------------
 
-db_connection <- function() {
-  if (DEMO_MODE) stop("Demo mode: no warehouse connection is available, by design.")
-  DBI::dbConnect(
-    brickster::DatabricksSQL(),
-    warehouse_id = Sys.getenv("DATABRICKS_WAREHOUSE_ID")
-  )
+DB_CONN_MAX_AGE <- 1800        # seconds before the shared connection is rebuilt
+
+.fgs_db <- new.env(parent = emptyenv())
+.fgs_db$con    <- NULL
+.fgs_db$made   <- NULL
+.fgs_db$outage <- outage_new()
+
+# The warehouse_id tells brickster which warehouse runs the statement. Host and
+# token come from DATABRICKS_HOST and DATABRICKS_TOKEN, which keeps credentials
+# out of any error trace.
+db_connector <- function() {
+  DBI::dbConnect(brickster::DatabricksSQL(), warehouse_id = Sys.getenv("DATABRICKS_WAREHOUSE_ID"))
+}
+db_run   <- function(con, sql) DBI::dbGetQuery(con, sql)
+db_close <- function(con) tryCatch(DBI::dbDisconnect(con), error = function(e) NULL)
+db_sleep <- function(seconds) Sys.sleep(seconds)
+
+db_drop_connection <- function() {
+  if (!is.null(.fgs_db$con)) db_close(.fgs_db$con)
+  .fgs_db$con  <- NULL
+  .fgs_db$made <- NULL
+  invisible(NULL)
 }
 
+# The shared connection, built on first use and after DB_CONN_MAX_AGE.
+db_connection <- function() {
+  if (DEMO_MODE) stop("Demo mode: no warehouse connection is available, by design.")
+  age <- if (is.null(.fgs_db$made)) Inf else as.numeric(difftime(Sys.time(), .fgs_db$made, units = "secs"))
+  if (is.null(.fgs_db$con) || age > DB_CONN_MAX_AGE) {
+    db_drop_connection()
+    .fgs_db$con  <- db_connector()
+    .fgs_db$made <- Sys.time()
+  }
+  .fgs_db$con
+}
+
+# One line to the console, stamped.
+db_log <- function(text) message("[", format(Sys.time(), "%H:%M:%S"), "] ", text)
 
 # -----------------------------------------------------------------------------
 # db_query()
 #
-# Convenience wrapper: connect, run query, disconnect, return a data.table.
-# setDT() converts the result by reference with no copy. The trailing []
-# forces print-on-return, useful when calling these functions directly at
-# the REPL during development.
+# Runs one read query and returns a data.table. A network error drops the shared
+# connection and is retried up to DB_RETRIES times; any other error (a missing
+# table, a SQL mistake) is raised at once. The console records an outage once
+# when it starts, at most once a minute while it lasts, and once when it ends.
 #
 # Note on parameterisation:
 #   brickster's DBI implementation does not support the params = argument to
 #   dbGetQuery() that standard DBI drivers expose. Values are interpolated
-#   into the SQL string via sprintf() in each fetch_* function below. This
-#   is safe for our queries because every bound value is an integer we
-#   control (statement_id and day_index), never user input.
+#   into the SQL string via sprintf() in each fetch_* function below. Every
+#   interpolated value is an integer we control, a value from a fixed set, or an
+#   identifier reduced to letters, digits and underscores, never raw user input.
 # -----------------------------------------------------------------------------
 
 db_query <- function(sql) {
   if (DEMO_MODE) stop("Demo mode: no warehouse query can run, by design.")
-  con <- db_connection()
-  on.exit(DBI::dbDisconnect(con), add = TRUE)
-  result <- DBI::dbGetQuery(con, sql)
+
+  note <- function(r) { .fgs_db$outage <- r$state; if (!is.null(r$log)) db_log(r$log) }
+
+  result <- with_retries(
+    function() {
+      con <- db_connection()
+      tryCatch(db_run(con, sql), error = function(e) {
+        if (is_connection_error(conditionMessage(e))) db_drop_connection()
+        stop(e)
+      })
+    },
+    retries = DB_RETRIES,
+    sleep = function(s) db_sleep(s),
+    on_failure = function(attempt, total, msg, will_retry, pause) {
+      if (is_connection_error(msg)) note(outage_failure(.fgs_db$outage, Sys.time(), msg))
+      else                          note(outage_success(.fgs_db$outage, Sys.time()))   # the warehouse answered: it is reachable
+    }
+  )
+  note(outage_success(.fgs_db$outage, Sys.time()))
   setDT(result)
   result[]
 }
@@ -470,7 +515,7 @@ fetch_constituencies_for_statement <- function(statement_id, day_index) {
 #
 # Returns, for every EA flood area, the constituency(ies) it overlaps and
 # that constituency's MP contact details. Backs the "Export CSV" button on
-# the Affected EA Warnings panel.
+# the Affected Target Areas panel.
 #
 # The two source tables share no ID column -- ea_area_constituency_lookup
 # and mp_contact_details are joined on constituency_name.

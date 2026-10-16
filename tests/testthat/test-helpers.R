@@ -234,3 +234,93 @@ test_that("a look-back without the changes table says escalation is unknown, not
   s2 <- aggregate_situation(x$inter, NULL, x$mp, x$all_const, 1L, "2026-10-02T09:30:00", changes_available = TRUE)
   expect_false(any(s2$fgs_escalated))                                            # table exists, nothing changed: FALSE
 })
+
+
+# ---- retries --------------------------------------------------------------------------
+
+net_err  <- "Failed to connect to warehouse 0a86ae40313bb7db: Failed to perform HTTP request."
+sql_err  <- "[TABLE_OR_VIEW_NOT_FOUND] The table or view `c`.`s`.`t` cannot be found. SQLSTATE: 42P01; line 12 pos 9"
+
+test_that("with_retries returns at once on success and never sleeps", {
+  slept <- numeric()
+  expect_equal(with_retries(function() 42, sleep = function(s) slept <<- c(slept, s)), 42)
+  expect_length(slept, 0L)
+  expect_null(with_retries(function() NULL))                       # a NULL result is a result
+})
+
+test_that("a network error is retried, with growing pauses, until it works", {
+  n <- 0L; slept <- numeric(); seen <- list()
+  r <- with_retries(function() { n <<- n + 1L; if (n < 3L) stop(net_err); "ok" }, retries = 2L,
+                    sleep = function(s) slept <<- c(slept, s),
+                    on_failure = function(attempt, total, msg, will_retry, pause) seen[[length(seen) + 1L]] <<- c(attempt, total, will_retry, pause))
+  expect_equal(r, "ok"); expect_equal(n, 3L)
+  expect_equal(slept, c(1.5, 3))
+  expect_equal(seen[[1]], c(1, 3, 1, 1.5)); expect_equal(seen[[2]], c(2, 3, 1, 3))
+})
+
+test_that("once retries run out, the original error is raised with its message", {
+  n <- 0L; slept <- numeric()
+  e <- tryCatch(with_retries(function() { n <<- n + 1L; stop(net_err) }, retries = 2L, sleep = function(s) slept <<- c(slept, s)),
+                error = function(e) e)
+  expect_equal(n, 3L); expect_equal(slept, c(1.5, 3))
+  expect_equal(conditionMessage(e), net_err)
+})
+
+test_that("a SQL error, such as a missing table, is never retried", {
+  n <- 0L; slept <- numeric()
+  expect_error(with_retries(function() { n <<- n + 1L; stop(sql_err) }, sleep = function(s) slept <<- c(slept, s)), "TABLE_OR_VIEW_NOT_FOUND")
+  expect_equal(n, 1L); expect_length(slept, 0L)
+})
+
+test_that("retries = 0 switches retrying off, and the last pause is reused for long runs", {
+  n <- 0L
+  expect_error(with_retries(function() { n <<- n + 1L; stop(net_err) }, retries = 0L, sleep = function(s) NULL), "Failed to connect")
+  expect_equal(n, 1L)
+  slept <- numeric()
+  try(with_retries(function() stop(net_err), retries = 4L, sleep = function(s) slept <<- c(slept, s)), silent = TRUE)
+  expect_equal(slept, c(1.5, 3, 3, 3))
+})
+
+# ---- the outage log ---------------------------------------------------------------------
+
+t0 <- as.POSIXct("2026-10-16 08:13:34", tz = "UTC")
+
+test_that("the outage log speaks at the start, sparingly during, and once at the end", {
+  s <- outage_new()
+  r <- outage_failure(s, t0, net_err); s <- r$state
+  expect_match(r$log, "Databricks warehouse unreachable: Failed to connect to warehouse")
+  r <- outage_failure(s, t0 + 5, net_err); s <- r$state;  expect_null(r$log)          # too soon
+  r <- outage_failure(s, t0 + 30, net_err); s <- r$state; expect_null(r$log)
+  r <- outage_failure(s, t0 + 65, net_err); s <- r$state
+  expect_match(r$log, "still unreachable since 08:13:34 \\(4 failed requests so far\\)")
+  r <- outage_failure(s, t0 + 90, net_err); s <- r$state; expect_null(r$log)           # a minute since the reminder
+  r <- outage_failure(s, t0 + 130, net_err); s <- r$state; expect_match(r$log, "still unreachable")
+  r <- outage_success(s, t0 + 200); s <- r$state
+  expect_match(r$log, "reachable again after 3 min 20 s \\(6 failed requests\\)")
+  expect_null(outage_success(s, t0 + 300)$log)                                           # nothing to report once recovered
+})
+
+test_that("a single blip is reported as one failed request, in the singular", {
+  r <- outage_failure(outage_new(), t0, net_err)
+  expect_match(outage_success(r$state, t0 + 2)$log, "after 2 s \\(1 failed request\\)$")
+})
+
+test_that("durations read plainly", {
+  expect_equal(fmt_duration(7), "7 s"); expect_equal(fmt_duration(125), "2 min 5 s"); expect_equal(fmt_duration(7260), "2 h 1 min")
+})
+
+test_that("a long error message is shortened in the log, not dumped", {
+  r <- outage_failure(outage_new(), t0, paste(rep("word", 200), collapse = " "))
+  expect_lte(nchar(r$log), 240)
+})
+
+test_that("look-back choices group a busy day and leave a quiet day flat", {
+  older <- data.table(statement_id = c(5L, 4L, 3L),
+                      issued_at = c("2026-10-02T09:30:00", "2026-10-02T15:00:00", "2026-10-01T09:30:00"))
+  ch <- group_statement_choices(older)
+  expect_equal(length(ch), 2L)
+  expect_match(names(ch)[1], "02 Oct \\(2 statements\\)")
+  expect_equal(unname(unlist(ch[[1]])), c("5", "4"))
+  expect_equal(unname(ch[[2]]), "3")
+  expect_equal(length(group_statement_choices(older[0])), 0L)
+})

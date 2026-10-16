@@ -679,7 +679,7 @@ make_right_panel <- function() tags$div(
     tags$div(class = "stat-card mt-2",
              tags$div(textOutput("count_ea_areas", inline = TRUE),
                       class = "stat-num"),
-             tags$div("Affected EA Warnings", class = "stat-label")),
+             tags$div("Affected Target Areas", class = "stat-label")),
     
     tags$div(class = "stat-card mt-2",
              tags$div(textOutput("count_constituencies", inline = TRUE),
@@ -692,7 +692,7 @@ make_right_panel <- function() tags$div(
     class = "panel-section",
     tags$div(
       class = "d-flex justify-content-between align-items-center",
-      h6("Affected EA Warnings", class = "panel-h"),
+      h6("Affected Target Areas", class = "panel-h"),
       downloadButton("download_ea_areas", "Export CSV",
                      class = "btn-sm btn-outline-secondary")
     ),

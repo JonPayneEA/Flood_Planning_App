@@ -168,6 +168,7 @@ if (!GEOMETRY_SOURCE %in% c("risk_areas", "aoc")) {
 #   FGS_POC_FEATURES          1 (default) keeps the proof-of-concept features.
 #                             0 removes them. See POC_FEATURES below.
 #   FGS_CONTACT_MIN_PCT       Coverage a polygon needs to count (default 0.01).
+#   FGS_QUERY_RETRIES         Retries after a network failure (default 2, max 5).
 #   FGS_CACHE_SECONDS         How long query results are reused across
 #                             sessions. Default 600. 0 turns the cache off.
 # -----------------------------------------------------------------------------
@@ -199,6 +200,12 @@ if (AUTO_REFRESH_SECONDS > 0 && AUTO_REFRESH_SECONDS < 30) {
 }
 STALE_HOURS       <- env_number("FGS_STALE_HOURS", 3, min = 0.1)
 CACHE_TTL_SECONDS <- env_number("FGS_CACHE_SECONDS", 600)
+
+# How many times a query is retried after a network failure (not after a SQL
+# error, which is never retried). 0 turns retrying off. Each retry waits 1.5 s,
+# then 3 s, and the wait blocks the app's R process, so keep this small.
+DB_RETRIES <- as.integer(env_number("FGS_QUERY_RETRIES", 2))
+if (DB_RETRIES > 5L) stop("FGS_QUERY_RETRIES must be between 0 and 5.")
 
 
 # -----------------------------------------------------------------------------

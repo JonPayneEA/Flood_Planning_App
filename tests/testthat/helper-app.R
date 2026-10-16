@@ -27,14 +27,14 @@ load_app_constants <- function(extra_env = list()) {
 
 # data.R in its own environment with a stubbed db_query that records the SQL.
 # The cache is off unless ttl is given, so tests do not see each other's rows.
-load_data_layer <- function(source_value = "risk_areas", ttl = 0, constants = load_app_constants()) {
+load_data_layer <- function(source_value = "risk_areas", ttl = 0, constants = load_app_constants(), stub_query = TRUE) {
   env <- new.env(parent = globalenv())
   for (n in ls(constants, all.names = TRUE)) assign(n, get(n, constants), envir = env)
   assign("GEOMETRY_SOURCE", source_value, envir = env)
   assign("CACHE_TTL_SECONDS", ttl, envir = env)
   env$captured <- character()
   source(file.path(app_root, "data.R"), local = env)
-  env$db_query <- function(sql) { env$captured <- c(env$captured, sql); data.table() }
+  if (stub_query) env$db_query <- function(sql) { env$captured <- c(env$captured, sql); data.table() }
   env
 }
 

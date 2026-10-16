@@ -82,6 +82,29 @@ fmt_statement_time <- function(x, format = "%a %d %b %H:%M") {
 
 
 # -----------------------------------------------------------------------------
+# group_statement_choices()   POC-ONLY: remove with the look-back picker.
+#
+# Choices for the look-back picker, older statements only. A day with several
+# statements becomes a group headed "Thu 02 Oct (3 statements)", so a busy day
+# reads as one block. A day with one statement stays a flat entry.
+# -----------------------------------------------------------------------------
+group_statement_choices <- function(older) {
+  if (nrow(older) == 0L) return(list())
+  t    <- as_utc(older$issued_at)
+  day  <- ifelse(is.na(t), "unknown date", base::format(t, "%a %d %b"))
+  lab  <- sprintf("%s (#%d)", fmt_statement_time(older$issued_at), older$statement_id)
+  ids  <- as.character(older$statement_id)
+  out  <- list()
+  for (d in unique(day)) {
+    k <- which(day == d)
+    if (length(k) == 1L) out[[lab[k]]] <- ids[k]
+    else out[[sprintf("%s (%d statements)", d, length(k))]] <- setNames(ids[k], lab[k])
+  }
+  out
+}
+
+
+# -----------------------------------------------------------------------------
 # stale_status()
 #
 # Decide what the stale-data banner should say, from the pipeline_health
@@ -380,4 +403,84 @@ gaps_message <- function(gaps, location = NULL) {
   }, character(1))
   sprintf("Some pipeline tables are not %syet, so parts of the app are limited: %s. Press Refresh statements to retry.",
           if (is.null(location)) "available " else paste0("in ", location, " "), paste(one, collapse = "; "))
+}
+
+
+# -----------------------------------------------------------------------------
+# with_retries()
+#
+# Runs fn(), and if it fails with an error that retry_if accepts, waits and tries
+# again, up to `retries` more times. Any other error is raised at once, so a bad
+# query or a missing table is never retried. The final error is raised as it
+# came, with its class, so callers see the real message.
+#
+# Safe here because the app only reads. Do not use it around anything that
+# writes.
+#
+#   pauses     seconds to wait before each retry (the last is reused)
+#   sleep      how to wait; replaceable so tests need not
+#   on_failure called after every failed attempt:
+#              function(attempt, total, msg, will_retry, pause)
+# -----------------------------------------------------------------------------
+
+with_retries <- function(fn, retries = 2L, pauses = c(1.5, 3), retry_if = is_connection_error,
+                         sleep = Sys.sleep, on_failure = function(attempt, total, msg, will_retry, pause) NULL) {
+  attempt <- 0L
+  repeat {
+    attempt <- attempt + 1L
+    res <- tryCatch(list(value = fn()), error = function(e) e)
+    if (!inherits(res, "error")) return(res$value)
+    msg <- conditionMessage(res)
+    will_retry <- attempt <= retries && isTRUE(retry_if(msg))
+    pause <- if (will_retry) pauses[min(attempt, length(pauses))] else NA_real_
+    on_failure(attempt, retries + 1L, msg, will_retry, pause)
+    if (!will_retry) stop(res)
+    sleep(pause)
+  }
+}
+
+
+# -----------------------------------------------------------------------------
+# The outage log
+#
+# A console that prints each failure once cannot say how long a drop lasted, and
+# one that prints every failure floods. These keep one state and return the line
+# to print, if any: the first failure, then at most one reminder a minute while
+# it continues, then one line when the warehouse answers again.
+#
+# outage_new()                      a fresh state
+# outage_failure(state, now, msg)   -> list(state, log)
+# outage_success(state, now)        -> list(state, log)
+# -----------------------------------------------------------------------------
+
+outage_new <- function() list(since = NULL, failures = 0L, last_logged = NULL)
+
+fmt_duration <- function(secs) {
+  secs <- as.numeric(secs)
+  if (secs < 60) return(sprintf("%d s", as.integer(round(secs))))
+  if (secs < 3600) return(sprintf("%d min %d s", as.integer(secs %/% 60), as.integer(round(secs %% 60))))
+  sprintf("%d h %d min", as.integer(secs %/% 3600), as.integer((secs %% 3600) %/% 60))
+}
+
+outage_failure <- function(state, now, msg, quiet_secs = 60) {
+  first <- is.null(state$since)
+  if (first) state$since <- now
+  state$failures <- state$failures + 1L
+  log <- NULL
+  if (first) {
+    log <- sprintf("Databricks warehouse unreachable: %s", substr(gsub("\\s+", " ", msg), 1L, 200L))
+  } else if (as.numeric(difftime(now, state$last_logged, units = "secs")) >= quiet_secs) {
+    log <- sprintf("Databricks warehouse still unreachable since %s (%d failed requests so far)",
+                   format(state$since, "%H:%M:%S"), state$failures)
+  }
+  if (!is.null(log)) state$last_logged <- now
+  list(state = state, log = log)
+}
+
+outage_success <- function(state, now) {
+  if (is.null(state$since)) return(list(state = state, log = NULL))
+  log <- sprintf("Databricks warehouse reachable again after %s (%d failed request%s)",
+                 fmt_duration(difftime(now, state$since, units = "secs")), state$failures,
+                 if (state$failures == 1L) "" else "s")
+  list(state = outage_new(), log = log)
 }
