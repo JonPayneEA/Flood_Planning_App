@@ -324,3 +324,10 @@ test_that("look-back choices group a busy day and leave a quiet day flat", {
   expect_equal(unname(ch[[2]]), "3")
   expect_equal(length(group_statement_choices(older[0])), 0L)
 })
+
+test_that("no_change_message names the statement it was compared with", {
+  recent <- data.table(statement_id = c(4922L, 4921L), issued_at = c("2026-10-16T09:30:00", "2026-10-15T09:30:00"))
+  expect_match(no_change_message(recent, 4922L), "No change since statement #4921 \\(issued Thu 15 Oct 09:30\\)")
+  expect_match(no_change_message(recent, 4921L), "No earlier statement")
+  expect_match(no_change_message(recent[0], 1L), "No earlier statement")
+})

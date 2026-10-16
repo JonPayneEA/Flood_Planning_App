@@ -1177,7 +1177,7 @@ server <- function(input, output, session) {
     }
     per <- summarise_changes(ch)
     if (nrow(per) == 0L) {
-      return(tags$p(class = "text-muted", "No change against the previous statement (or this is the first complete one)."))
+      return(tags$p(class = "text-muted", no_change_message(recent_rv(), selected_statement()$statement_id)))
     }
     n_up <- sum(per$up); n_down <- sum(!per$up)
     show <- rbind(head(per[up == TRUE], 5L), head(per[up == FALSE], 3L))
@@ -1420,7 +1420,7 @@ server <- function(input, output, session) {
     if (nrow(ch) == 0L) {
       return(tags$div(class = "changes-wrap",
         tags$div(class = "changes-strip text-muted",
-          "No changes recorded against the previous statement (or this is the first complete one).")))
+          no_change_message(recent_rv(), selected_statement()$statement_id))))
     }
     per <- summarise_changes(ch)
     n_up <- sum(per$up); n_down <- sum(!per$up)
