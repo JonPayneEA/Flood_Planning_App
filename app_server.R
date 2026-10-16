@@ -61,7 +61,7 @@ server <- function(input, output, session) {
     recent_rv(dt)
     if (nrow(dt) == 0L) return()
     labels  <- sprintf("%s  (#%d)",
-                       format(as.POSIXct(dt$issued_at), "%a %d %b %H:%M"),
+                       fmt_statement_time(dt$issued_at),
                        dt$statement_id)
     choices <- setNames(as.character(dt$statement_id), labels)
     # Keep the current selection if it still exists, with one exception: a
@@ -200,6 +200,10 @@ server <- function(input, output, session) {
   # individually by each layer observer once its own draw finishes -- so the
   # spinner clears only when the slowest of the visible layers is done.
   # ---------------------------------------------------------------------------
+
+  # Every map layer runs inside with_layer_guard() (helpers.R), so its flag is
+  # cleared however it ends and a real error is shown, not just logged.
+  layer_notify <- function(msg) showNotification(msg, type = "error", duration = 15)
 
   busy_polygons <- reactiveVal(FALSE)
   busy_ea       <- reactiveVal(FALSE)
@@ -395,7 +399,7 @@ server <- function(input, output, session) {
     
     sprintf("Forecast Day %d - issued %s",
             as.integer(input$day_index),
-            format(as.POSIXct(stmt$issued_at), "%d %b %Y %H:%M"))
+            fmt_statement_time(stmt$issued_at, "%d %b %Y %H:%M"))
   })
   
   output$map_subtitle <- renderText({
@@ -700,7 +704,7 @@ server <- function(input, output, session) {
     m
   })
   
-  observe({
+  observe(with_layer_guard("FGS risk polygons", busy_polygons, notify = layer_notify, expr = {
     shape <- polygons()
 
     # Get a handle to the existing map and clear last render's polygons.
@@ -741,7 +745,7 @@ server <- function(input, output, session) {
     )
 
     busy_polygons(FALSE)
-  })
+  }))
   
   
   # ---------------------------------------------------------------------------
@@ -758,7 +762,7 @@ server <- function(input, output, session) {
   # and FAAs indistinguishable from FGS polygons on the map.
   # ---------------------------------------------------------------------------
 
-  observe({
+  observe(with_layer_guard("EA flood areas", busy_ea, notify = layer_notify, expr = {
     proxy <- leaflet::leafletProxy("live_map")
     proxy <- leaflet::clearGroup(proxy, "ea_areas")
 
@@ -795,7 +799,7 @@ server <- function(input, output, session) {
     )
 
     busy_ea(FALSE)
-  })
+  }))
   
   
   # ---------------------------------------------------------------------------
@@ -806,7 +810,7 @@ server <- function(input, output, session) {
   # constituency context for an MP-notification eyeball check.
   # ---------------------------------------------------------------------------
   
-  observe({
+  observe(with_layer_guard("constituency outlines", busy_const, notify = layer_notify, expr = {
     proxy <- leaflet::leafletProxy("live_map")
     proxy <- leaflet::clearGroup(proxy, "constituencies")
 
@@ -839,7 +843,7 @@ server <- function(input, output, session) {
     )
 
     busy_const(FALSE)
-  })
+  }))
 
 
   # ---------------------------------------------------------------------------
@@ -970,7 +974,7 @@ server <- function(input, output, session) {
 
   record_review <- function(action) {
     row <- input$situation_table_rows_selected
-    req(row)
+    req(row, is.null(poc_past_id()))        # reviews are recorded against the live batch only
     d <- situation_filtered()
     cid <- d$constituency_id[row]
     b <- briefing_rv()
@@ -1034,7 +1038,7 @@ server <- function(input, output, session) {
   }
 
   ov_data <- reactive({
-    sit <- tryCatch(situation_clean(), error = function(e) NULL)
+    sit <- tryCatch(situation_latest_clean(), error = function(e) NULL)
     list(sit = sit, stmt = { r <- recent_rv(); if (nrow(r) > 0L) as.list(r[1L]) else NULL })
   })
 
@@ -1048,7 +1052,7 @@ server <- function(input, output, session) {
     tags$div(
       class = "ov-headline", style = paste0("border-left-color:", colour, ";"),
       tags$div(class = "ov-kicker",
-               sprintf("Flood Guidance Statement #%s, issued %s UTC", d$stmt$statement_id, short_ts(d$stmt$issued_at))),
+               sprintf("Flood Guidance Statement #%s, issued %s", d$stmt$statement_id, fmt_statement_time(d$stmt$issued_at, "%Y-%m-%d %H:%M"))),
       tags$div(class = "ov-text", field_or_dash(d$stmt$headline)),
       tags$div(class = "mt-2", "Highest forecast risk in any constituency: ", rank_chip(worst))
     )
@@ -1325,7 +1329,7 @@ server <- function(input, output, session) {
     }
     if (!is.null(sit) && nrow(sit) > 0L) {
       bits <- c(bits, paste0("Latest statement #", sit$fgs_statement_id[1L], ", ",
-                             short_ts(sit$fgs_issued_at[1L]), " UTC"))
+                             fmt_statement_time(sit$fgs_issued_at[1L], "%Y-%m-%d %H:%M")))
     }
     if (length(bits) == 0L) return(NULL)
     tags$span(class = "asof", paste(bits, collapse = " | "))
@@ -1398,7 +1402,7 @@ server <- function(input, output, session) {
   # which follows the pickers and the matrix filter.
   # ---------------------------------------------------------------------------
 
-  observe({
+  observe(with_layer_guard("constituency forecast risk", function(x) invisible(NULL), notify = layer_notify, expr = {
     proxy <- leaflet::leafletProxy("live_map")
     proxy <- leaflet::clearGroup(proxy, "const_risk")
     proxy <- leaflet::removeControl(proxy, "const_risk_legend")
@@ -1432,7 +1436,7 @@ server <- function(input, output, session) {
       title   = "Forecast risk by constituency<br>(worst of 5 days, latest statement)",
       layerId = "const_risk_legend", opacity = 0.85
     )
-  })
+  }))
 
 
   # ---------------------------------------------------------------------------
@@ -1466,15 +1470,58 @@ server <- function(input, output, session) {
   # Constituency situation tab (jobs 19 and 20).
   # ---------------------------------------------------------------------------
 
-  situation_clean <- reactive({
-    d <- situation_rv()
+  clean_situation <- function(d) {
     req(d)
     d <- copy(d)
     d[, `:=`(fgs_worst_rank     = as.integer(fgs_worst_rank),
              fgs_escalated      = as.logical(fgs_escalated),
              has_active_warning = as.logical(has_active_warning))]
     d[]
+  }
+
+  # The Overview always shows the latest statement.
+  situation_latest_clean <- reactive(clean_situation(situation_rv()))
+
+  # POC-ONLY: statement look-back ------------------------------------------------
+  # The Constituency situation tab can show an earlier statement, rebuilt from the
+  # stored intersections. poc_past_id() is NULL for the live (newest) table.
+  # Remove with the other POC-ONLY blocks when the app goes live.
+  poc_past_id <- reactive({
+    if (!POC_FEATURES) return(NULL)
+    id <- input$sit_statement
+    r  <- recent_rv()
+    if (is.null(id) || identical(id, "latest") || nrow(r) == 0L) return(NULL)
+    if (!(id %in% as.character(r$statement_id)) || as.integer(id) == r$statement_id[1L]) return(NULL)
+    as.integer(id)
   })
+
+  if (POC_FEATURES) {                                          # POC-ONLY
+    observe({
+      r <- recent_rv()
+      req(nrow(r) > 0L)
+      older <- r[-1L]
+      choices <- c("Latest (live table)" = "latest",
+                   setNames(as.character(older$statement_id),
+                            sprintf("%s (#%d)", fmt_statement_time(older$issued_at), older$statement_id)))
+      cur <- isolate(input$sit_statement)
+      updateSelectInput(session, "sit_statement", choices = choices,
+                        selected = if (!is.null(cur) && cur %in% choices) cur else "latest")
+    })
+  }
+
+  situation_view <- reactive({
+    id <- poc_past_id()
+    if (is.null(id)) return(situation_rv())
+    r <- recent_rv()
+    safe_fetch(fetch_situation_for_statement, id, as.character(r$issued_at[r$statement_id == id][1L]))
+  })
+
+  briefing_view <- reactive({
+    id <- poc_past_id()
+    if (is.null(id)) briefing_effective() else safe_fetch(fetch_briefing_drafts, id)
+  })
+
+  situation_clean <- reactive(clean_situation(situation_view()))
 
   situation_filtered <- reactive({
     d <- situation_clean()
@@ -1492,14 +1539,23 @@ server <- function(input, output, session) {
   })
 
   output$situation_note <- renderUI({
-    d <- situation_rv()
+    id <- poc_past_id()
+    d  <- if (is.null(id)) situation_rv() else situation_view()
     if (is.null(d) || nrow(d) == 0L) {
       return(tags$div(class = "alert alert-warning",
-        "constituency_flood_situation could not be read. Check the pipeline health badge."))
+        if (is.null(id)) "constituency_flood_situation could not be read. Check the pipeline health badge."
+        else sprintf("Statement #%s could not be rebuilt. Check the pipeline health badge.", id)))
+    }
+    if (!is.null(id)) {                                        # POC-ONLY
+      return(tags$div(class = "alert alert-secondary mb-2",
+        tags$strong("Look-back (proof of concept). "),
+        sprintf("Statement #%s, issued %s. ", d$fgs_statement_id[1L], fmt_statement_time(d$fgs_issued_at[1L], "%Y-%m-%d %H:%M")),
+        "Risks and escalation are rebuilt from the stored intersections. Warnings and alerts in force are not kept ",
+        "for past statements, so they show n/a. MP details are today's."))
     }
     tags$div(class = "text-muted mb-2",
-      sprintf("Latest complete statement: id %s, issued %s UTC. This view does not follow the statement picker. ",
-              d$fgs_statement_id[1L], short_ts(d$fgs_issued_at[1L])),
+      sprintf("Latest complete statement: id %s, issued %s. ",
+              d$fgs_statement_id[1L], fmt_statement_time(d$fgs_issued_at[1L], "%Y-%m-%d %H:%M")),
       "Forecast and warnings are separate measures and are not combined.")
   })
 
@@ -1514,7 +1570,7 @@ server <- function(input, output, session) {
     tags$div(class = "kpi-row",
       card(sum(d$fgs_worst_rank >= 3L, na.rm = TRUE), "Forecast Medium or above", TRUE),
       card(sum(d$fgs_escalated, na.rm = TRUE),        "Escalated since last statement"),
-      card(sum(d$has_active_warning, na.rm = TRUE),   "Warning or alert in force"))
+      card(if (is.null(poc_past_id())) sum(d$has_active_warning, na.rm = TRUE) else "n/a", "Warning or alert in force"))
   })
 
   output$rank_legend <- renderUI({
@@ -1525,7 +1581,7 @@ server <- function(input, output, session) {
 
   output$situation_table <- DT::renderDataTable({
     d <- situation_filtered()
-    base_date <- tryCatch(as.Date(substr(situation_rv()$fgs_issued_at[1L], 1L, 10L)), error = function(e) NA)
+    base_date <- tryCatch(as.Date(substr(situation_clean()$fgs_issued_at[1L], 1L, 10L)), error = function(e) NA)
     day_names <- if (is.na(base_date)) paste0("D", 1:5) else format(base_date + 0:4, "%a %d")
     tbl <- d[, .(
       Constituency = constituency_name,
@@ -1542,6 +1598,9 @@ server <- function(input, output, session) {
       Alerts       = alerts
     )]
     setnames(tbl, c("d1", "d2", "d3", "d4", "d5"), day_names)
+    if (!is.null(poc_past_id())) {                             # POC-ONLY: not held for past statements
+      for (cn in c("Severe", "Warnings", "Alerts")) tbl[, (cn) := rep("n/a", .N)]
+    }
     rank_cols <- c("Worst", day_names)
     labels_js <- jsonlite::toJSON(RANK_LABELS, auto_unbox = FALSE)
     render_js <- DT::JS(sprintf(
@@ -1553,7 +1612,10 @@ server <- function(input, output, session) {
       tbl, rownames = FALSE, selection = "single",
       options = list(pageLength = 25, scrollX = TRUE, dom = "tip", ordering = TRUE,
                      language = list(info = "Showing _START_ to _END_ of _TOTAL_ constituencies",
-                                     emptyTable = "No constituency matches these filters."),
+                                     emptyTable = empty_situation_message(
+                                       situation_clean()$fgs_worst_rank, as.integer(input$sit_min_rank),
+                                       other_filters = isTRUE(input$sit_escalated) || isTRUE(input$sit_warning) ||
+                                                       nzchar(trimws(if (is.null(input$sit_search)) "" else input$sit_search)))),
                      columnDefs = list(list(targets = targets, render = render_js)))
     ) |>
       DT::formatStyle(rank_cols,
@@ -1583,7 +1645,7 @@ server <- function(input, output, session) {
     d  <- situation_filtered()
     cid <- d$constituency_id[row]
     cname <- d$constituency_name[row]
-    b  <- briefing_effective()
+    b  <- briefing_view()
     draft <- if (is.null(b)) NULL else b[constituency_id == cid]
     map_btn <- tags$button(type = "button", class = "btn btn-sm btn-outline-secondary",
                            onclick = goto_js(cid), icon("map-location-dot"), " Show on map")
@@ -1610,7 +1672,7 @@ server <- function(input, output, session) {
                      else "This app sends nothing. The status was set elsewhere.")),
       tags$p(tags$strong("Subject: "), draft$subject),
       tags$div(class = "briefing-body", draft$body),
-      if (DEMO_MODE) tags$div(
+      if (DEMO_MODE && is.null(poc_past_id())) tags$div(
         class = "mt-2 d-flex align-items-center gap-2 flex-wrap",
         actionButton("rv_reviewed", "Mark reviewed", class = "btn-sm btn-outline-secondary"),
         actionButton("rv_sent",     "Mark sent",     class = "btn-sm btn-outline-secondary"),

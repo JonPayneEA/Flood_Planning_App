@@ -142,3 +142,110 @@ test_that("every other tab renders from the demo data", {
   })
   expect_equal(demo_srv$warehouse_calls, 0L)
 })
+
+test_that("POC look-back: an earlier statement is rebuilt, flagged, read-only and has no warnings", {
+  testServer(demo_srv$server, {
+    do.call(session$setInputs, demo_inputs)
+    live <- situation_clean()
+    expect_null(poc_past_id())
+    expect_match(txt(output$situation_note), "Latest complete statement")
+
+    session$setInputs(sit_statement = "4808", sit_min_rank = "0")
+    expect_equal(poc_past_id(), 4808L)
+    past <- situation_clean()
+    expect_equal(unique(past$fgs_statement_id), 4808L)
+    expect_false(identical(past$fgs_worst_rank, live$fgs_worst_rank))
+    expect_true(all(is.na(past$has_active_warning)))
+    n <- txt(output$situation_note)
+    expect_match(n, "Look-back (proof of concept)", fixed = TRUE)
+    expect_match(n, "not kept for past statements")
+    expect_match(txt(output$situation_kpis), "n/a")
+
+    # The Overview and the live reviews are untouched by looking back.
+    expect_equal(txt(output$ov_headline), {session$setInputs(sit_statement = "latest"); txt(output$ov_headline)})
+    session$setInputs(sit_statement = "4808", sit_min_rank = "3")
+    session$setInputs(situation_table_rows_selected = 1L)
+    expect_false(grepl("rv_reviewed", txt(output$briefing_panel), fixed = TRUE))
+    session$setInputs(rv_reviewed = 1)
+    expect_length(review_status(), 0L)
+  })
+  expect_equal(demo_srv$warehouse_calls, 0L)
+})
+
+test_that("POC look-back: choosing the newest statement is the live table, and a bad id falls back", {
+  testServer(demo_srv$server, {
+    do.call(session$setInputs, demo_inputs)
+    session$setInputs(sit_statement = "4812"); expect_null(poc_past_id())     # newest = the live table, with its warnings
+    session$setInputs(sit_statement = "99999"); expect_null(poc_past_id())
+    session$setInputs(sit_statement = "latest"); expect_null(poc_past_id())
+  })
+})
+
+test_that("POC look-back: briefing drafts for the past statement are shown when they exist", {
+  testServer(demo_srv$server, {
+    do.call(session$setInputs, demo_inputs)
+    session$setInputs(sit_statement = "4811", sit_min_rank = "3")
+    d <- situation_filtered()
+    skip_if(nrow(d) == 0L)
+    session$setInputs(situation_table_rows_selected = 1L)
+    h <- txt(output$briefing_panel)
+    expect_match(h, "briefing draft for")
+    expect_match(h, "Warnings in force at the time are not held for this statement")
+  })
+})
+
+test_that("POC look-back switches off completely with FGS_POC_FEATURES=0", {
+  env <- new.env(parent = globalenv())
+  consts <- load_app_constants()
+  for (n in ls(consts, all.names = TRUE)) assign(n, get(n, consts), envir = env)
+  assign("DEMO_MODE", TRUE, envir = env); assign("AUTO_REFRESH_SECONDS", 0, envir = env); assign("CACHE_TTL_SECONDS", 0, envir = env)
+  assign("POC_FEATURES", FALSE, envir = env)
+  old <- setwd(app_root); on.exit(setwd(old))
+  source("app_ui.R", local = env)
+  expect_false(grepl("sit_statement", as.character(env$make_situation_tab()), fixed = TRUE))
+  assign("POC_FEATURES", TRUE, envir = env)
+  expect_true(grepl("sit_statement", as.character(env$make_situation_tab()), fixed = TRUE))
+  expect_true(grepl("POC only", as.character(env$make_situation_tab()), fixed = TRUE))
+
+  # And the server ignores a look-back request when the switch is off.
+  src <- new.env(parent = globalenv())
+  for (n in ls(consts, all.names = TRUE)) assign(n, get(n, consts), envir = src)
+  assign("DEMO_MODE", TRUE, envir = src); assign("AUTO_REFRESH_SECONDS", 0, envir = src); assign("CACHE_TTL_SECONDS", 0, envir = src)
+  assign("POC_FEATURES", FALSE, envir = src)
+  source("app_server.R", local = src)
+  testServer(src$server, {
+    do.call(session$setInputs, demo_inputs)
+    session$setInputs(sit_statement = "4808")
+    expect_null(poc_past_id())
+    expect_match(txt(output$situation_note), "Latest complete statement")
+  })
+})
+
+test_that("every piece of look-back code is tagged so it can be found and removed", {
+  files <- file.path(app_root, c("app_server.R", "app_ui.R", "data.R", "demo.R", "helpers.R", "global.R"))
+  tagged <- vapply(files, function(f) sum(grepl("POC-ONLY", readLines(f, warn = FALSE, encoding = "UTF-8"), fixed = TRUE)), integer(1))
+  expect_true(all(tagged >= 1L), info = paste(names(tagged)[tagged == 0L], collapse = ", "))
+  # No look-back function is defined anywhere without a tag on or near it.
+  for (f in c("data.R", "helpers.R")) {
+    lines <- readLines(file.path(app_root, f), warn = FALSE, encoding = "UTF-8")
+    for (fn in c("fetch_all_constituencies", "fetch_mp_lookup", "fetch_constituency_intersections",
+                 "fetch_situation_for_statement", "aggregate_situation", "normalise_name")) {
+      i <- grep(paste0("^", fn, " *<- *"), lines)
+      for (k in i) expect_true(any(grepl("POC-ONLY", lines[max(1L, k - 12L):k], fixed = TRUE)) ||
+                                 any(grepl("POC-ONLY", lines[k:min(length(lines), k + 6L)], fixed = TRUE)),
+                               info = paste(f, fn))
+    }
+  }
+})
+
+test_that("a quiet statement's empty table tells the user why, not just 'no match'", {
+  testServer(demo_srv$server, {
+    do.call(session$setInputs, demo_inputs)
+    session$setInputs(sit_statement = "4805", sit_min_rank = "3")
+    expect_equal(nrow(situation_filtered()), 0L)
+    ranks <- situation_clean()$fgs_worst_rank
+    msg <- empty_situation_message(ranks, 3L)
+    expect_false(identical(msg, "No constituency matches these filters."))
+    expect_match(msg, "Nothing in this statement is forecast at Medium or above")
+  })
+})

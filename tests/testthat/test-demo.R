@@ -175,10 +175,66 @@ test_that("the scenario belongs to the session, so two viewers cannot affect eac
   expect_equal(demo_env$demo_current()$scenario, "developing")           # no session: the default
 })
 
-test_that("demo statements look like the warehouse's: newest first, timestamps not text", {
+test_that("demo statements look like the warehouse's: newest first, times as text", {
   st <- demo_env$fetch_recent_statements(100L)
   expect_equal(nrow(st), 8L)
-  expect_true(inherits(st$issued_at, "POSIXct"))
+  expect_true(is.character(st$issued_at))                  # as the real table returns it
   expect_equal(st$statement_id, sort(st$statement_id, decreasing = TRUE))
-  expect_equal(format(st$issued_at[1], "%H:%M"), "09:30")
+  expect_equal(format(as_utc(st$issued_at[1]), "%H:%M"), "09:30")
+  expect_equal(format(as.POSIXct(st$issued_at[1], tz = "UTC"), "%H:%M"), "00:00")   # the trap as_utc avoids
+})
+
+# The real look-back path (aggregate_situation) against the demo's own, independent
+# model. The demo builds its situation table from the cell field and polygons; the
+# real path rebuilds it from intersection rows alone. They must agree.
+rebuild_from_intersections <- function(scenario, sid, min_pct = 0.25) {
+  g <- demo_env$demo_geometry()
+  inter <- rbindlist(lapply(1:5, function(d) {
+    x <- demo_env$demo_const_inter(scenario, sid, d)
+    if (nrow(x) == 0L) return(NULL)
+    x[, day_index := d]
+    x[, .(constituency_id, constituency_name, forecast_date = as.character(forecast_date), day_index, source, risk_level, intersection_pct)]
+  }))
+  mp <- g$table[, .(constituency_name, mp_name, mp_party, mp_email, mp_phone)]
+  st <- demo_env$demo_stmt_row(scenario, sid)
+  aggregate_situation(inter, demo_env$demo_changes_for(scenario, sid), mp,
+                      g$table[, .(constituency_id, constituency_name)], sid, st$issued_at, min_pct = min_pct)
+}
+
+for (s in c("developing", "severe")) {
+  test_that(paste("the real look-back path reproduces the demo's situation table:", s), {
+    for (sid in c(4812L, 4810L, 4806L)) {
+      mine <- rebuild_from_intersections(s, sid)
+      demo <- demo_env$demo_situation_for(s, sid)
+      cols <- c("constituency_id", "fgs_worst_rank", "fgs_worst_level", "fgs_worst_date", "fgs_worst_sources",
+                paste0("fgs_rank_day", 1:5), "fgs_escalated", "fgs_changed", "mp_name", "mp_matched")
+      setkey(mine, constituency_id); setkey(demo, constituency_id)
+      expect_equal(as.data.frame(mine[, ..cols]), as.data.frame(demo[, ..cols]), info = paste(s, sid))
+    }
+  })
+}
+
+test_that("past statements have no warnings in force, the newest does", {
+  past <- demo_env$demo_situation_for("severe", 4810L)
+  expect_true(all(is.na(past$severe_warnings) & is.na(past$warnings) & is.na(past$alerts) & is.na(past$has_active_warning)))
+  now <- demo_env$demo_situation_for("severe", 4812L)
+  expect_false(any(is.na(now$warnings)))
+  expect_gt(sum(now$has_active_warning), 0L)
+})
+
+test_that("look-back statements differ from today's, and an unknown id is refused cleanly", {
+  a <- demo_env$demo_situation_for("developing", 4812L); b <- demo_env$demo_situation_for("developing", 4807L)
+  expect_gt(sum(a$fgs_worst_rank >= 3L), sum(b$fgs_worst_rank >= 3L))        # the event builds up
+  expect_equal(unique(b$fgs_statement_id), 4807L)
+  expect_null(demo_env$fetch_situation_for_statement(9999L))
+})
+
+test_that("briefings exist for past statements and are built from that statement", {
+  d <- demo_env$demo_briefings_for("developing", 4810L)
+  if (nrow(d) > 0L) {
+    expect_equal(unique(d$statement_id), 4810L)
+    expect_false(any(grepl("NA", d$body, fixed = TRUE)))
+    expect_true(all(grepl("not held for this statement", d$body)))
+  }
+  expect_equal(unique(demo_env$demo_briefings_for("severe", 4812L)$statement_id), 4812L)
 })

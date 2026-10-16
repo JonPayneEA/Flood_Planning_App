@@ -251,3 +251,27 @@ test_that("in the live app the briefing review buttons do nothing and are not sh
     expect_match(html_of(output$briefing_panel), "DRAFT ONLY")
   })
 })
+
+test_that("a map layer that errors cannot leave the spinner on, and the reason is shown", {
+  # The failure behind a map that "always spins": a layer's query or geometry parse
+  # throws, the observer stops partway, and its busy flag is never cleared.
+  env <- make_server_env(list(fetch_ea_geometry = function(...) stop("geometry parse failed")))
+  testServer(env$server, {
+    do.call(session$setInputs, c(base_inputs, list(layer_ea_areas = TRUE, layer_polygons = TRUE)))
+    session$setInputs(day_index = "2")                     # a change that makes every layer re-fetch
+    expect_false(busy_ea())
+    expect_false(busy_polygons())
+    expect_false(busy_const())
+  })
+})
+
+test_that("the map title shows the statement's real time, not midnight", {
+  # The real warehouse hands issued_at back as text. as.POSIXct() on that reads 00:00.
+  env <- make_server_env()
+  testServer(env$server, {
+    do.call(session$setInputs, base_inputs)
+    expect_match(output$map_title, "15 Oct 2026 09:30", fixed = TRUE)
+    expect_false(grepl("00:00", output$map_title, fixed = TRUE))
+    expect_false(grepl("UTC", output$map_title, fixed = TRUE))
+  })
+})

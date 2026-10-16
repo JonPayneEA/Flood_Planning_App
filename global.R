@@ -165,6 +165,9 @@ if (!GEOMETRY_SOURCE %in% c("risk_areas", "aoc")) {
 #   FGS_STALE_HOURS           Hours without a pipeline health update before the
 #                             stale-data banner shows. Default 3 (the pipeline
 #                             polls every 30 or 60 minutes).
+#   FGS_POC_FEATURES          1 (default) keeps the proof-of-concept features.
+#                             0 removes them. See POC_FEATURES below.
+#   FGS_CONTACT_MIN_PCT       Coverage a polygon needs to count (default 0.01).
 #   FGS_CACHE_SECONDS         How long query results are reused across
 #                             sessions. Default 600. 0 turns the cache off.
 # -----------------------------------------------------------------------------
@@ -177,6 +180,18 @@ env_number <- function(name, default, min = 0) {
   }
   val
 }
+
+# POC-ONLY: proof-of-concept features that should not ship in the live tool.
+# FGS_POC_FEATURES=0 switches every one of them off. Today that is the statement
+# look-back on the Constituency situation tab. Each piece of code behind this
+# switch is tagged "POC-ONLY", so `grep -rn POC-ONLY .` lists everything to
+# remove when the app goes live. Default on, because this is a proof of concept.
+POC_FEATURES <- tolower(Sys.getenv("FGS_POC_FEATURES", unset = "1")) %in% c("1", "true", "yes", "on")
+
+# Share of a constituency a polygon must cover before it counts. Match the
+# pipeline's FGS_CONTACT_MIN_PCT in config.py (0.01 = 1%). Used only to rebuild
+# the situation table for a past statement (POC-ONLY look-back).
+CONTACT_MIN_PCT <- env_number("FGS_CONTACT_MIN_PCT", 0.01)
 
 AUTO_REFRESH_SECONDS <- env_number("FGS_AUTO_REFRESH_SECONDS", 120)
 if (AUTO_REFRESH_SECONDS > 0 && AUTO_REFRESH_SECONDS < 30) {

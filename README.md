@@ -144,6 +144,10 @@ them try it, without access to live data.
   drafts reviewed, sent or rejected. Those actions, and the "MP audit log" tab
   that lists them, live in the browser session only. They are lost when the page
   closes, and one viewer cannot see another's.
+- **Time zones.** Statement times are shown as stored, with no zone. The FGS is
+  issued at 09:30 UK time and the pipeline keeps the issue time as the API gave
+  it, so labelling it UTC would be wrong in summer. Pipeline health times carry
+  an explicit offset and are labelled UTC.
 - **Everything is fictional.** Constituencies are a hexagon map of a rough outline
   of England, not real boundaries. Constituency names, MPs, rivers and flood
   areas are invented, and email addresses end in `example.invalid`, which can
@@ -153,6 +157,43 @@ them try it, without access to live data.
 
 To put it in front of people, deploy the same bundle to Posit Connect as a
 second item and set only `FGS_DEMO_MODE=1`. It needs no credentials.
+
+## Proof-of-concept features (to remove when live)
+
+Anything that exists only because this is a proof of concept is tagged
+`POC-ONLY` in the code and sits behind one switch, `FGS_POC_FEATURES`
+(default `1`). Set it to `0` to hide all of it, and delete what
+`grep -rn POC-ONLY .` finds when the app goes live.
+
+| Feature | Where | What it does |
+|---|---|---|
+| **Statement look-back** | Constituency situation tab, "Statement" picker | Shows an earlier statement's constituency table, so a quiet day today can still be compared with a busier one. |
+
+How the look-back works, and what it cannot do:
+
+- The live `constituency_flood_situation` table only ever holds the latest
+  statement. For an earlier one the app rebuilds the table from
+  `fgs_constituency_intersections`, which the pipeline keeps for every
+  statement (`aggregate_situation()` in `helpers.R`, tested against the demo's
+  independent model).
+- **Warnings and alerts in force show n/a** for past statements: the pipeline
+  keeps no history of them.
+- **MP details are today's**, matched to constituencies on a normalised name.
+- Briefing drafts come from `mp_briefing_drafts`, which keeps older statements'
+  batches as history. Reviews can only be recorded against the live batch.
+- The Overview always shows the latest statement, whatever is picked here.
+- `FGS_CONTACT_MIN_PCT` (default `0.01`) should match the pipeline's
+  `config.py`, so a rebuilt table counts polygons the same way.
+
+## If the map spins
+
+The spinner covers a map layer that is still being fetched. It now clears
+whenever the layer finishes or fails, and a failure shows a red message on
+screen (for example "The EA flood areas layer could not be drawn: ...") as well
+as in the R console. If the spinner stays on for a long time with no message,
+the layer's query is still running: the console prints `<query> took N s` for
+anything over five seconds, which shows which one is slow. Send that message
+or line with a bug report.
 
 ## Look and feel
 

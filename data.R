@@ -594,7 +594,12 @@ fetch_situation <- function() {
 # source.
 # -----------------------------------------------------------------------------
 
-fetch_briefing_drafts <- function() {
+fetch_briefing_drafts <- function(statement_id = NULL) {
+  # NULL means the newest batch. A statement id (POC-ONLY look-back) reads that
+  # statement's batch: the pipeline keeps older statements' drafts as history.
+  sid_sql <- if (is.null(statement_id)) {
+    sprintf("(SELECT MAX(statement_id) FROM %s WHERE geometry_source = '%s')", TBL_BRIEFINGS, GEOMETRY_SOURCE)
+  } else as.character(as.integer(statement_id))
   db_query(sprintf("
     SELECT
       statement_id,
@@ -613,10 +618,9 @@ fetch_briefing_drafts <- function() {
       reviewed_by
     FROM %s
     WHERE geometry_source = '%s'
-      AND statement_id = (SELECT MAX(statement_id) FROM %s
-                          WHERE geometry_source = '%s')
+      AND statement_id = %s
     ORDER BY worst_rank DESC, constituency_name
-  ", TBL_BRIEFINGS, GEOMETRY_SOURCE, TBL_BRIEFINGS, GEOMETRY_SOURCE))
+  ", TBL_BRIEFINGS, GEOMETRY_SOURCE, sid_sql))
 }
 
 
@@ -739,6 +743,47 @@ fetch_data_signature <- function() {
 }
 
 
+# -----------------------------------------------------------------------------
+# POC-ONLY: statement look-back (remove when the app goes live)
+#
+# The live constituency_flood_situation table holds only the latest statement.
+# To look back at an earlier one, the situation is rebuilt here from the
+# intersection rows the pipeline keeps for every statement
+# (fgs_constituency_intersections), using aggregate_situation() in helpers.R.
+# Warnings and alerts in force are not kept historically, so they come back NA.
+# MP details are today's. Switched off by FGS_POC_FEATURES=0.
+# -----------------------------------------------------------------------------
+
+fetch_all_constituencies <- function() {  # POC-ONLY
+  db_query(sprintf("SELECT constituency_id, name AS constituency_name FROM %s", TBL_CONSTITUENCIES))
+}
+
+fetch_mp_lookup <- function() {  # POC-ONLY
+  db_query(sprintf("
+    SELECT constituency_name, name AS mp_name, party AS mp_party, email AS mp_email, phone AS mp_phone
+    FROM %s
+  ", TBL_MP_CONTACTS))
+}
+
+fetch_constituency_intersections <- function(statement_id) {  # POC-ONLY
+  db_query(sprintf("
+    SELECT constituency_id, constituency_name, forecast_date, day_index, source, risk_level, intersection_pct
+    FROM %s
+    WHERE statement_id    = %d
+      AND geometry_source = '%s'
+  ", TBL_CONST_INTERSECT, as.integer(statement_id), GEOMETRY_SOURCE))
+}
+
+fetch_situation_for_statement <- function(statement_id, issued_at = NA) {  # POC-ONLY
+  aggregate_situation(
+    inter = fetch_constituency_intersections(statement_id),
+    changes = fetch_changes(statement_id),
+    mp = fetch_mp_lookup(),
+    all_const = fetch_all_constituencies(),
+    statement_id = statement_id, issued_at = issued_at, min_pct = CONTACT_MIN_PCT)
+}
+
+
 # =============================================================================
 # QUERY CACHE
 #
@@ -774,7 +819,11 @@ with_cache <- function(fn, name, ttl = CACHE_TTL_SECONDS) {
       return(if (is.data.table(hit$value)) copy(hit$value) else hit$value)
     }
 
+    t0 <- Sys.time()
     value <- fn(...)
+    took <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
+    # A slow query otherwise looks like a hung map. Say so in the R console.
+    if (took > 5) message(sprintf("[%s] %s took %.0f s", format(Sys.time(), "%H:%M:%S"), name, took))
     keys <- ls(.fgs_cache, all.names = TRUE)
     if (length(keys) >= CACHE_MAX_ENTRIES) {
       ages <- vapply(keys, function(k) as.numeric(.fgs_cache[[k]]$at), numeric(1))
@@ -795,6 +844,9 @@ fetch_constituency_geometry        <- with_cache(fetch_constituency_geometry,   
 fetch_constituencies_for_statement <- with_cache(fetch_constituencies_for_statement, "const_meta")
 fetch_changes                      <- with_cache(fetch_changes,                      "changes")
 fetch_constituency_shape           <- with_cache(fetch_constituency_shape,           "const_shape")
+fetch_all_constituencies           <- with_cache(fetch_all_constituencies,           "all_constituencies", ttl = max(CACHE_TTL_SECONDS, 0) * 6)  # POC-ONLY
+fetch_mp_lookup                    <- with_cache(fetch_mp_lookup,                    "mp_lookup")                                                 # POC-ONLY
+fetch_situation_for_statement      <- with_cache(fetch_situation_for_statement,      "situation_for_statement")                                   # POC-ONLY
 fetch_constituency_risk_geometry   <- with_cache(fetch_constituency_risk_geometry,   "const_risk_geometry", ttl = min(CACHE_TTL_SECONDS, 120))
 
 

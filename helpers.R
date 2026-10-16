@@ -56,8 +56,28 @@ risk_layer_popup <- function(shape) {
 # -----------------------------------------------------------------------------
 
 parse_utc <- function(x) {
-  x <- substr(as.character(x), 1L, 19L)
+  x <- sub(" ", "T", substr(as.character(x), 1L, 19L), fixed = TRUE)
+  x <- ifelse(nchar(x) == 10L, paste0(x, "T00:00:00"), x)       # a bare date is midnight
   as.POSIXct(x, format = "%Y-%m-%dT%H:%M:%S", tz = "UTC")
+}
+
+# as_utc(): a statement time from the warehouse as POSIXct, whatever form it
+# arrives in. The warehouse can hand back text ("2026-10-15T09:30:00"), and
+# as.POSIXct() on ISO text with a "T" silently drops the time and returns
+# midnight, which is how a 09:30 statement was shown as 00:00. Always use this.
+as_utc <- function(x) {
+  if (inherits(x, "POSIXct")) return(x)
+  if (inherits(x, "Date"))    return(as.POSIXct(format(x), tz = "UTC"))
+  parse_utc(x)
+}
+
+# fmt_statement_time(): "Thu 15 Oct 09:30", or a calm "unknown time" if the
+# value cannot be read. No time zone is printed: the pipeline stores the issue
+# time as the FGS API gave it, and the FGS is issued at 09:30 UK time, so
+# calling it UTC would be wrong in summer.
+fmt_statement_time <- function(x, format = "%a %d %b %H:%M") {
+  t <- as_utc(x)
+  ifelse(is.na(t), "unknown time", base::format(t, format))
 }
 
 
@@ -162,4 +182,158 @@ summarise_changes <- function(ch) {
     n_cells           = .N
   ), by = constituency_id]
   per[order(-up, -new_rank, constituency_name)]
+}
+
+
+# -----------------------------------------------------------------------------
+# with_layer_guard()
+#
+# Runs one map layer's drawing code so that its "busy" flag is ALWAYS cleared,
+# whichever way it ends: normally, by an early return(), by req() halting
+# silently, or by an error. Before this, each layer cleared its flag on its last
+# line, so any error in the query or the geometry parse left the spinner on the
+# map forever, and the reason only reached the R console. Now the flag clears
+# and a real error is shown to the user.
+#
+#   label   the layer's name, for the message
+#   busy    the layer's reactiveVal flag
+#   expr    the drawing code (return() inside it returns from the caller)
+#   notify  how to tell the user; a function of one string
+# -----------------------------------------------------------------------------
+
+with_layer_guard <- function(label, busy, expr, notify = function(msg) invisible(NULL)) {
+  tryCatch(
+    expr,
+    error = function(e) {
+      if (inherits(e, "shiny.silent.error")) return(invisible(NULL))   # req(): not a failure
+      msg <- sprintf("The %s layer could not be drawn: %s", label, conditionMessage(e))
+      message(sprintf("[%s] %s", format(Sys.time(), "%H:%M:%S"), msg))
+      notify(msg)
+      invisible(NULL)
+    },
+    finally = busy(FALSE)
+  )
+}
+
+
+# -----------------------------------------------------------------------------
+# normalise_name()                                              POC-ONLY
+#
+# Key for matching a constituency name to an MP record, where the two tables
+# share no id. Lower case, "&" as "and", punctuation and spacing removed.
+# -----------------------------------------------------------------------------
+
+normalise_name <- function(x) {  # POC-ONLY
+  x <- tolower(as.character(x))
+  x <- gsub("&", "and", x, fixed = TRUE)
+  gsub("[^a-z0-9]", "", x)
+}
+
+
+# -----------------------------------------------------------------------------
+# aggregate_situation()                                         POC-ONLY
+# (statement look-back: remove with the other POC-ONLY blocks when live)
+#
+# Rebuilds one row per constituency for ANY statement, from the intersection
+# rows the pipeline keeps for every statement. The live constituency_flood_
+# situation table only ever holds the latest one, so this is what makes a
+# look-back possible. It mirrors what job 19 does for the forecast half:
+#
+#   - polygons covering less than min_pct of a constituency are ignored
+#   - the worst rank per constituency, forecast day and source, then per day
+#   - worst rank over the five days, the first date it occurs, the sources
+#   - escalation from the changes table for that statement
+#
+# What it CANNOT rebuild, and so leaves NA: warnings and alerts in force
+# (the pipeline does not keep a history of them).
+#
+#   inter      constituency_id, constituency_name, forecast_date, day_index,
+#              source, risk_level, intersection_pct
+#   changes    the statement's fgs_constituency_changes rows (or NULL)
+#   mp         constituency_name, mp_name, mp_party, mp_email, mp_phone
+#   all_const  every constituency (id, name), so quiet ones still get a row
+# -----------------------------------------------------------------------------
+
+POC_RANK_LEVELS <- c("Very Low", "Low", "Medium", "High")   # POC-ONLY
+
+aggregate_situation <- function(inter, changes, mp, all_const, statement_id, issued_at, min_pct = 0.01) {  # POC-ONLY
+  inter <- data.table::as.data.table(inter)
+  all_const <- data.table::as.data.table(all_const)[, list(constituency_id, constituency_name)]
+  out <- data.table::copy(all_const)
+
+  if (nrow(inter) > 0L) {
+    inter <- inter[is.na(intersection_pct) | intersection_pct >= min_pct]
+    inter[, rk := match(risk_level, POC_RANK_LEVELS)]
+    inter <- inter[!is.na(rk)]
+  }
+  for (d in 1:5) out[, (paste0("fgs_rank_day", d)) := 0L]
+  out[, `:=`(fgs_worst_rank = 0L, fgs_worst_date = NA_character_, fgs_worst_sources = NA_character_)]
+
+  if (nrow(inter) > 0L) {
+    cell <- inter[, list(rk = max(rk)), by = list(constituency_id, forecast_date, day_index, source)]
+    byday <- cell[, list(rk = max(rk)), by = list(constituency_id, day_index)]
+    for (d in 1:5) {
+      v <- byday[day_index == d]
+      if (nrow(v) > 0L) out[v, (paste0("fgs_rank_day", d)) := i.rk, on = "constituency_id"]
+    }
+    worst <- cell[, list(w = max(rk)), by = constituency_id]
+    out[worst, fgs_worst_rank := i.w, on = "constituency_id"]
+    top <- cell[worst, on = list(constituency_id), nomatch = NULL][rk == w]
+    first <- top[, list(fgs_worst_date = as.character(min(as.Date(forecast_date))),
+                        fgs_worst_sources = paste(sort(unique(source)), collapse = ", ")),
+                 by = constituency_id]
+    out[first, `:=`(fgs_worst_date = i.fgs_worst_date, fgs_worst_sources = i.fgs_worst_sources), on = "constituency_id"]
+  }
+  out[, fgs_worst_level := ifelse(fgs_worst_rank == 0L, "None", POC_RANK_LEVELS[pmax(1L, fgs_worst_rank)])]
+
+  ch <- if (is.null(changes)) data.table::data.table(constituency_id = character(), change_type = character()) else data.table::as.data.table(changes)
+  out[, `:=`(fgs_changed   = constituency_id %in% ch$constituency_id,
+             fgs_escalated = constituency_id %in% ch[change_type %in% c("new", "escalated"), constituency_id])]
+
+  # MP details are today's, matched on a normalised name.
+  mp <- data.table::as.data.table(mp)
+  out[, key := normalise_name(constituency_name)]
+  if (nrow(mp) > 0L) {
+    mp <- data.table::copy(mp)[, key := normalise_name(constituency_name)][!duplicated(key)]
+    out[mp, `:=`(mp_name = i.mp_name, mp_party = i.mp_party, mp_email = i.mp_email, mp_phone = i.mp_phone), on = "key"]
+  } else {
+    out[, `:=`(mp_name = NA_character_, mp_party = NA_character_, mp_email = NA_character_, mp_phone = NA_character_)]
+  }
+  out[, key := NULL]
+  out[, mp_matched := !is.na(mp_name)]
+
+  # Not held for past statements.
+  out[, `:=`(severe_warnings = NA_integer_, warnings = NA_integer_, alerts = NA_integer_, has_active_warning = NA)]
+  out[, `:=`(fgs_statement_id = as.integer(statement_id), fgs_issued_at = as.character(issued_at))]
+  data.table::setcolorder(out, c("constituency_id", "constituency_name", "mp_matched", "mp_name", "mp_party",
+    "mp_email", "mp_phone", "fgs_statement_id", "fgs_issued_at", "fgs_worst_rank", "fgs_worst_level",
+    "fgs_worst_date", "fgs_worst_sources", paste0("fgs_rank_day", 1:5), "fgs_changed", "fgs_escalated",
+    "severe_warnings", "warnings", "alerts", "has_active_warning"))
+  out[]
+}
+
+
+# -----------------------------------------------------------------------------
+# empty_situation_message()
+#
+# What the Constituency situation table says when no row survives the filters.
+# On a quiet statement the default floor (Medium) hides everything, and a bare
+# "no match" reads as a broken page. If the only reason is the risk floor, say
+# so and say how many sit below it.
+#
+#   ranks          fgs_worst_rank for every constituency in the statement
+#   floor          the minimum rank chosen (0 to 4)
+#   other_filters  TRUE if a search, escalated or warning filter is also on
+# -----------------------------------------------------------------------------
+
+empty_situation_message <- function(ranks, floor, other_filters = FALSE) {
+  generic <- "No constituency matches these filters."
+  if (other_filters || floor <= 0L) return(generic)
+  lower <- sum(ranks >= 1L & ranks < floor, na.rm = TRUE)
+  if (lower == 0L) {
+    return(sprintf("Nothing in this statement is forecast at %s or above, and no constituency is flagged at any risk.",
+                   RANK_LABELS[floor + 1L]))
+  }
+  sprintf("Nothing in this statement is forecast at %s or above. %d constituenc%s forecast at a lower risk: lower \"Minimum forecast risk\" to see %s.",
+          RANK_LABELS[floor + 1L], lower, if (lower == 1L) "y is" else "ies are", if (lower == 1L) "it" else "them")
 }

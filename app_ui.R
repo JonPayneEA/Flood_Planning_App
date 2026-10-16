@@ -480,6 +480,8 @@ table.dataTable thead th { color: var(--ea-ink); border-bottom: 2px solid var(--
 .demo-controls .form-group, .demo-controls .checkbox { margin: 0; }
 .demo-controls label { font-size: 12px; color: var(--ea-muted); }
 .demo-note { font-size: 12px; color: var(--ea-muted); }
+.poc-tag { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ea-ink);
+           background: var(--ea-green-mid); border-radius: 8px; padding: 1px 7px; margin-left: 4px; }
 
 /* Overview. */
 .ov-headline { background: var(--ea-surface); border: 1px solid var(--ea-line); border-left: 6px solid var(--ea-green);
@@ -670,6 +672,9 @@ make_situation_tab <- function() tags$div(
   uiOutput("situation_kpis"),
   tags$div(
     class = "filter-row",
+    # POC-ONLY: statement look-back. Remove this control with the other POC-ONLY blocks.
+    if (POC_FEATURES) selectInput("sit_statement", tagList("Statement ", tags$span(class = "poc-tag", "POC only")),
+                                  choices = c("Latest (live table)" = "latest"), selected = "latest", width = "270px"),
     selectInput("sit_min_rank", "Minimum forecast risk",
                 choices  = c("Any" = "0", "Very Low" = "1", "Low" = "2",
                              "Medium" = "3", "High" = "4"),

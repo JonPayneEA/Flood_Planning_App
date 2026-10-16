@@ -391,36 +391,48 @@ demo_changes_for <- function(scn, stmt_id) demo_memo(sprintf("changes_%s_%d", sc
      .(constituency_id, constituency_name, forecast_date, day_index, source, previous_rank, new_rank, rank_change, change_type)]
 })
 
-demo_situation <- function(scn) demo_memo(paste0("situation_", scn), {
+# One row per constituency for any statement. Only the newest statement has
+# warnings and alerts in force: the pipeline keeps no history of them, so for
+# an older statement they are NA, exactly as the real look-back returns them.
+demo_situation_for <- function(scn, sid) demo_memo(sprintf("situation_%s_%d", scn, sid), {
   g <- demo_geometry()$table
-  sid <- demo_latest_id(scn)
   st  <- demo_stmt_row(scn, sid)
+  is_latest <- sid == demo_latest_id(scn)
   days <- demo_rank_by_day(scn, sid)
   ch   <- demo_changes_for(scn, sid)
   esc  <- unique(ch[change_type %in% c("new", "escalated"), constituency_id])
 
   wide <- data.table(constituency_id = g$constituency_id)
   for (d in 1:5) {
-    r <- if (is.null(days) || nrow(days) == 0L) integer() else days[day == d]
+    r <- if (is.null(days) || nrow(days) == 0L) NULL else days[day == d]
     wide[, (paste0("fgs_rank_day", d)) := 0L]
-    if (nrow(r) > 0L) wide[r, (paste0("fgs_rank_day", d)) := i.rank, on = "constituency_id"]
+    if (!is.null(r) && nrow(r) > 0L) wide[r, (paste0("fgs_rank_day", d)) := i.rank, on = "constituency_id"]
   }
   rk <- as.matrix(wide[, paste0("fgs_rank_day", 1:5), with = FALSE])
   wide[, fgs_worst_rank := apply(rk, 1L, max)]
   first_day <- apply(rk, 1L, function(r) if (max(r) == 0L) NA_integer_ else which(r == max(r))[1L])
   fdate <- as.Date(substr(st$issued_at, 1, 10))
   wide[, fgs_worst_date := as.character(fdate + first_day - 1L)]
-  src <- vapply(seq_len(nrow(wide)), function(i) {
-    if (is.na(first_day[i]) || is.null(days)) return(NA_character_)
-    days[constituency_id == wide$constituency_id[i] & day == first_day[i], sources][1L]
-  }, character(1))
+  # Sources behind the worst risk across ALL days, as the pipeline's job 19 does
+  # (collect_set over every cell at the worst rank), not just the first day.
+  cell_ranks <- rbindlist(lapply(1:5, function(d) {
+    ci <- demo_const_inter(scn, sid, d)[intersection_pct >= 0.25]
+    if (nrow(ci) == 0L) return(NULL)
+    ci[, .(rank = max(match(risk_level, DEMO_LEVELS))), by = .(constituency_id, source)]
+  }))
+  src <- rep(NA_character_, nrow(wide))
+  if (!is.null(cell_ranks) && nrow(cell_ranks) > 0L) {
+    w <- cell_ranks[, .(worst = max(rank)), by = constituency_id]
+    top <- merge(cell_ranks, w, by = "constituency_id")[rank == worst, .(s = paste(sort(unique(source)), collapse = ", ")), by = constituency_id]
+    src <- top$s[match(wide$constituency_id, top$constituency_id)]
+  }
   wide[, fgs_worst_sources := src]
   wide[, fgs_worst_level := fifelse(fgs_worst_rank == 0L, "None", DEMO_LEVELS[pmax(1L, fgs_worst_rank)])]
   wide[, `:=`(fgs_escalated = constituency_id %in% esc, fgs_changed = constituency_id %in% ch$constituency_id)]
 
   # Warnings in force: flood areas flagged Medium or above on days 1 to 3.
   geo <- demo_geometry(); ea <- demo_ea_areas()
-  warn <- rbindlist(lapply(1:3, function(d) {
+  warn <- if (!is_latest) data.table(ea_area_code = character(), ea_area_type = character(), rank = integer()) else rbindlist(lapply(1:3, function(d) {
     ei <- demo_ea_inter(scn, sid, d)
     ei[match(risk_level, DEMO_LEVELS) >= 3L, .(ea_area_code, ea_area_type, rank = match(risk_level, DEMO_LEVELS))]
   }))
@@ -437,6 +449,7 @@ demo_situation <- function(scn) demo_memo(paste0("situation_", scn), {
     }
   }
   wide[, has_active_warning := severe_warnings + warnings + alerts > 0L]
+  if (!is_latest) wide[, `:=`(severe_warnings = NA_integer_, warnings = NA_integer_, alerts = NA_integer_, has_active_warning = NA)]
 
   out <- merge(g[, .(constituency_id, constituency_name, mp_name, mp_party, mp_email, mp_phone)], wide, by = "constituency_id", sort = FALSE)
   out[, `:=`(mp_matched = !is.na(mp_name), fgs_statement_id = sid, fgs_issued_at = st$issued_at)]
@@ -447,24 +460,28 @@ demo_situation <- function(scn) demo_memo(paste0("situation_", scn), {
   out[]
 })
 
-demo_briefings <- function(scn) demo_memo(paste0("briefings_", scn), {
-  s <- demo_situation(scn)[fgs_worst_rank >= 3L & !is.na(mp_name)]
+demo_situation <- function(scn) demo_situation_for(scn, demo_latest_id(scn))
+
+demo_briefings_for <- function(scn, sid) demo_memo(sprintf("briefings_%s_%d", scn, sid), {
+  s <- demo_situation_for(scn, sid)[fgs_worst_rank >= 3L & !is.na(mp_name)]
   if (nrow(s) == 0L) return(data.table(statement_id = integer(), constituency_id = character(), constituency_name = character(),
     mp_name = character(), mp_email = character(), worst_rank = integer(), worst_level = character(), worst_date = character(),
     is_escalation = logical(), has_active_warning = logical(), subject = character(), body = character(),
     status = character(), reviewed_by = character()))
-  st <- demo_stmt_row(scn, demo_latest_id(scn))
+  st <- demo_stmt_row(scn, sid)
   issued <- parse_utc(st$issued_at)
   s[, `:=`(
-    statement_id = demo_latest_id(scn), worst_rank = fgs_worst_rank, worst_level = fgs_worst_level,
+    statement_id = sid, worst_rank = fgs_worst_rank, worst_level = fgs_worst_level,
     worst_date = fgs_worst_date, is_escalation = fgs_escalated,
     subject = sprintf("Flood Guidance Statement: %s flood risk forecast for %s on %s", fgs_worst_level,
                       constituency_name, format(as.Date(fgs_worst_date), "%A %d %B")))]
   s[, body := vapply(seq_len(.N), function(i) {
     r <- s[i]
     days <- paste(sprintf("Day %d %s", 1:5, RANK_LABELS[unlist(r[, paste0("fgs_rank_day", 1:5), with = FALSE]) + 1L]), collapse = ", ")
-    force <- if (r$has_active_warning) sprintf("%d severe flood warning(s), %d flood warning(s) and %d flood alert(s) are currently in force in the constituency.",
-                                               r$severe_warnings, r$warnings, r$alerts) else "No flood warnings or alerts are currently in force in the constituency."
+    force <- if (isTRUE(r$has_active_warning)) sprintf("%d severe flood warning(s), %d flood warning(s) and %d flood alert(s) are currently in force in the constituency.",
+                                                       r$severe_warnings, r$warnings, r$alerts)
+             else if (is.na(r$has_active_warning)) "Warnings in force at the time are not held for this statement."
+             else "No flood warnings or alerts are currently in force in the constituency."
     paste0("Dear ", r$mp_name, ",\n\n",
            "The Flood Guidance Statement issued at ", format(issued, "%H:%M"), " on ", format(issued, "%d %B %Y"),
            " forecasts a ", r$fgs_worst_level, " risk of ", r$fgs_worst_sources, " flooding in ", r$constituency_name,
@@ -475,8 +492,10 @@ demo_briefings <- function(scn) demo_memo(paste0("briefings_", scn), {
   s[, `:=`(status = "draft", reviewed_by = NA_character_)]
   s[order(-worst_rank, constituency_name),
     .(statement_id, constituency_id, constituency_name, mp_name, mp_email, worst_rank, worst_level, worst_date,
-      is_escalation, has_active_warning, subject, body, status, reviewed_by)]
+      is_escalation, has_active_warning = fifelse(is.na(has_active_warning), FALSE, has_active_warning), subject, body, status, reviewed_by)]
 })
+
+demo_briefings <- function(scn) demo_briefings_for(scn, demo_latest_id(scn))
 
 demo_exposure <- function(scn) demo_memo(paste0("exposure_", scn), demo_with_seed(99, {
   g <- demo_geometry()$table
@@ -529,8 +548,9 @@ fetch_recent_statements <- function(n = 20L) {
   st <- demo_statements_table(demo_current()$scenario)
   out <- head(st[order(-issued_at), .(statement_id, issued_at, headline, source_coastal, source_surface,
                                       source_ground, source_river, england_forecast, pdf_url)], n)
-  # The warehouse returns a timestamp, not text, so the picker and titles show the time.
-  out[, issued_at := parse_utc(issued_at)]
+  # The warehouse returns the time as text ("2026-10-15T09:30:00"), which R's
+  # as.POSIXct() reads as midnight. Keep it as text so the demo exercises the
+  # same path (as_utc() in helpers.R) as the live app.
   out[]
 }
 
@@ -602,7 +622,17 @@ fetch_changes <- function(statement_id) demo_changes_for(demo_current()$scenario
 
 fetch_situation <- function() copy(demo_situation(demo_current()$scenario))
 
-fetch_briefing_drafts <- function() copy(demo_briefings(demo_current()$scenario))
+fetch_briefing_drafts <- function(statement_id = NULL) {
+  scn <- demo_current()$scenario
+  copy(demo_briefings_for(scn, if (is.null(statement_id)) demo_latest_id(scn) else as.integer(statement_id)))
+}
+
+# POC-ONLY: statement look-back (see helpers.R aggregate_situation for the real path).
+fetch_situation_for_statement <- function(statement_id, issued_at = NA) {
+  scn <- demo_current()$scenario
+  if (is.null(demo_stmt_row(scn, statement_id))) return(NULL)
+  copy(demo_situation_for(scn, as.integer(statement_id)))
+}
 
 fetch_exposure <- function(n_months = 12L) copy(demo_exposure(demo_current()$scenario))
 
