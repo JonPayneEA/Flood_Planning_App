@@ -1,5 +1,5 @@
 # =============================================================================
-# ui.R
+# app_ui.R
 # Declarative UI for the Flood Intelligence Tool dashboard.
 #
 # Three-column layout for the Live view tab: a left sidebar of controls, a
@@ -8,7 +8,7 @@
 # placeholders we'll fill in later.
 #
 # This file produces no reactive output itself -- every textOutput, uiOutput,
-# and leafletOutput slot is filled by callbacks in server.R.
+# and leafletOutput slot is filled by callbacks in app_server.R.
 # =============================================================================
 
 
@@ -16,7 +16,7 @@
 # matrix_filter_ui()
 #
 # Builds the 4x4 FGS risk matrix as a CSS grid of styled cells, each holding
-# a checkbox. Each checkbox is given inputId 'mtx_{x}_{y}' so server.R can
+# a checkbox. Each checkbox is given inputId 'mtx_{x}_{y}' so app_server.R can
 # loop over the same x/y coordinates and read which cells are selected.
 #
 # Two default tactics:
@@ -116,30 +116,30 @@ matrix_filter_ui <- function() {
 custom_css <- "
 /* --- 1. Layout chrome ----------------------------------------------------- */
 
-body { background: #f8f9fa; font-size: 14px; }
+body { background: var(--ea-bg); font-size: 14px; }
 
-.shiny-sidebar { background: #e9ecef; padding: 20px; height: 100%; }
+.shiny-sidebar { background: var(--ea-tint); padding: 20px; height: 100%; }
 
 .shiny-sidebar h6 {
   font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
-  color: #495057; margin-top: 16px; margin-bottom: 8px;
+  color: var(--ea-muted); margin-top: 16px; margin-bottom: 8px;
 }
 .shiny-sidebar h6:first-child { margin-top: 0; }
 
 .panel-section {
-  background: #fff; border: 1px solid #dee2e6; border-radius: 4px;
+  background: var(--ea-surface); border: 1px solid var(--ea-line); border-radius: 4px;
   padding: 14px; margin-bottom: 12px;
 }
 .panel-h {
   font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;
-  color: #495057; padding-bottom: 6px; border-bottom: 1px solid #e9ecef;
+  color: var(--ea-muted); padding-bottom: 6px; border-bottom: 1px solid var(--ea-tint);
 }
 
 /* --- 2. Stat cards -------------------------------------------------------- */
 
 div.stat-card {
-  background: #fff;
-  border: 1px solid #dee2e6;
+  background: var(--ea-surface);
+  border: 1px solid var(--ea-line);
   border-radius: 4px;
   padding: 12px;
   text-align: center;
@@ -148,22 +148,22 @@ div.stat-card {
   display: block;
   cursor: default;
 }
-div.stat-card .stat-num { font-size: 24px; font-weight: 700; line-height: 1; color: #212529; }
-div.stat-card .stat-num.accent { color: #c8581f; }
+div.stat-card .stat-num { font-size: 24px; font-weight: 700; line-height: 1; color: var(--ea-ink); }
+div.stat-card .stat-num.accent { color: var(--ea-green-dark); }
 div.stat-card .stat-label {
   font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em;
-  color: #6c757d; margin-top: 4px;
+  color: var(--ea-muted); margin-top: 4px;
 }
 
 /* --- Affected-area list rows --------------------------------------------- */
 
 .area-row {
   display: flex; align-items: center; padding: 6px 0;
-  border-bottom: 1px solid #f1f3f5; font-size: 13px;
+  border-bottom: 1px solid var(--ea-tint); font-size: 13px;
   cursor: pointer;
 }
 .area-row:last-child { border-bottom: none; }
-.area-row:hover { background: #f8f9fa; }
+.area-row:hover { background: var(--ea-bg); }
 .risk-bar { width: 4px; height: 22px; margin-right: 10px; border-radius: 1px; }
 .risk-bar.red    { background: #b02020; }
 .risk-bar.amber  { background: #e08020; }
@@ -205,7 +205,7 @@ div.stat-card .stat-label {
 .matrix-cell.red    { background: #b02020; }
 
 .matrix-col-header {
-  font-size: 10px; color: #495057; text-align: left;
+  font-size: 10px; color: var(--ea-muted); text-align: left;
   transform: rotate(35deg);
   transform-origin: bottom left;
   white-space: nowrap;
@@ -213,8 +213,8 @@ div.stat-card .stat-label {
   z-index: 10;
   align-self: start;
 }
-.matrix-row-header { font-size: 10px; color: #495057; text-align: right; padding-right: 4px; line-height: 1.15; }
-.matrix-row-header .band { font-size: 9px; color: #868e96; }
+.matrix-row-header { font-size: 10px; color: var(--ea-muted); text-align: right; padding-right: 4px; line-height: 1.15; }
+.matrix-row-header .band { font-size: 9px; color: var(--ea-muted); }
 
 .matrix-likelihood-label {
   writing-mode: vertical-rl;
@@ -222,13 +222,13 @@ div.stat-card .stat-label {
   text-align: center;
   font-size: 10px;
   font-weight: 600;
-  color: #495057;
+  color: var(--ea-muted);
 }
 .matrix-impact-label {
   text-align: center;
   font-size: 10px;
   font-weight: 600;
-  color: #495057;
+  color: var(--ea-muted);
 }
 
 /* --- 4. Quiet-state notice ------------------------------------------------ */
@@ -237,9 +237,9 @@ div.stat-card .stat-label {
    A neutral light-blue rather than warning-amber, because this is a normal
    operational state. */
 .quiet-notice {
-  background: #e7f1f9;
-  border: 1px solid #b6d4ec;
-  color: #1f4f7a;
+  background: var(--ea-tint);
+  border: 1px solid var(--ea-green-mid);
+  color: var(--ea-ink);
   border-radius: 4px;
   padding: 10px 14px;
   margin-bottom: 12px;
@@ -265,8 +265,8 @@ div.stat-card .stat-label {
 .map-spinner {
   width: 36px;
   height: 36px;
-  border: 4px solid #dee2e6;
-  border-top-color: #c8581f;
+  border: 4px solid var(--ea-line);
+  border-top-color: var(--ea-green-dark);
   border-radius: 50%;
   animation: map-spin 0.8s linear infinite;
 }
@@ -277,9 +277,9 @@ div.stat-card .stat-label {
 /* --- 6. Headline notice & statement info boxes ----------------------------- */
 
 .headline-notice {
-  background: #fff;
-  border: 1px solid #dee2e6;
-  border-left: 4px solid #dee2e6;  /* colour overridden inline from risk keyword */
+  background: var(--ea-surface);
+  border: 1px solid var(--ea-line);
+  border-left: 4px solid var(--ea-line);  /* colour overridden inline from risk keyword */
   border-radius: 4px;
   padding: 10px 14px;
   margin-bottom: 12px;
@@ -293,9 +293,9 @@ div.stat-card .stat-label {
   gap: 8px;
 }
 .source-info-card {
-  background: #fff;
-  border: 1px solid #dee2e6;
-  border-left: 4px solid #dee2e6;  /* width fixed; colour overridden inline per card */
+  background: var(--ea-surface);
+  border: 1px solid var(--ea-line);
+  border-left: 4px solid var(--ea-line);  /* width fixed; colour overridden inline per card */
   border-radius: 4px;
   padding: 10px 14px;
 }
@@ -303,12 +303,12 @@ div.stat-card .stat-label {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #6c757d;
+  color: var(--ea-muted);
   margin-bottom: 4px;
 }
 .source-info-value {
   font-size: 13px;
-  color: #212529;
+  color: var(--ea-ink);
   line-height: 1.4;
 }
 
@@ -331,11 +331,11 @@ div.stat-card .stat-label {
 .health-warn .dot { background: #e08020; }
 .health-fail { color: #8b1a1a; border-color: #b02020; background: #f9e5e5; }
 .health-fail .dot { background: #b02020; }
-.health-unknown { color: #495057; border-color: #adb5bd; background: #f1f3f5; }
-.health-unknown .dot { background: #adb5bd; }
+.health-unknown { color: var(--ea-muted); border-color: var(--ea-line-strong); background: var(--ea-tint); }
+.health-unknown .dot { background: var(--ea-line-strong); }
 
 .changes-strip {
-  background: #fff; border: 1px solid #dee2e6; border-radius: 6px;
+  background: var(--ea-surface); border: 1px solid var(--ea-line); border-radius: 6px;
   padding: 8px 12px; margin-bottom: 12px; font-size: 13px;
 }
 .changes-strip summary { cursor: pointer; }
@@ -350,12 +350,12 @@ div.stat-card .stat-label {
 
 .rank-chip {
   display: inline-block; min-width: 54px; text-align: center;
-  padding: 1px 6px; border-radius: 3px; font-size: 11px; color: #212529;
+  padding: 1px 6px; border-radius: 3px; font-size: 11px; color: var(--ea-ink);
 }
 .exposure-grid { border-collapse: collapse; font-size: 12px; }
 .exposure-grid th { font-weight: 500; padding: 2px 6px; text-align: center; white-space: nowrap; }
 .exposure-grid td.name { text-align: left; padding: 2px 10px 2px 0; white-space: nowrap; }
-.exposure-grid td.cell { min-width: 40px; height: 24px; text-align: center; border: 2px solid #f8f9fa; }
+.exposure-grid td.cell { min-width: 40px; height: 24px; text-align: center; border: 2px solid var(--ea-bg); }
 .exposure-grid td.total { padding-left: 10px; font-weight: 600; }
 /* --- 7. Header group, changes overlay, KPI row, legends ------------------ */
 
@@ -368,7 +368,7 @@ div.stat-card .stat-label {
 .stale-banner .btn-link { margin-left: auto; padding: 0; font-size: 13px; }
 
 .header-right { display: flex; align-items: center; gap: 12px; }
-.asof { font-size: 12px; color: #6c757d; }
+.asof { font-size: 12px; color: var(--ea-muted); }
 
 .changes-wrap { position: relative; height: 42px; margin-bottom: 10px; z-index: 1100; }
 .changes-wrap .changes-strip {
@@ -376,19 +376,19 @@ div.stat-card .stat-label {
   box-shadow: 0 2px 8px rgba(0,0,0,0.12);
 }
 .changes-strip .chg-row { cursor: pointer; }
-.changes-strip .chg-row:hover { background: #eef3f8; }
+.changes-strip .chg-row:hover { background: var(--ea-tint); }
 .changes-strip .chg-group td {
   font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em;
-  color: #6c757d; padding-top: 8px;
+  color: var(--ea-muted); padding-top: 8px;
 }
-.changes-strip .chg-hint { font-size: 11px; color: #6c757d; margin-top: 4px; }
-.changes-strip .chg-more { color: #6c757d; font-size: 11px; }
+.changes-strip .chg-hint { font-size: 11px; color: var(--ea-muted); margin-top: 4px; }
+.changes-strip .chg-more { color: var(--ea-muted); font-size: 11px; }
 
 .kpi-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
 .kpi-row .stat-card { flex: 1 1 180px; margin: 0; }
 
 .legend-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
-              font-size: 11px; color: #6c757d; margin: 8px 0; }
+              font-size: 11px; color: var(--ea-muted); margin: 8px 0; }
 .legend-bar { width: 160px; height: 10px; border-radius: 2px;
               background: linear-gradient(to right, #fff3bf, #e08020, #b02020); }
 
@@ -402,17 +402,106 @@ div.stat-card .stat-label {
 .exp-bar { height: 8px; background: #e08020; border-radius: 2px; }
 
 .empty-state {
-  padding: 32px; text-align: center; color: #6c757d; background: #fff;
-  border: 1px dashed #ced4da; border-radius: 6px;
+  padding: 32px; text-align: center; color: var(--ea-muted); background: var(--ea-surface);
+  border: 1px dashed var(--ea-line-strong); border-radius: 6px;
 }
 
 /* Planned tabs sit in a quiet dropdown rather than as four dead tabs. */
-.nav-tabs .dropdown-toggle { color: #868e96; }
+.nav-tabs .dropdown-toggle { color: var(--ea-muted); }
 
 .briefing-body {
-  white-space: pre-wrap; background: #fff; border: 1px solid #dee2e6;
+  white-space: pre-wrap; background: var(--ea-surface); border: 1px solid var(--ea-line);
   border-radius: 6px; padding: 12px; font-size: 13px;
 }
+
+/* --- 8. Environment Agency frame (colours from theme.R) ------------------- */
+
+body { font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; color: var(--ea-ink); }
+a { color: var(--ea-blue-dark); }
+
+/* Full-bleed header band. */
+.app-header {
+  background: var(--ea-green-dark); color: var(--ea-surface);
+  margin: 0 calc(-0.5 * var(--bs-gutter-x, 1.5rem)) 0 calc(-0.5 * var(--bs-gutter-x, 1.5rem));
+  padding: 14px calc(0.5 * var(--bs-gutter-x, 1.5rem));
+  border-bottom: 4px solid var(--ea-green);
+}
+.app-header h2 { color: var(--ea-surface); font-weight: 700; letter-spacing: 0.01em; }
+.app-header .app-sub { font-size: 12px; color: rgba(255,255,255,0.85); margin-top: 2px; }
+.app-header .asof { color: rgba(255,255,255,0.88); }
+.app-header .btn-outline-secondary {
+  color: var(--ea-surface); border-color: rgba(255,255,255,0.7); background: transparent;
+}
+.app-header .btn-outline-secondary:hover { background: rgba(255,255,255,0.14); color: var(--ea-surface); }
+.ea-logo { height: 36px; margin-right: 14px; }
+.header-left { display: flex; align-items: center; }
+
+/* Tabs: green rule on the active tab. */
+.nav-tabs { border-bottom: 1px solid var(--ea-line); margin-top: 10px; }
+.nav-tabs .nav-link { color: var(--ea-blue-dark); border: 0; border-top: 3px solid transparent; border-radius: 0; }
+.nav-tabs .nav-link.active {
+  color: var(--ea-ink); background: var(--ea-surface); font-weight: 700;
+  border-top: 3px solid var(--ea-green); border-left: 1px solid var(--ea-line); border-right: 1px solid var(--ea-line);
+}
+
+/* Buttons and focus. */
+.btn-outline-secondary { color: var(--ea-green-dark); border-color: var(--ea-green-dark); }
+.btn-outline-secondary:hover { background: var(--ea-green-dark); color: var(--ea-surface); border-color: var(--ea-green-dark); }
+.btn-primary { background: var(--ea-green-dark); border-color: var(--ea-green-dark); }
+:focus-visible { outline: 3px solid var(--ea-blue); outline-offset: 2px; }
+
+/* Cards and panels sit on white with a hairline. */
+div.stat-card, .panel-section, .changes-strip, .briefing-body, .empty-state {
+  background: var(--ea-surface); border-color: var(--ea-line);
+}
+.shiny-sidebar { background: var(--ea-tint); }
+table.dataTable thead th { color: var(--ea-ink); border-bottom: 2px solid var(--ea-green); }
+.dataTables_wrapper .dataTables_paginate .paginate_button.current {
+  background: var(--ea-green-dark) !important; color: var(--ea-surface) !important; border-color: var(--ea-green-dark) !important;
+}
+.exposure-grid td.name { color: var(--ea-ink); }
+.irs--shiny .irs-bar, .irs--shiny .irs-handle { background: var(--ea-green-dark); border-color: var(--ea-green-dark); }
+.irs--shiny .irs-single, .irs--shiny .irs-from, .irs--shiny .irs-to { background: var(--ea-green-dark); }
+.form-check-input:checked { background-color: var(--ea-green-dark); border-color: var(--ea-green-dark); }
+.stat-card .stat-num.accent { color: var(--ea-green-dark); }
+
+/* Demonstration ribbon and controls (demo mode only). */
+.demo-ribbon {
+  background: var(--ea-ink); color: var(--ea-surface); font-size: 12px; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase; text-align: center; padding: 5px 12px;
+  margin: 0 calc(-0.5 * var(--bs-gutter-x, 1.5rem));
+}
+.demo-controls {
+  display: flex; gap: 18px; align-items: flex-end; flex-wrap: wrap; font-size: 13px;
+  background: var(--ea-tint); border-bottom: 1px solid var(--ea-line);
+  padding: 8px calc(0.5 * var(--bs-gutter-x, 1.5rem));
+  margin: 0 calc(-0.5 * var(--bs-gutter-x, 1.5rem));
+}
+.demo-controls .form-group, .demo-controls .checkbox { margin: 0; }
+.demo-controls label { font-size: 12px; color: var(--ea-muted); }
+.demo-note { font-size: 12px; color: var(--ea-muted); }
+
+/* Overview. */
+.ov-headline { background: var(--ea-surface); border: 1px solid var(--ea-line); border-left: 6px solid var(--ea-green);
+               border-radius: 4px; padding: 14px 18px; margin-bottom: 14px; }
+.ov-headline .ov-kicker { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ea-muted); }
+.ov-headline .ov-text { font-size: 19px; line-height: 1.35; margin-top: 4px; }
+.ov-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.ov-grid .stat-card { margin: 0; }
+.ov-outlook { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 16px; }
+.ov-day { background: var(--ea-surface); border: 1px solid var(--ea-line); border-radius: 4px; padding: 10px; text-align: center; }
+.ov-day .d { font-size: 12px; color: var(--ea-muted); }
+.ov-day .n { font-size: 12px; margin-top: 6px; color: var(--ea-ink); }
+.ov-day .rank-chip { margin-top: 6px; min-width: 70px; }
+.ov-cols { display: grid; grid-template-columns: 3fr 2fr; gap: 14px; }
+@media (max-width: 992px) { .ov-cols, .ov-outlook { grid-template-columns: 1fr; } }
+.ov-panel { background: var(--ea-surface); border: 1px solid var(--ea-line); border-radius: 4px; padding: 12px 14px; }
+.ov-panel h6 { margin: 0 0 8px 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ea-muted); }
+.ov-table { width: 100%; font-size: 13px; }
+.ov-table td, .ov-table th { padding: 4px 6px; border-bottom: 1px solid var(--ea-line); }
+.ov-table tr.clickable { cursor: pointer; }
+.ov-table tr.clickable:hover { background: var(--ea-tint); }
+.ov-foot { font-size: 12px; color: var(--ea-muted); margin-top: 10px; }
 "
 
 
@@ -431,7 +520,7 @@ make_sidebar <- function() tags$div(
   h6("FGS statement"),
   # Choices populated server-side once fetch_recent_statements() has run.
   # Display labels show issue date/time; values are statement_ids so the
-  # filters() reactive in server.R picks the right rows.
+  # filters() reactive in app_server.R picks the right rows.
   selectInput("statement_id", NULL,
               choices = NULL,         # populated by updateSelectInput in server
               selectize = FALSE),
@@ -549,7 +638,7 @@ make_right_panel <- function() tags$div(
              tags$div("Constituencies", class = "stat-label"))
   ),
   
-  # Affected-areas list (server.R builds the row markup).
+  # Affected-areas list (app_server.R builds the row markup).
   tags$div(
     class = "panel-section",
     tags$div(
@@ -631,43 +720,86 @@ make_exposure_tab <- function() tags$div(
 
 
 # -----------------------------------------------------------------------------
+# Overview tab.
+#
+# The one-screen summary for senior forecasters and managers: what the latest
+# statement says, how many constituencies are at risk, the five-day outlook,
+# who to look at first and what has changed. Everything here comes from tables
+# the app already reads, so it costs no extra queries. The map and the full
+# tables sit behind it, one click away.
+# -----------------------------------------------------------------------------
+
+make_overview_tab <- function() tags$div(
+  class = "p-3",
+  uiOutput("ov_headline"),
+  uiOutput("ov_kpis"),
+  tags$div(class = "ov-panel mb-3",
+           tags$h6("Five-day outlook: constituencies at Medium risk or above"),
+           uiOutput("ov_outlook")),
+  tags$div(
+    class = "ov-cols",
+    tags$div(class = "ov-panel",
+             tags$h6("Constituencies to watch"),
+             uiOutput("ov_watch")),
+    tags$div(class = "ov-panel",
+             tags$h6("Changed since the previous statement"),
+             uiOutput("ov_changes"))
+  ),
+  uiOutput("ov_foot")
+)
+
+
+# -----------------------------------------------------------------------------
+# MP audit log tab (demo mode only).
+#
+# Shows the review actions taken on briefing drafts in THIS session. It is a
+# demonstration of the workflow the live app does not have yet. Nothing is
+# saved, and nothing is sent or written to any warehouse.
+# -----------------------------------------------------------------------------
+
+make_audit_tab <- function() tags$div(
+  class = "p-3",
+  tags$div(class = "alert alert-secondary",
+           tags$strong("Demonstration only. "),
+           "This log is held in your browser session and disappears when you close the page. ",
+           "Nothing is saved, sent or written to any warehouse. In the live app, briefings are read-only ",
+           "until a decision is made on who may record a review."),
+  DT::dataTableOutput("audit_table")
+)
+
+
+# -----------------------------------------------------------------------------
+# Demo ribbon and controls (demo mode only).
+#
+# The ribbon is always visible so a screenshot of the demo can never be mistaken
+# for live data.
+# -----------------------------------------------------------------------------
+
+make_demo_controls <- function() {
+  tags$div(
+    class = "demo-controls",
+    selectInput("demo_scenario", "Scenario", choices = DEMO_SCENARIOS, selected = "developing", width = "200px"),
+    checkboxInput("demo_problem", "Simulate a pipeline problem", FALSE),
+    actionButton("demo_reset", "Reset demo actions", class = "btn-sm btn-outline-secondary"),
+    tags$span(class = "demo-note",
+              "People, places and rivers are fictional. The map is an illustrative hexagon layout, not real boundaries.")
+  )
+}
+
+
+# -----------------------------------------------------------------------------
 # Top-level UI.
 #
 # A function of the request, and every section above is a function too, so the
 # widgets are built per request. That is what lets a bookmarked URL restore
 # the tab, statement, day and filters: Shiny only applies a restored value
 # when the widget is created while the request is being served.
-#
-# tabsetPanel with the live view active; the five analytics tabs are
-# placeholder panels we'll fill in later. The tab order matches the wireframe
-# we agreed on (live first, then analytics in order of operational usefulness).
 # -----------------------------------------------------------------------------
 
-ui <- function(request) bslib::page_fluid(
-  theme = bslib::bs_theme(version = 5),
-  tags$head(tags$style(HTML(custom_css))),
-  tags$div(
-    class = "app-header",
-    tags$h2("Flood Intelligence Tool"),
-    tags$div(class = "header-right",
-             uiOutput("data_asof"),
-             tags$button(
-               type = "button", id = "copy_link", class = "btn btn-sm btn-outline-secondary",
-               title = "Copy a link to this exact view",
-               onclick = paste0(
-                 "var b=this,t=b.innerHTML;",
-                 "if(navigator.clipboard){navigator.clipboard.writeText(window.location.href).then(function(){",
-                 "b.textContent='Copied';setTimeout(function(){b.innerHTML=t;},1500);});}",
-                 "else{window.prompt('Copy this link',window.location.href);}"),
-               icon("link"), " Copy link"),
-             uiOutput("health_badge"))
-  ),
-  # Shown only when the pipeline is failing, stale or unreadable.
-  uiOutput("stale_banner"),
-  
-  tabsetPanel(
-    id = "main_tabs",
-    
+ui <- function(request) {
+  tabs <- list(
+    tabPanel("Overview", make_overview_tab()),
+
     tabPanel("FGS Interrogator",
              # Stacks on small screens: sidebar and map first, counts below.
              tags$div(
@@ -677,18 +809,49 @@ ui <- function(request) bslib::page_fluid(
                tags$div(class = "col-12 col-xl-3",          make_right_panel())
              )
     ),
-    
+
     tabPanel("Constituency situation", make_situation_tab()),
     tabPanel("Exposure history",       make_exposure_tab()),
+    if (DEMO_MODE) tabPanel("MP audit log", make_audit_tab()),
 
     # Planned. These need data the pipeline does not hold yet (observed gauge
     # levels, the Met Office licence decision), so they sit in one menu.
-    navbarMenu(
-      "Planned",
+    do.call(navbarMenu, c(list("Planned"), Filter(Negate(is.null), list(
       tabPanel("Warning issue times",   tags$p(class = "p-3 text-muted", "Planned. Needs warning issue history.")),
       tabPanel("Forecast verification", tags$p(class = "p-3 text-muted", "Planned. Needs observed gauge levels and a decision on the Met Office licence.")),
       tabPanel("Event playback",        tags$p(class = "p-3 text-muted", "Planned. Needs observed gauge levels and a decision on the Met Office licence.")),
-      tabPanel("MP audit log",          tags$p(class = "p-3 text-muted", "Planned. Needs a record of who sent what."))
-    )
+      if (!DEMO_MODE) tabPanel("MP audit log", tags$p(class = "p-3 text-muted", "Planned. Needs a record of who sent what."))
+    ))))
   )
-)
+
+  bslib::page_fluid(
+    theme = ea_theme(),
+    tags$head(tags$title(if (DEMO_MODE) "Flood Intelligence Tool (demonstration)" else "Flood Intelligence Tool"),
+              tags$style(HTML(paste(ea_css_variables(), custom_css)))),
+    if (DEMO_MODE) tags$div(class = "demo-ribbon", "Demonstration: synthetic data. Nothing is connected, saved or sent."),
+    tags$div(
+      class = "app-header",
+      tags$div(class = "header-left",
+               ea_logo(),
+               tags$div(tags$h2("Flood Intelligence Tool"),
+                        tags$div(class = "app-sub", "Flood Guidance Statement: forecast, constituencies and flood areas"))),
+      tags$div(class = "header-right",
+               uiOutput("data_asof"),
+               tags$button(
+                 type = "button", id = "copy_link", class = "btn btn-sm btn-outline-secondary",
+                 title = "Copy a link to this exact view",
+                 onclick = paste0(
+                   "var b=this,t=b.innerHTML;",
+                   "if(navigator.clipboard){navigator.clipboard.writeText(window.location.href).then(function(){",
+                   "b.textContent='Copied';setTimeout(function(){b.innerHTML=t;},1500);});}",
+                   "else{window.prompt('Copy this link',window.location.href);}"),
+                 icon("link"), " Copy link"),
+               uiOutput("health_badge"))
+    ),
+    if (DEMO_MODE) make_demo_controls(),
+    # Shown only when the pipeline is failing, stale or unreadable.
+    uiOutput("stale_banner"),
+
+    do.call(tabsetPanel, c(list(id = "main_tabs"), Filter(Negate(is.null), tabs)))
+  )
+}

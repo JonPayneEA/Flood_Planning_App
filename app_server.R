@@ -1,11 +1,11 @@
 # =============================================================================
-# server.R
+# app_server.R
 # Reactive server logic for the FGS Flood Guidance dashboard.
 #
 # Structure:
 #   1. Source data.R so the fetch_* functions are available.
 #   2. Define one reactive() per logical chunk of derived data.
-#   3. Wire those reactives to output slots declared in ui.R.
+#   3. Wire those reactives to output slots declared in app_ui.R.
 #
 # Two design choices worth knowing about:
 #
@@ -41,6 +41,19 @@ server <- function(input, output, session) {
   # ingested since the session opened.
   # ---------------------------------------------------------------------------
 
+  # Bumped whenever the underlying data may have changed under the same inputs
+  # (a refresh, new data, a demo scenario switch), so the map layers re-read.
+  data_version <- reactiveVal(0L)
+
+  # Demo mode keeps its scenario and "pipeline problem" switch in the session,
+  # so two people using one deployed demo never affect each other. A restored
+  # bookmark supplies the starting scenario.
+  if (DEMO_MODE) {
+    start <- isolate(input$demo_scenario)
+    session$userData$demo_scenario <- if (!is.null(start) && start %in% DEMO_SCENARIOS) start else "developing"
+    session$userData$demo_problem  <- isTRUE(isolate(input$demo_problem))
+  }
+
   recent_rv <- reactiveVal(data.table())
 
   load_statements <- function(keep_selected = FALSE) {
@@ -73,6 +86,7 @@ server <- function(input, output, session) {
   observeEvent(input$refresh_data, {
     cache_clear()
     load_statements(keep_selected = TRUE)
+    data_version(isolate(data_version()) + 1L)
   })
 
 
@@ -137,6 +151,7 @@ server <- function(input, output, session) {
   filters <- reactive({
     stmt <- selected_statement()
     req(stmt)                                   # bail if statement isn't yet loaded
+    data_version()                              # re-read when the data under the same inputs changes
     
     # Map UI checkboxes to the source codes the database uses. isTRUE() guards
     # against the brief NULL state Shiny inputs can have on first render.
@@ -924,6 +939,214 @@ server <- function(input, output, session) {
 
 
   # ---------------------------------------------------------------------------
+  # Briefing review state.
+  #
+  # Empty in the live app: briefings are read-only there until someone decides
+  # who may record a review. In demo mode the buttons below change this state,
+  # which lives in the session only. There is no code path from here to any
+  # warehouse: the only writers are these two reactive values.
+  # ---------------------------------------------------------------------------
+
+  review_status <- reactiveVal(character())            # constituency_id -> status
+  review_log    <- reactiveVal(data.table(
+    at = character(), statement = integer(), constituency = character(), mp = character(),
+    action = character(), by = character()))
+
+  briefing_effective <- reactive({
+    b  <- briefing_rv()
+    st <- review_status()
+    if (is.null(b) || length(st) == 0L) return(b)
+    b <- copy(b)
+    idx <- match(b$constituency_id, names(st))
+    hit <- !is.na(idx)
+    b[hit, `:=`(status = unname(st[idx[hit]]), reviewed_by = "Demo forecaster")]
+    b[]
+  })
+
+  reset_review <- function() {
+    review_status(character())
+    review_log(review_log()[0L])
+  }
+
+  record_review <- function(action) {
+    row <- input$situation_table_rows_selected
+    req(row)
+    d <- situation_filtered()
+    cid <- d$constituency_id[row]
+    b <- briefing_rv()
+    req(!is.null(b), cid %in% b$constituency_id)
+    st <- review_status(); st[[cid]] <- action; review_status(st)
+    review_log(rbind(review_log(), data.table(
+      at = format(Sys.time(), "%H:%M:%S"), statement = b$statement_id[b$constituency_id == cid][1L],
+      constituency = d$constituency_name[row], mp = d$mp_name[row], action = action, by = "Demo forecaster")))
+    showNotification(sprintf("%s: marked %s (demonstration only, not saved).", d$constituency_name[row], action),
+                     type = "message", duration = 4)
+  }
+
+  if (DEMO_MODE) {
+    observeEvent(input$rv_reviewed, record_review("reviewed"))
+    observeEvent(input$rv_sent,     record_review("sent"))
+    observeEvent(input$rv_rejected, record_review("rejected"))
+    observeEvent(input$demo_reset,  { reset_review(); showNotification("Demo actions cleared.", duration = 3) })
+
+    observeEvent(input$demo_scenario, {
+      req(input$demo_scenario %in% DEMO_SCENARIOS)
+      if (identical(session$userData$demo_scenario, input$demo_scenario)) return()
+      session$userData$demo_scenario <- input$demo_scenario
+      withProgress(message = "Building the scenario", value = 0.3, {
+        reset_review()
+        load_statements(keep_selected = TRUE)
+        load_products()
+        data_version(isolate(data_version()) + 1L)
+      })
+    }, ignoreInit = TRUE)
+
+    observeEvent(input$demo_problem, {
+      session$userData$demo_problem <- isTRUE(input$demo_problem)
+      health_rv(safe_fetch(fetch_pipeline_health))
+    }, ignoreInit = TRUE)
+
+    output$audit_table <- DT::renderDataTable({
+      lg <- review_log()
+      DT::datatable(
+        setnames(copy(lg), c("Time", "Statement", "Constituency", "MP", "Action", "By")),
+        rownames = FALSE, selection = "none",
+        options = list(dom = "tip", pageLength = 15, ordering = TRUE,
+                       language = list(emptyTable = "No actions yet. Select a constituency on Constituency situation and mark its briefing.")))
+    })
+  }
+
+
+  # ---------------------------------------------------------------------------
+  # Overview (senior forecasters and managers).
+  #
+  # One screen from tables the app already holds: nothing here runs a query of
+  # its own beyond what the other tabs use.
+  # ---------------------------------------------------------------------------
+
+  observeEvent(input$nav_to, {
+    req(input$nav_to %in% c("Overview", "FGS Interrogator", "Constituency situation", "Exposure history"))
+    updateTabsetPanel(session, "main_tabs", selected = input$nav_to)
+  })
+
+  nav_link <- function(label, to) {
+    tags$a(href = "#", onclick = sprintf("Shiny.setInputValue('nav_to','%s',{priority:'event'});return false;", to), label)
+  }
+
+  ov_data <- reactive({
+    sit <- tryCatch(situation_clean(), error = function(e) NULL)
+    list(sit = sit, stmt = { r <- recent_rv(); if (nrow(r) > 0L) as.list(r[1L]) else NULL })
+  })
+
+  output$ov_headline <- renderUI({
+    d <- ov_data()
+    if (is.null(d$stmt) || is.null(d$sit)) {
+      return(tags$div(class = "alert alert-warning", "The latest statement could not be read. Check the pipeline status above."))
+    }
+    worst <- max(d$sit$fgs_worst_rank, 0L, na.rm = TRUE)
+    colour <- if (worst == 0L) EA_PALETTE$green else RANK_HEX[worst + 1L]
+    tags$div(
+      class = "ov-headline", style = paste0("border-left-color:", colour, ";"),
+      tags$div(class = "ov-kicker",
+               sprintf("Flood Guidance Statement #%s, issued %s UTC", d$stmt$statement_id, short_ts(d$stmt$issued_at))),
+      tags$div(class = "ov-text", field_or_dash(d$stmt$headline)),
+      tags$div(class = "mt-2", "Highest forecast risk in any constituency: ", rank_chip(worst))
+    )
+  })
+
+  output$ov_kpis <- renderUI({
+    d <- ov_data()$sit
+    if (is.null(d)) return(NULL)
+    b <- briefing_effective()
+    n_draft <- if (is.null(b)) 0L else sum(b$status == "draft")
+    n_done  <- if (is.null(b)) 0L else sum(b$status != "draft")
+    card <- function(n, label, accent = FALSE, sub = NULL) {
+      tags$div(class = "stat-card",
+               tags$div(class = paste("stat-num", if (accent) "accent"), n),
+               tags$div(class = "stat-label", label), if (!is.null(sub)) tags$div(class = "demo-note", sub))
+    }
+    tags$div(class = "ov-grid",
+      card(sum(d$fgs_worst_rank >= 3L, na.rm = TRUE), "Constituencies at Medium or above", TRUE,
+           sprintf("of which High: %d", sum(d$fgs_worst_rank >= 4L, na.rm = TRUE))),
+      card(sum(d$fgs_escalated, na.rm = TRUE), "Escalated since the last statement", sub = "any rise, on any day or source"),
+      card(sum(d$has_active_warning, na.rm = TRUE), "Constituencies with a warning or alert in force"),
+      card(n_draft, "MP briefings awaiting review", sub = if (DEMO_MODE && n_done > 0L) sprintf("%d actioned in this demo", n_done)))
+  })
+
+  output$ov_outlook <- renderUI({
+    d <- ov_data()
+    if (is.null(d$sit)) return(NULL)
+    base <- tryCatch(as.Date(substr(d$sit$fgs_issued_at[1L], 1L, 10L)), error = function(e) NA)
+    cells <- lapply(1:5, function(k) {
+      r <- d$sit[[paste0("fgs_rank_day", k)]]
+      worst <- max(r, 0L, na.rm = TRUE)
+      day_label <- paste0("Day ", k, if (!is.na(base)) paste0(": ", format(base + k - 1L, "%a %d %b")) else "")
+      tags$div(class = "ov-day",
+        tags$div(class = "d", day_label),
+        tags$div(rank_chip(worst)),
+        tags$div(class = "n", sprintf("%d at Medium or above", sum(r >= 3L, na.rm = TRUE))))
+    })
+    tags$div(class = "ov-outlook", cells)
+  })
+
+  output$ov_watch <- renderUI({
+    d <- ov_data()$sit
+    if (is.null(d)) return(NULL)
+    top <- d[fgs_worst_rank >= 2L][order(-fgs_worst_rank, -severe_warnings, -warnings, -fgs_escalated, constituency_name)]
+    n_all <- nrow(top); top <- head(top, 8L)
+    if (nrow(top) == 0L) return(tags$p(class = "text-muted", "No constituency is forecast at Low risk or above."))
+    rows <- lapply(seq_len(nrow(top)), function(i) {
+      r <- top[i]
+      flags <- c(if (isTRUE(r$fgs_escalated)) "Escalated",
+                 if (r$severe_warnings > 0L) sprintf("%d severe warning%s", r$severe_warnings, if (r$severe_warnings > 1L) "s" else ""),
+                 if (r$warnings > 0L) sprintf("%d warning%s", r$warnings, if (r$warnings > 1L) "s" else ""),
+                 if (r$alerts > 0L) sprintf("%d alert%s", r$alerts, if (r$alerts > 1L) "s" else ""))
+      tags$tr(class = "clickable", onclick = goto_js(r$constituency_id),
+        tags$td(tags$strong(r$constituency_name), tags$br(),
+                tags$span(class = "demo-note", if (is.na(r$mp_name)) "Seat vacant" else r$mp_name)),
+        tags$td(rank_chip(r$fgs_worst_rank), tags$br(),
+                tags$span(class = "demo-note", format(as.Date(r$fgs_worst_date), "%a %d %b"))),
+        tags$td(if (length(flags)) paste(flags, collapse = "; ") else tags$span(class = "demo-note", "None")))
+    })
+    tagList(
+      tags$table(class = "ov-table",
+                 tags$thead(tags$tr(tags$th("Constituency"), tags$th("Worst risk"), tags$th("In force or changed"))),
+                 tags$tbody(rows)),
+      tags$div(class = "ov-foot", sprintf("Showing %d of %d at Low or above. Click a row to see it on the map. ", nrow(top), n_all),
+               nav_link("Open the full table", "Constituency situation"))
+    )
+  })
+
+  output$ov_changes <- renderUI({
+    ch <- changes()
+    per <- summarise_changes(ch)
+    if (nrow(per) == 0L) {
+      return(tags$p(class = "text-muted", "No change against the previous statement (or this is the first complete one)."))
+    }
+    n_up <- sum(per$up); n_down <- sum(!per$up)
+    show <- rbind(head(per[up == TRUE], 5L), head(per[up == FALSE], 3L))
+    rows <- lapply(seq_len(nrow(show)), function(i) {
+      r <- show[i]
+      tags$tr(class = "clickable", onclick = goto_js(r$constituency_id),
+        tags$td(r$constituency_name),
+        tags$td(rank_chip(r$previous_rank), HTML(" &rarr; "), rank_chip(r$new_rank)),
+        tags$td(class = "demo-note", format(as.Date(r$forecast_date), "%a %d")))
+    })
+    tagList(
+      tags$p(tags$strong(n_up), " up, ", tags$strong(n_down), " down (constituencies)."),
+      tags$table(class = "ov-table", tags$tbody(rows)),
+      tags$div(class = "ov-foot", "Rises first. ", nav_link("Open the map", "FGS Interrogator"))
+    )
+  })
+
+  output$ov_foot <- renderUI({
+    tags$div(class = "ov-foot mt-3",
+             "Forecast and warnings are separate measures and are not combined. ",
+             "Counts use the pipeline's latest complete statement, whichever statement is picked on the map.")
+  })
+
+
+  # ---------------------------------------------------------------------------
   # Auto-refresh.
   #
   # The pipeline publishes every 30 to 60 minutes. Every
@@ -946,6 +1169,7 @@ server <- function(input, output, session) {
         cache_clear()
         load_statements(keep_selected = TRUE)
         load_products()
+        data_version(isolate(data_version()) + 1L)
         showNotification("New pipeline data loaded.", type = "message", duration = 6)
       }
     })
@@ -961,7 +1185,8 @@ server <- function(input, output, session) {
   # ---------------------------------------------------------------------------
 
   setBookmarkExclude(c(
-    "refresh_data", "show_health", "goto_constituency", "exp_pick",
+    "refresh_data", "show_health", "goto_constituency", "exp_pick", "nav_to",
+    "rv_reviewed", "rv_sent", "rv_rejected", "demo_reset",
     "area_row_click", "download_ea_areas", "download_situation",
     "situation_table_rows_selected", "situation_table_row_last_clicked",
     "situation_table_cell_clicked", "situation_table_rows_current",
@@ -1125,16 +1350,7 @@ server <- function(input, output, session) {
         tags$div(class = "changes-strip text-muted",
           "No changes recorded against the previous statement (or this is the first complete one).")))
     }
-    per <- ch[order(-new_rank, forecast_date)][, .(
-      constituency_name = constituency_name[1L],
-      forecast_date     = forecast_date[1L],
-      source            = source[1L],
-      previous_rank     = previous_rank[1L],
-      new_rank          = new_rank[1L],
-      up                = change_type[1L] %in% c("new", "escalated"),
-      n_cells           = .N
-    ), by = constituency_id]
-    per <- per[order(-up, -new_rank, constituency_name)]
+    per <- summarise_changes(ch)
     n_up <- sum(per$up); n_down <- sum(!per$up)
 
     row_html <- function(r) {
@@ -1238,7 +1454,7 @@ server <- function(input, output, session) {
     proxy <- leaflet::leafletProxy("live_map")
     proxy <- leaflet::clearGroup(proxy, "goto")
     proxy <- leaflet::addPolygons(proxy, data = shape, group = "goto",
-                                  color = "#0b5cad", weight = 3, fill = FALSE,
+                                  color = EA_PALETTE$blue_dark, weight = 3, fill = FALSE,
                                   label = shape$constituency_name[1L])
     leaflet::flyToBounds(proxy,
                          lng1 = bbox[["xmin"]], lat1 = bbox[["ymin"]],
@@ -1367,7 +1583,7 @@ server <- function(input, output, session) {
     d  <- situation_filtered()
     cid <- d$constituency_id[row]
     cname <- d$constituency_name[row]
-    b  <- briefing_rv()
+    b  <- briefing_effective()
     draft <- if (is.null(b)) NULL else b[constituency_id == cid]
     map_btn <- tags$button(type = "button", class = "btn btn-sm btn-outline-secondary",
                            onclick = goto_js(cid), icon("map-location-dot"), " Show on map")
@@ -1384,13 +1600,22 @@ server <- function(input, output, session) {
       tags$div(class = "d-flex justify-content-between align-items-center",
                tags$h6(sprintf("%s: briefing draft for %s", cname, draft$mp_name)), map_btn),
       tags$p(class = "text-muted mb-1",
-             sprintf("Status: %s%s. To: %s. DRAFT ONLY, nothing has been sent.",
+             sprintf("Status: %s%s. To: %s. %s",
                      draft$status,
                      if (!is.na(draft$reviewed_by) && nzchar(draft$reviewed_by))
-                       paste0(" (reviewed by ", draft$reviewed_by, ")") else "",
-                     if (is.na(draft$mp_email)) "no email held" else draft$mp_email)),
+                       paste0(" (by ", draft$reviewed_by, ")") else "",
+                     if (is.na(draft$mp_email)) "no email held" else draft$mp_email,
+                     if (identical(draft$status, "draft")) "DRAFT ONLY, nothing has been sent."
+                     else if (DEMO_MODE) "Recorded in this demonstration only. Nothing was sent."
+                     else "This app sends nothing. The status was set elsewhere.")),
       tags$p(tags$strong("Subject: "), draft$subject),
-      tags$div(class = "briefing-body", draft$body)
+      tags$div(class = "briefing-body", draft$body),
+      if (DEMO_MODE) tags$div(
+        class = "mt-2 d-flex align-items-center gap-2 flex-wrap",
+        actionButton("rv_reviewed", "Mark reviewed", class = "btn-sm btn-outline-secondary"),
+        actionButton("rv_sent",     "Mark sent",     class = "btn-sm btn-outline-secondary"),
+        actionButton("rv_rejected", "Reject",        class = "btn-sm btn-outline-secondary"),
+        tags$span(class = "demo-note", "Demonstration: held in this session only. Nothing is saved or sent."))
     )
   })
 

@@ -1,6 +1,6 @@
 # =============================================================================
 # helpers.R
-# Pure functions used by server.R. No Shiny, no database, no globals beyond
+# Pure functions used by app_server.R. No Shiny, no database, no globals beyond
 # the constants in global.R (RANK_HEX, RANK_LABELS), so each can be unit
 # tested on plain data. Sourced by app.R after global.R.
 # =============================================================================
@@ -133,4 +133,33 @@ choose_selected_statement <- function(choices, current, prev_newest, keep_select
   if (!keep_selected || is.null(current) || !(current %in% choices)) return(newest)
   if (!is.null(prev_newest) && identical(current, prev_newest)) return(newest)
   current
+}
+
+
+# -----------------------------------------------------------------------------
+# summarise_changes()
+#
+# The pipeline stores one row per constituency, forecast day and flood source.
+# People talk about a constituency ("Carlisle went from Medium to High on
+# Friday"), so this reduces the rows to one per constituency: its highest new
+# risk, whether that was a rise or a fall, and how many other cells changed.
+# Rises come first. Used by the changes strip and the Overview.
+# -----------------------------------------------------------------------------
+
+summarise_changes <- function(ch) {
+  empty <- data.table::data.table(
+    constituency_id = character(), constituency_name = character(), forecast_date = character(),
+    source = character(), previous_rank = integer(), new_rank = integer(), up = logical(), n_cells = integer())
+  if (is.null(ch) || nrow(ch) == 0L) return(empty)
+  ch <- data.table::as.data.table(ch)
+  per <- ch[order(-new_rank, forecast_date)][, list(
+    constituency_name = constituency_name[1L],
+    forecast_date     = as.character(forecast_date[1L]),
+    source            = source[1L],
+    previous_rank     = previous_rank[1L],
+    new_rank          = new_rank[1L],
+    up                = change_type[1L] %in% c("new", "escalated"),
+    n_cells           = .N
+  ), by = constituency_id]
+  per[order(-up, -new_rank, constituency_name)]
 }

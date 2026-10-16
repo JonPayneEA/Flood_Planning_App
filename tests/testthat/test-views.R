@@ -36,9 +36,9 @@ make_server_env <- function(overrides = list(), auto_refresh = 30) {
   for (n in ls(consts, all.names = TRUE)) assign(n, get(n, consts), envir = env)
   assign("CACHE_TTL_SECONDS", 0, envir = env)
   assign("AUTO_REFRESH_SECONDS", auto_refresh, envir = env)
-  # server.R sources data.R by relative path, so load it from the project root.
+  # app_server.R sources data.R by relative path, so load it from the project root.
   old_wd <- setwd(app_root); on.exit(setwd(old_wd), add = TRUE)
-  source("server.R", local = env)   # also sources data.R
+  source("app_server.R", local = env)   # also sources data.R
   setwd(old_wd)
 
   env$calls <- new.env()
@@ -179,6 +179,9 @@ test_that("auto-refresh reloads only when the signature changes", {
     # The stub signature changes on every call, so each tick looks like new data.
     session$elapse(31000)
     expect_gt(env$calls$statements, s0)
+    # One change must cause one reload, not a loop. (The observer once read the
+    # data version it was also writing, so it re-triggered itself.)
+    expect_lte(env$calls$statements, s0 + 3L)
   })
   env2 <- make_server_env(list(fetch_data_signature = function() "same"), auto_refresh = 30)
   testServer(env2$server, {
@@ -233,4 +236,18 @@ test_that("the constituency risk layer handles data, no data and a failed query"
       expect_no_error(session$setInputs(layer_const_risk = FALSE))
     })
   }
+})
+
+test_that("in the live app the briefing review buttons do nothing and are not shown", {
+  env <- make_server_env()
+  testServer(env$server, {
+    do.call(session$setInputs, base_inputs)
+    session$setInputs(situation_table_rows_selected = 1L)
+    expect_false(grepl("rv_reviewed", html_of(output$briefing_panel), fixed = TRUE))
+    expect_false(grepl("demonstration", tolower(html_of(output$briefing_panel)), fixed = TRUE))
+    session$setInputs(rv_reviewed = 1, rv_sent = 1, rv_rejected = 1)
+    expect_length(review_status(), 0L)
+    expect_equal(nrow(review_log()), 0L)
+    expect_match(html_of(output$briefing_panel), "DRAFT ONLY")
+  })
 })

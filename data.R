@@ -30,6 +30,7 @@
 # -----------------------------------------------------------------------------
 
 db_connection <- function() {
+  if (DEMO_MODE) stop("Demo mode: no warehouse connection is available, by design.")
   DBI::dbConnect(
     brickster::DatabricksSQL(),
     warehouse_id = Sys.getenv("DATABRICKS_WAREHOUSE_ID")
@@ -54,6 +55,7 @@ db_connection <- function() {
 # -----------------------------------------------------------------------------
 
 db_query <- function(sql) {
+  if (DEMO_MODE) stop("Demo mode: no warehouse query can run, by design.")
   con <- db_connection()
   on.exit(DBI::dbDisconnect(con), add = TRUE)
   result <- DBI::dbGetQuery(con, sql)
@@ -146,7 +148,7 @@ fetch_latest_statement <- function() {
 #
 # The six risk matrix columns (risk_x, risk_y, impact_label, likelihood_label,
 # risk_level, risk_colour) are pulled through directly so downstream filtering
-# in server.R can work on the data.table representation before plotting.
+# in app_server.R can work on the data.table representation before plotting.
 # -----------------------------------------------------------------------------
 
 fetch_risk_polygons <- function(statement_id, day_index) {
@@ -368,7 +370,7 @@ fetch_ea_geometry <- function(statement_id, day_index) {
 # affected set, constituency table for the shapes.
 #
 # source, risk_x, risk_y and intersection_pct are pulled through (not just
-# risk_colour/risk_level) so server.R can apply the same source, matrix-cell,
+# risk_colour/risk_level) so app_server.R can apply the same source, matrix-cell,
 # and threshold filters used for polygons and EA areas, rather than showing
 # every constituency touched by any polygon in the statement-day.
 # -----------------------------------------------------------------------------
@@ -794,3 +796,15 @@ fetch_constituencies_for_statement <- with_cache(fetch_constituencies_for_statem
 fetch_changes                      <- with_cache(fetch_changes,                      "changes")
 fetch_constituency_shape           <- with_cache(fetch_constituency_shape,           "const_shape")
 fetch_constituency_risk_geometry   <- with_cache(fetch_constituency_risk_geometry,   "const_risk_geometry", ttl = min(CACHE_TTL_SECONDS, 120))
+
+
+# =============================================================================
+# DEMO MODE
+#
+# Replaces every fetch_* function with a generator over synthetic data. Sourced
+# last so it overrides the warehouse versions and bypasses their cache. db_query
+# and db_connection already refuse to run in demo mode, so a fetcher that was
+# missed would fail loudly instead of reaching for a warehouse.
+# =============================================================================
+
+if (DEMO_MODE) source("demo.R", local = TRUE)

@@ -8,7 +8,7 @@ suppressMessages({
 
 # Load global.R's constants without its library() calls or .env loading, and
 # with dummy credentials. Evaluated into the global environment because
-# data.R and server.R look these up by name.
+# data.R and app_server.R look these up by name.
 load_app_constants <- function(extra_env = list()) {
   old <- Sys.getenv(c("DATABRICKS_HOST", "DATABRICKS_TOKEN", "DATABRICKS_WAREHOUSE_ID",
                       "FGS_CATALOG", "FGS_SCHEMA", names(extra_env)), names = TRUE, unset = NA)
@@ -19,7 +19,7 @@ load_app_constants <- function(extra_env = list()) {
     for (n in names(old)) if (is.na(old[[n]])) Sys.unsetenv(n) else do.call(Sys.setenv, setNames(list(old[[n]]), n))
   })
   g <- readLines(file.path(app_root, "global.R"), warn = FALSE)
-  g <- g[!grepl("^library\\(", g) & !grepl("load_dot_env", g)]
+  g <- g[!grepl("^\\s*library\\(", g) & !grepl("load_dot_env", g)]
   env <- new.env(parent = globalenv())
   eval(parse(text = g), envir = env)
   env

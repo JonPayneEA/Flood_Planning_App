@@ -7,7 +7,7 @@
 #   - Environment variable validation
 #   - Shared constants (colour palette, risk matrix metadata)
 #
-# Anything defined here is visible to ui.R and server.R via lexical scoping.
+# Anything defined here is visible to app_ui.R and app_server.R via lexical scoping.
 #
 # CONNECTION STRATEGY:
 #   brickster provides a DBI driver that wraps the Databricks SQL Statement
@@ -29,19 +29,33 @@
 # This is the lighter route.
 # -----------------------------------------------------------------------------
 
+# -----------------------------------------------------------------------------
+# Demo mode.
+#
+# FGS_DEMO_MODE=1 runs the whole app on generated data (demo.R). It never opens
+# a warehouse connection: brickster and DBI are not even loaded, no credentials
+# are needed, and db_query() refuses to run. Nothing is read from or written to
+# any warehouse. It exists so the tool can be shown, and tried, by people who
+# have no access to the live data.
+# -----------------------------------------------------------------------------
+
+DEMO_MODE <- tolower(Sys.getenv("FGS_DEMO_MODE", unset = "")) %in% c("1", "true", "yes", "on")
+
 library(shiny)
 library(bslib)        # Bootstrap 5 layouts -- needed for the CSS we use
 library(data.table)
-library(brickster)    # DBI driver for Databricks SQL warehouses (no ODBC needed)
-library(DBI)
 library(sf)
-library(geojsonsf)    # Parse GeoJSON strings to sf objects (storage format
-# used by the FGS pipeline -- GeoJSON in Delta all the
-# way through to Leaflet)
 library(leaflet)
+# The live data path only. Demo mode must not need (or touch) any of these.
+if (!DEMO_MODE) {
+  library(brickster)  # DBI driver for Databricks SQL warehouses (no ODBC needed)
+  library(DBI)
+  library(geojsonsf)  # Parse GeoJSON strings to sf objects (storage format
+                      # used by the FGS pipeline -- GeoJSON in Delta all the
+                      # way through to Leaflet)
+}
 library(htmltools)
 library(DT)           # Sortable, searchable tables for the constituency views
-library(dotenv)
 
 
 # -----------------------------------------------------------------------------
@@ -51,7 +65,14 @@ library(dotenv)
 # Posit Connect the env vars come from the deployed app's Vars panel.
 # -----------------------------------------------------------------------------
 
-if (file.exists(".env")) load_dot_env()
+# Only when a .env file exists, and never needed in demo mode or on Connect.
+if (file.exists(".env")) {
+  if (!requireNamespace("dotenv", quietly = TRUE)) {
+    stop("A .env file was found but the dotenv package is not installed. ",
+         "Run install.packages(\"dotenv\"), or remove .env and set the variables another way.")
+  }
+  dotenv::load_dot_env()
+}
 
 
 # -----------------------------------------------------------------------------
@@ -69,7 +90,7 @@ required_vars <- c(
   "FGS_SCHEMA"                # Schema within that catalog
 )
 
-missing_vars <- required_vars[!nzchar(Sys.getenv(required_vars))]
+missing_vars <- if (DEMO_MODE) character() else required_vars[!nzchar(Sys.getenv(required_vars))]
 if (length(missing_vars) > 0L) {
   stop(
     "Missing required environment variables: ",
@@ -88,8 +109,8 @@ if (length(missing_vars) > 0L) {
 # in source.
 # -----------------------------------------------------------------------------
 
-CAT <- Sys.getenv("FGS_CATALOG")
-SCH <- Sys.getenv("FGS_SCHEMA")
+CAT <- Sys.getenv("FGS_CATALOG", unset = if (DEMO_MODE) "demo" else "")
+SCH <- Sys.getenv("FGS_SCHEMA",  unset = if (DEMO_MODE) "demo" else "")
 
 TBL_STATEMENTS      <- paste(CAT, SCH, "fgs_statements",                 sep = ".")
 TBL_RISK_POLYGONS   <- paste(CAT, SCH, "fgs_risk_polygons",              sep = ".")
@@ -170,7 +191,7 @@ CACHE_TTL_SECONDS <- env_number("FGS_CACHE_SECONDS", 600)
 #
 # Hex values taken from the FGS User Guide Table 1. Named character vector
 # so colour lookups read as RISK_COLOUR_HEX[<colour_label>]. The CSS classes
-# in ui.R use the same names (Red/Amber/Yellow/Green) for the swatches in
+# in app_ui.R use the same names (Red/Amber/Yellow/Green) for the swatches in
 # the right-hand panel.
 # -----------------------------------------------------------------------------
 

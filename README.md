@@ -42,11 +42,13 @@ this app handles.
 
 | File | Purpose |
 |---|---|
-| `app.R` | Entry point. Sources the other files and starts the app. |
+| `app.R` | The only entry point. Sources the files below and starts the app. They are `app_ui.R` and `app_server.R`, not `ui.R` and `server.R`, because Shiny prefers `ui.R`/`server.R` over `app.R` when both exist. |
 | `global.R` | Library loads, env vars, constants. |
+| `demo.R` | Synthetic data for demo mode. Replaces every query. Fictional throughout. |
+| `theme.R` | Environment Agency colours and Bootstrap theme, in one place. Provisional palette. |
 | `helpers.R` | Pure functions (colours, popups, staleness, statement choice). Unit tested. |
-| `ui.R` | Layout, sidebar, panels, custom CSS, risk matrix grid builder. Every section is a function of the request, which bookmarking needs. |
-| `server.R` | Reactive logic, filtering, output bindings, map updates. |
+| `app_ui.R` | Layout, sidebar, panels, custom CSS, risk matrix grid builder. Every section is a function of the request, which bookmarking needs. |
+| `app_server.R` | Reactive logic, filtering, output bindings, map updates. |
 | `data.R` | Queries via brickster's DBI driver, and the shared query cache. |
 | `tests/` | Unit and view tests. No Databricks connection needed. |
 | `.env.example` | Template for connection credentials and optional settings. |
@@ -115,9 +117,56 @@ Optional settings, all in `.env.example`:
 | `FGS_AUTO_REFRESH_SECONDS` | `120` | How often an open session checks for new data. `0` is off, otherwise at least 30. |
 | `FGS_STALE_HOURS` | `3` | Hours without a pipeline health update before the stale-data banner shows. |
 | `FGS_CACHE_SECONDS` | `600` | How long query results are shared across sessions. `0` is off. |
+| `FGS_DEMO_MODE` | off | `1` runs on generated data with no warehouse. See Demo mode. |
 
 Set the environment variables under the deployed app's *Vars* tab.
 Do not deploy `.env`; `.rscignore` already excludes it.
+
+## Demo mode
+
+```sh
+FGS_DEMO_MODE=1 Rscript -e 'shiny::runApp()'
+```
+
+Runs the whole app on generated data. It needs no Databricks token, no warehouse
+id, no `brickster`, no network beyond the map tiles, and no `.env`. A black
+ribbon on every screen says it is a demonstration, so a screenshot cannot be
+mistaken for live data.
+
+What it is for: showing the tool to senior forecasters and managers, and letting
+them try it, without access to live data.
+
+- **Nothing is read from or written to a warehouse.** In demo mode `db_query()`
+  and `db_connection()` refuse to run, and `tests/` checks both that no demo
+  function calls them and that no file in the app contains a write statement.
+- **It is interactive.** Pick a scenario (quiet, developing event, severe event),
+  simulate a pipeline problem to see the stale-data banner, and mark briefing
+  drafts reviewed, sent or rejected. Those actions, and the "MP audit log" tab
+  that lists them, live in the browser session only. They are lost when the page
+  closes, and one viewer cannot see another's.
+- **Everything is fictional.** Constituencies are a hexagon map of a rough outline
+  of England, not real boundaries. Constituency names, MPs, rivers and flood
+  areas are invented, and email addresses end in `example.invalid`, which can
+  never be delivered.
+- **One model feeds every table**, so the map, the overlaps, the situation
+  table, the changes and the briefings agree with each other.
+
+To put it in front of people, deploy the same bundle to Posit Connect as a
+second item and set only `FGS_DEMO_MODE=1`. It needs no credentials.
+
+## Look and feel
+
+Colours come from `theme.R`, and only from there. The palette is provisional:
+the greens are sampled from the Environment Agency logo, the blues and magenta
+were already in the app, and no official palette was available. Replace the
+values in `EA_PALETTE` with the brand file's, and `tests/` will fail if a swap
+breaks a contrast pair. The brand green is borderline for white text (4.43:1), so
+a darker green is used wherever text sits on it.
+
+The FGS risk colours (red, amber, yellow, green on the matrix, map, chips and
+heat grid) are deliberately **not** brand colours. They come from the FGS User
+Guide and keep a fixed meaning, and the brand green must never be read as the
+"Very Low" green. To add the logo, put the approved file at `www/ea-logo.svg`.
 
 ## Behaviour worth knowing
 
@@ -151,8 +200,8 @@ Do not deploy `.env`; `.rscignore` already excludes it.
 Rscript tests/run_tests.R     # from the project root
 ```
 
-Needs `testthat` plus the app's own packages. The view tests need `leaflet`
-and skip themselves without it. They cover the geometry-source filter on every
+Needs `testthat` plus the app's own packages (`brickster` is not needed). The
+view tests need `leaflet` and skip themselves without it. They cover the geometry-source filter on every
 tagged query, SQL safety of browser-supplied ids, the cache, the staleness
 rules, the statement-selection rules, and each new view on fake data. They do
 not draw a real map and do not touch Databricks.
@@ -207,7 +256,7 @@ likelihood Low to Very High.
   placeholders. Verification and playback depend on the Met Office licence
   decision.
 - Public OpenStreetMap basemap. If the EA proxy blocks tile servers,
-  swap the `providers$OpenStreetMap` reference in `server.R` for an
+  swap the `providers$OpenStreetMap` reference in `app_server.R` for an
   internal tile URL.
 - No query-level caching. For the analytics tabs, wrap reactives in
   `bindCache()`.
