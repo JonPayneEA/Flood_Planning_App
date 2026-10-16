@@ -44,6 +44,7 @@ this app handles.
 |---|---|
 | `app.R` | The only entry point. Sources the files below and starts the app. They are `app_ui.R` and `app_server.R`, not `ui.R` and `server.R`, because Shiny prefers `ui.R`/`server.R` over `app.R` when both exist. |
 | `global.R` | Library loads, env vars, constants. |
+| `guide.R` | The Guide tab: how each product is calculated. All the wording is here and is tested against the code and the pipeline's `config.py`. |
 | `demo.R` | Synthetic data for demo mode. Replaces every query. Fictional throughout. |
 | `theme.R` | Environment Agency colours and Bootstrap theme, in one place. Provisional palette. |
 | `helpers.R` | Pure functions (colours, popups, staleness, statement choice). Unit tested. |
@@ -157,6 +158,22 @@ them try it, without access to live data.
 
 To put it in front of people, deploy the same bundle to Posit Connect as a
 second item and set only `FGS_DEMO_MODE=1`. It needs no credentials.
+
+## The Guide tab
+
+The **Guide** tab explains, in words, how each product in the app is calculated,
+how to read it and where it stops being reliable. It covers the ideas behind the
+figures (the risk matrix, forecast against warnings, how shapes link to places),
+every product, a worked example taken from the latest statement, where each table
+comes from, how this deployment is set up, and a glossary. It is searchable, and
+the Overview links to it.
+
+The text is in `guide.R`, in one place, so it can be reviewed as prose. It is
+tested: every table the app reads must be documented, every threshold quoted must
+match the pipeline's `config.py` (checked when `FGS_Notebooks` sits alongside this
+repository), the matrix drawn is the one the map uses, and the prose follows the
+house style. **When you add a product, add it to the Guide.** The tests say what
+is missing.
 
 ## Proof-of-concept features (to remove when live)
 

@@ -38,6 +38,7 @@ make_server_env <- function(overrides = list(), auto_refresh = 30) {
   assign("AUTO_REFRESH_SECONDS", auto_refresh, envir = env)
   # app_server.R sources data.R by relative path, so load it from the project root.
   old_wd <- setwd(app_root); on.exit(setwd(old_wd), add = TRUE)
+  source("guide.R", local = env)
   source("app_server.R", local = env)   # also sources data.R
   setwd(old_wd)
 
@@ -368,5 +369,18 @@ test_that("the look-back still works when the changes table is missing", {
     expect_equal(s[constituency_id == "c1", fgs_worst_rank], 3L)
     expect_true(all(is.na(s$fgs_escalated)))                                  # unknown, not 'none'
     expect_match(html_of(output$situation_kpis), "n/a")
+  })
+})
+
+test_that("the Guide on the live server names the warehouse, and flags a table that is missing", {
+  env <- make_server_env(list(fetch_changes = function(sid) stop(missing_changes)))
+  testServer(env$server, {
+    do.call(session$setInputs, base_inputs)
+    g <- html_of(output$guide_body)
+    expect_match(g, "Live, reading the warehouse")
+    expect_match(g, "Tables read from")
+    expect_match(g, "Take Alpha")                                           # the worked example, from the stub situation
+    expect_match(g, "Not built yet in this warehouse")                      # the changes card, because that table is missing
+    expect_false(grepl("This demonstration", g))
   })
 })

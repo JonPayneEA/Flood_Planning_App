@@ -24,6 +24,7 @@
 source("global.R",     local = TRUE)
 source("helpers.R",    local = TRUE)
 source("theme.R",      local = TRUE)
+source("guide.R",      local = TRUE)
 source("app_ui.R",     local = TRUE)
 source("app_server.R", local = TRUE)
 

@@ -508,6 +508,49 @@ table.dataTable thead th { color: var(--ea-ink); border-bottom: 2px solid var(--
 .ov-table tr.clickable { cursor: pointer; }
 .ov-table tr.clickable:hover { background: var(--ea-tint); }
 .ov-foot { font-size: 12px; color: var(--ea-muted); margin-top: 10px; }
+
+/* --- 9. Guide ------------------------------------------------------------- */
+
+.guide { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 24px; align-items: start; }
+.guide-nav { position: sticky; top: 8px; max-height: calc(100vh - 24px); overflow-y: auto;
+             background: var(--ea-surface); border: 1px solid var(--ea-line); border-radius: 4px; padding: 12px; font-size: 13px; }
+.guide-nav-h { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ea-muted); margin-bottom: 6px; }
+.guide-nav ul { list-style: none; padding: 0; margin: 0; }
+.guide-nav li { margin: 0; }
+.guide-nav a { display: block; padding: 4px 6px; border-radius: 3px; text-decoration: none; }
+.guide-nav a:hover { background: var(--ea-tint); }
+.guide-content { max-width: 880px; }
+.guide-intro h2 { margin: 0 0 6px 0; }
+.guide-search { max-width: 360px; margin-bottom: 12px; }
+.guide-part { font-size: 12px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--ea-muted); margin: 22px 0 8px 0; }
+.guide-card { background: var(--ea-surface); border: 1px solid var(--ea-line); border-left: 5px solid var(--ea-green);
+              border-radius: 4px; padding: 14px 18px; margin-bottom: 14px; scroll-margin-top: 8px; }
+.guide-card.guide-poc { border-left-color: var(--ea-green-mid); }
+.guide-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.guide-head h3 { margin: 0; font-size: 18px; }
+.guide-card h4 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ea-muted); margin: 14px 0 4px 0; }
+.guide-card ol, .guide-card ul { padding-left: 20px; margin-bottom: 4px; }
+.guide-card li { margin-bottom: 4px; }
+.guide-q { margin: 8px 0 4px 0; }
+.guide-where, .guide-tables { font-size: 12px; color: var(--ea-muted); margin: 2px 0; }
+.guide-gap { font-size: 11px; background: var(--ea-tint); border: 1px solid var(--ea-green-mid); border-radius: 8px; padding: 1px 8px; color: var(--ea-ink); }
+.guide-matrix-wrap { overflow-x: auto; margin: 10px 0; }
+.guide-matrix { border-collapse: separate; border-spacing: 3px; font-size: 12px; }
+.guide-matrix caption { caption-side: bottom; font-size: 11px; color: var(--ea-muted); padding-top: 6px; }
+.guide-matrix th { font-weight: 500; text-align: center; padding: 3px 8px; }
+.guide-matrix th[scope=row] { text-align: right; white-space: nowrap; }
+.guide-cell { width: 92px; height: 40px; text-align: center; font-weight: 700; border-radius: 3px; }
+.guide-cell.green  { background: #4f9d4f; color: var(--ea-surface); }
+.guide-cell.yellow { background: #f0d040; color: var(--ea-ink); }
+.guide-cell.amber  { background: #e08020; color: var(--ea-ink); }
+.guide-cell.red    { background: #b02020; color: var(--ea-surface); }
+.guide-table { width: 100%; font-size: 13px; border-collapse: collapse; margin-top: 6px; }
+.guide-table th, .guide-table td { padding: 6px 8px; border-bottom: 1px solid var(--ea-line); vertical-align: top; text-align: left; }
+.guide-table thead th { border-bottom: 2px solid var(--ea-green); }
+.guide-lineage { display: block; overflow-x: auto; }
+.guide-glossary dt { font-weight: 700; margin-top: 8px; }
+.guide-glossary dd { margin: 0 0 2px 0; }
+@media (max-width: 992px) { .guide { grid-template-columns: 1fr; } .guide-nav { position: static; max-height: none; } }
 "
 
 
@@ -822,6 +865,7 @@ ui <- function(request) {
     tabPanel("Constituency situation", make_situation_tab()),
     tabPanel("Exposure history",       make_exposure_tab()),
     if (DEMO_MODE) tabPanel("MP audit log", make_audit_tab()),
+    tabPanel("Guide", make_guide_tab()),
 
     # Planned. These need data the pipeline does not hold yet (observed gauge
     # levels, the Met Office licence decision), so they sit in one menu.

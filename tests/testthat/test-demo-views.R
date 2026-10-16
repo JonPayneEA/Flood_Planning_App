@@ -11,6 +11,7 @@ demo_srv <- local({
   assign("AUTO_REFRESH_SECONDS", 0, envir = env)
   assign("CACHE_TTL_SECONDS", 0, envir = env)
   old <- setwd(app_root); on.exit(setwd(old))
+  source("guide.R", local = env)
   source("app_server.R", local = env)                  # sources data.R, which sources demo.R
   env$warehouse_calls <- 0L
   env$db_query <- function(sql) { env$warehouse_calls <- env$warehouse_calls + 1L; stop("blocked") }
@@ -212,6 +213,7 @@ test_that("POC look-back switches off completely with FGS_POC_FEATURES=0", {
   for (n in ls(consts, all.names = TRUE)) assign(n, get(n, consts), envir = src)
   assign("DEMO_MODE", TRUE, envir = src); assign("AUTO_REFRESH_SECONDS", 0, envir = src); assign("CACHE_TTL_SECONDS", 0, envir = src)
   assign("POC_FEATURES", FALSE, envir = src)
+  source("guide.R", local = src)
   source("app_server.R", local = src)
   testServer(src$server, {
     do.call(session$setInputs, demo_inputs)
@@ -247,5 +249,29 @@ test_that("a quiet statement's empty table tells the user why, not just 'no matc
     msg <- empty_situation_message(ranks, 3L)
     expect_false(identical(msg, "No constituency matches these filters."))
     expect_match(msg, "Nothing in this statement is forecast at Medium or above")
+  })
+})
+
+test_that("the Guide renders on the demo server with a worked example from the demo's own data", {
+  testServer(demo_srv$server, {
+    do.call(session$setInputs, demo_inputs)
+    top <- situation_latest_clean()[order(-fgs_worst_rank, -severe_warnings, -warnings, constituency_name)][1L]
+    g <- txt(output$guide_body)
+    expect_match(g, "This demonstration")
+    expect_match(g, paste0("Take ", top$constituency_name), fixed = TRUE)
+    expect_match(g, "Statement look-back")
+    expect_match(g, "Demonstration, on generated data")
+    expect_false(grepl("Reading the warehouse|Tables read from", g))        # a demo has no warehouse to describe
+    session$setInputs(demo_scenario = "quiet")
+    expect_match(txt(output$guide_body), "no date|None")                    # a quiet statement still explains itself
+  })
+  expect_equal(demo_srv$warehouse_calls, 0L)
+})
+
+test_that("the Overview links to the Guide, and the Guide is a valid place to navigate to", {
+  testServer(demo_srv$server, {
+    do.call(session$setInputs, demo_inputs)
+    expect_match(txt(output$ov_foot), "How each figure is calculated")
+    expect_no_error(session$setInputs(nav_to = "Guide"))
   })
 })

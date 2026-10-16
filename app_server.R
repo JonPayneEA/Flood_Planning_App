@@ -1074,7 +1074,7 @@ server <- function(input, output, session) {
   # ---------------------------------------------------------------------------
 
   observeEvent(input$nav_to, {
-    req(input$nav_to %in% c("Overview", "FGS Interrogator", "Constituency situation", "Exposure history"))
+    req(input$nav_to %in% c("Overview", "FGS Interrogator", "Constituency situation", "Exposure history", "Guide"))
     updateTabsetPanel(session, "main_tabs", selected = input$nav_to)
   })
 
@@ -1196,7 +1196,16 @@ server <- function(input, output, session) {
   output$ov_foot <- renderUI({
     tags$div(class = "ov-foot mt-3",
              "Forecast and warnings are separate measures and are not combined. ",
-             "Counts use the pipeline's latest complete statement, whichever statement is picked on the map.")
+             "Counts use the pipeline's latest complete statement, whichever statement is picked on the map. ",
+             nav_link("How each figure is calculated", "Guide"), ".")
+  })
+
+  # The Guide (guide.R): how each product is calculated. The text is static; the
+  # worked example uses the latest situation table, and a card notes any table
+  # the pipeline has not built yet.
+  output$guide_body <- renderUI({
+    sit <- tryCatch(situation_latest_clean(), error = function(e) NULL)
+    guide_body_ui(guide_settings(), gaps = data_gaps(), sit = sit)
   })
 
 
