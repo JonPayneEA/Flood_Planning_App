@@ -359,6 +359,14 @@ div.stat-card .stat-label {
 .exposure-grid td.total { padding-left: 10px; font-weight: 600; }
 /* --- 7. Header group, changes overlay, KPI row, legends ------------------ */
 
+.stale-banner {
+  display: flex; align-items: center; gap: 8px; margin: 0 15px 8px 15px;
+  padding: 8px 12px; border-radius: 6px; font-size: 13px; border: 1px solid;
+}
+.stale-bad  { background: #f9e5e5; border-color: #b02020; color: #6b1212; }
+.stale-warn { background: #fdf1e2; border-color: #e08020; color: #6b4300; }
+.stale-banner .btn-link { margin-left: auto; padding: 0; font-size: 13px; }
+
 .header-right { display: flex; align-items: center; gap: 12px; }
 .asof { font-size: 12px; color: #6c757d; }
 
@@ -417,7 +425,7 @@ div.stat-card .stat-label {
 # in that order of decreasing frequency-of-change.
 # -----------------------------------------------------------------------------
 
-sidebar <- tags$div(
+make_sidebar <- function() tags$div(
   class = "shiny-sidebar",
   
   h6("FGS statement"),
@@ -449,6 +457,9 @@ sidebar <- tags$div(
   ),
 
   checkboxInput("layer_constituencies", "Constituencies", value = FALSE),
+  checkboxInput("layer_const_risk",
+                "Constituency forecast risk (latest statement, worst of 5 days)",
+                value = FALSE),
 
   h6("Risk source"),
   checkboxInput("src_river",   "River",       value = TRUE),
@@ -478,7 +489,7 @@ sidebar <- tags$div(
 # the map height stays the same to keep aspect ratios readable.
 # -----------------------------------------------------------------------------
 
-centre <- tags$div(
+make_centre <- function() tags$div(
   class = "p-3",
   tags$div(
     class = "mb-3",
@@ -516,7 +527,7 @@ centre <- tags$div(
 # easier to build with htmltools than to coerce out of DT.
 # -----------------------------------------------------------------------------
 
-right_panel <- tags$div(
+make_right_panel <- function() tags$div(
   class = "p-3",
   
   # Stat cards.
@@ -564,7 +575,7 @@ right_panel <- tags$div(
 # one exists. The drafts are text only: nothing is sent from here.
 # -----------------------------------------------------------------------------
 
-situation_tab <- tags$div(
+make_situation_tab <- function() tags$div(
   class = "p-3",
   uiOutput("situation_note"),
   uiOutput("situation_kpis"),
@@ -594,7 +605,7 @@ situation_tab <- tags$div(
 # most days at or above a chosen risk over the last 12 months, by month.
 # -----------------------------------------------------------------------------
 
-exposure_tab <- tags$div(
+make_exposure_tab <- function() tags$div(
   class = "p-3",
   fluidRow(
     column(3, selectInput("exp_source", "Flood source",
@@ -622,12 +633,17 @@ exposure_tab <- tags$div(
 # -----------------------------------------------------------------------------
 # Top-level UI.
 #
+# A function of the request, and every section above is a function too, so the
+# widgets are built per request. That is what lets a bookmarked URL restore
+# the tab, statement, day and filters: Shiny only applies a restored value
+# when the widget is created while the request is being served.
+#
 # tabsetPanel with the live view active; the five analytics tabs are
 # placeholder panels we'll fill in later. The tab order matches the wireframe
 # we agreed on (live first, then analytics in order of operational usefulness).
 # -----------------------------------------------------------------------------
 
-ui <- bslib::page_fluid(
+ui <- function(request) bslib::page_fluid(
   theme = bslib::bs_theme(version = 5),
   tags$head(tags$style(HTML(custom_css))),
   tags$div(
@@ -635,8 +651,19 @@ ui <- bslib::page_fluid(
     tags$h2("Flood Intelligence Tool"),
     tags$div(class = "header-right",
              uiOutput("data_asof"),
+             tags$button(
+               type = "button", id = "copy_link", class = "btn btn-sm btn-outline-secondary",
+               title = "Copy a link to this exact view",
+               onclick = paste0(
+                 "var b=this,t=b.innerHTML;",
+                 "if(navigator.clipboard){navigator.clipboard.writeText(window.location.href).then(function(){",
+                 "b.textContent='Copied';setTimeout(function(){b.innerHTML=t;},1500);});}",
+                 "else{window.prompt('Copy this link',window.location.href);}"),
+               icon("link"), " Copy link"),
              uiOutput("health_badge"))
   ),
+  # Shown only when the pipeline is failing, stale or unreadable.
+  uiOutput("stale_banner"),
   
   tabsetPanel(
     id = "main_tabs",
@@ -645,14 +672,14 @@ ui <- bslib::page_fluid(
              # Stacks on small screens: sidebar and map first, counts below.
              tags$div(
                class = "row",
-               tags$div(class = "col-12 col-md-4 col-xl-3", sidebar),
-               tags$div(class = "col-12 col-md-8 col-xl-6", centre),
-               tags$div(class = "col-12 col-xl-3",          right_panel)
+               tags$div(class = "col-12 col-md-4 col-xl-3", make_sidebar()),
+               tags$div(class = "col-12 col-md-8 col-xl-6", make_centre()),
+               tags$div(class = "col-12 col-xl-3",          make_right_panel())
              )
     ),
     
-    tabPanel("Constituency situation", situation_tab),
-    tabPanel("Exposure history",       exposure_tab),
+    tabPanel("Constituency situation", make_situation_tab()),
+    tabPanel("Exposure history",       make_exposure_tab()),
 
     # Planned. These need data the pipeline does not hold yet (observed gauge
     # levels, the Met Office licence decision), so they sit in one menu.

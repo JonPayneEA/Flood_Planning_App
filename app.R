@@ -16,8 +16,12 @@
 # still visible to shinyApp() because R's lexical scoping picks them up from
 # the calling environment.
 
-source("global.R", local = TRUE)
-source("ui.R",     local = TRUE)
-source("server.R", local = TRUE)
+source("global.R",  local = TRUE)
+source("helpers.R", local = TRUE)
+source("ui.R",      local = TRUE)
+source("server.R",  local = TRUE)
 
-shinyApp(ui = ui, server = server)
+# Bookmarking in "url" mode keeps the tab, statement, day and filters in the
+# address bar, so a view can be shared by copying the link. ui is a function of
+# the request (see ui.R), which bookmarking requires.
+shinyApp(ui = ui, server = server, enableBookmarking = "url")

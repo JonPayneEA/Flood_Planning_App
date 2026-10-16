@@ -51,16 +51,27 @@ server <- function(input, output, session) {
                        format(as.POSIXct(dt$issued_at), "%a %d %b %H:%M"),
                        dt$statement_id)
     choices <- setNames(as.character(dt$statement_id), labels)
-    # On refresh keep the currently selected statement if it still exists,
-    # otherwise default to the newest.
-    current <- isolate(input$statement_id)
-    sel <- if (keep_selected && !is.null(current) && current %in% choices) current else choices[1]
+    # Keep the current selection if it still exists, with one exception: a
+    # user who was looking at the newest statement follows to the new newest
+    # when one arrives. A user who picked an older statement stays on it. A
+    # restored bookmark (no previous newest known yet) is also left alone.
+    current     <- isolate(input$statement_id)
+    prev_newest <- isolate(newest_seen())
+    newest_seen(choices[1])
+    sel <- choose_selected_statement(choices, current, prev_newest, keep_selected)
     updateSelectInput(session, "statement_id", choices = choices, selected = sel)
   }
 
-  load_statements()
+  newest_seen <- reactiveVal(NULL)
 
+  # keep_selected = TRUE also on first load: a fresh session has no selection
+  # (so it takes the newest) and a restored bookmark has one (so it is kept).
+  load_statements(keep_selected = TRUE)
+
+  # Refresh also drops the shared query cache, so an amended statement is
+  # re-read rather than served from memory.
   observeEvent(input$refresh_data, {
+    cache_clear()
     load_statements(keep_selected = TRUE)
   })
 
@@ -547,8 +558,10 @@ server <- function(input, output, session) {
 
     search <- trimws(if (is.null(input$area_search)) "" else input$area_search)
     if (nzchar(search)) {
-      areas <- areas[grepl(search, ea_area_name, ignore.case = TRUE, fixed = TRUE) |
-                       grepl(search, constituency_names, ignore.case = TRUE, fixed = TRUE)]
+      # fixed = TRUE ignores ignore.case, so compare lower-cased text instead.
+      search_lc <- tolower(search)
+      areas <- areas[grepl(search_lc, tolower(ea_area_name), fixed = TRUE) |
+                       grepl(search_lc, tolower(constituency_names), fixed = TRUE)]
     }
 
     if (nrow(areas) == 0L) {
@@ -911,6 +924,81 @@ server <- function(input, output, session) {
 
 
   # ---------------------------------------------------------------------------
+  # Auto-refresh.
+  #
+  # The pipeline publishes every 30 to 60 minutes. Every
+  # FGS_AUTO_REFRESH_SECONDS this runs one cheap query (a signature of the
+  # newest statement and the latest health check) and reloads only when it
+  # has changed, so an idle tab costs almost nothing and a long-open tab
+  # does not go stale. Set the variable to 0 to turn it off.
+  # ---------------------------------------------------------------------------
+
+  last_signature <- reactiveVal(NULL)
+
+  if (AUTO_REFRESH_SECONDS > 0) {
+    observe({
+      invalidateLater(AUTO_REFRESH_SECONDS * 1000, session)
+      sig <- safe_fetch(fetch_data_signature)
+      if (is.null(sig) || is.na(sig)) return()
+      old <- isolate(last_signature())
+      last_signature(sig)
+      if (!is.null(old) && !identical(old, sig)) {
+        cache_clear()
+        load_statements(keep_selected = TRUE)
+        load_products()
+        showNotification("New pipeline data loaded.", type = "message", duration = 6)
+      }
+    })
+  }
+
+
+  # ---------------------------------------------------------------------------
+  # Shareable views.
+  #
+  # The URL follows the current tab, statement, day and filters, so "copy the
+  # address bar" (or the header button) shares exactly this view. Inputs that
+  # are actions or selections, not view state, are excluded.
+  # ---------------------------------------------------------------------------
+
+  setBookmarkExclude(c(
+    "refresh_data", "show_health", "goto_constituency", "exp_pick",
+    "area_row_click", "download_ea_areas", "download_situation",
+    "situation_table_rows_selected", "situation_table_row_last_clicked",
+    "situation_table_cell_clicked", "situation_table_rows_current",
+    "situation_table_rows_all", "situation_table_state", "situation_table_search",
+    "live_map_bounds", "live_map_center", "live_map_zoom", "live_map_click",
+    "live_map_shape_click", "live_map_shape_mouseover", "live_map_shape_mouseout",
+    "live_map_groups", "live_map_marker_click"
+  ))
+  view_state <- debounce(reactive(reactiveValuesToList(input)), 600)
+  observeEvent(view_state(), session$doBookmark(), ignoreInit = TRUE)
+  onBookmarked(function(url) updateQueryString(url, mode = "replace"))
+
+
+  # ---------------------------------------------------------------------------
+  # Stale-data banner.
+  #
+  # Shown above every tab when the pipeline is failing, needs attention, has
+  # stopped updating its own health table, or cannot be read. The decision
+  # lives in stale_status() (helpers.R). Re-evaluated every minute so the
+  # "stopped updating" case appears without anyone clicking anything.
+  # ---------------------------------------------------------------------------
+
+  output$stale_banner <- renderUI({
+    invalidateLater(60000, session)
+    st <- stale_status(health_rv(), stale_hours = STALE_HOURS)
+    if (st$level == "ok") return(NULL)
+    tags$div(
+      class = paste("stale-banner", if (st$level == "warn") "stale-warn" else "stale-bad"),
+      role  = "alert",
+      tags$span(st$message),
+      tags$button(type = "button", class = "btn btn-link",
+                  onclick = "Shiny.setInputValue('show_health', Math.random());", "Details")
+    )
+  })
+
+
+  # ---------------------------------------------------------------------------
   # Pipeline health badge (job 22).
   #
   # Reads the `overall` row. Click opens the full list of checks. "fail" or
@@ -996,7 +1084,7 @@ server <- function(input, output, session) {
   # to safe characters because it lands inside an HTML attribute.
   goto_js <- function(cid) {
     sprintf("Shiny.setInputValue('goto_constituency','%s',{priority:'event'});",
-            gsub("[^A-Za-z0-9_-]", "", as.character(cid)))
+            gsub("[^A-Za-z0-9_]", "", as.character(cid)))
   }
 
   # ---------------------------------------------------------------------------
@@ -1085,6 +1173,53 @@ server <- function(input, output, session) {
 
 
   # ---------------------------------------------------------------------------
+  # Constituency forecast risk layer.
+  #
+  # Colours every constituency with a forecast risk by its worst rank over the
+  # five days, from constituency_flood_situation. It follows the pipeline's
+  # latest complete statement, not the statement or day pickers, and the
+  # legend says so. Separate from the "Constituencies" outline layer above,
+  # which follows the pickers and the matrix filter.
+  # ---------------------------------------------------------------------------
+
+  observe({
+    proxy <- leaflet::leafletProxy("live_map")
+    proxy <- leaflet::clearGroup(proxy, "const_risk")
+    proxy <- leaflet::removeControl(proxy, "const_risk_legend")
+    if (!isTRUE(input$layer_const_risk)) return()
+
+    shape <- safe_fetch(fetch_constituency_risk_geometry)
+    if (is.null(shape)) {
+      showNotification("Constituency risk could not be loaded.", type = "warning")
+      return()
+    }
+    if (nrow(shape) == 0L) {
+      showNotification("No constituency has a forecast risk in the latest statement.", type = "message")
+      return()
+    }
+
+    proxy <- leaflet::addPolygons(
+      proxy,
+      data        = shape,
+      group       = "const_risk",
+      color       = "#495057",
+      weight      = 1,
+      fillColor   = rank_fill(shape$fgs_worst_rank),
+      fillOpacity = 0.55,
+      label       = shape$constituency_name,
+      popup       = risk_layer_popup(shape),
+      highlightOptions = leaflet::highlightOptions(weight = 2, fillOpacity = 0.7, bringToFront = FALSE)
+    )
+    leaflet::addLegend(
+      proxy, position = "bottomright",
+      colors  = RANK_HEX[2:5], labels = RANK_LABELS[2:5],
+      title   = "Forecast risk by constituency<br>(worst of 5 days, latest statement)",
+      layerId = "const_risk_legend", opacity = 0.85
+    )
+  })
+
+
+  # ---------------------------------------------------------------------------
   # Jump to a constituency on the map (from the changes strip, the situation
   # table or the exposure history). Switches to the Interrogator, draws the
   # boundary and flies to it. Messages reach the browser in order, so the tab
@@ -1132,8 +1267,10 @@ server <- function(input, output, session) {
     if (isTRUE(input$sit_warning))   keep <- keep & d$has_active_warning
     q <- trimws(if (is.null(input$sit_search)) "" else input$sit_search)
     if (nzchar(q)) {
-      keep <- keep & (grepl(q, d$constituency_name, fixed = TRUE, ignore.case = TRUE) |
-                      grepl(q, fifelse(is.na(d$mp_name), "", d$mp_name), fixed = TRUE, ignore.case = TRUE))
+      # fixed = TRUE ignores ignore.case, so compare lower-cased text instead.
+      q <- tolower(q)
+      keep <- keep & (grepl(q, tolower(d$constituency_name), fixed = TRUE) |
+                      grepl(q, tolower(fifelse(is.na(d$mp_name), "", d$mp_name)), fixed = TRUE))
     }
     d[keep][order(-fgs_worst_rank, -severe_warnings, -warnings, constituency_name)]
   })
@@ -1336,7 +1473,7 @@ server <- function(input, output, session) {
       cid <- totals$constituency_id[i]
       cell_rows <- e[constituency_id == cid]
       tags$tr(
-        onclick = sprintf("Shiny.setInputValue('exp_pick','%s',{priority:'event'});", gsub("[^A-Za-z0-9_-]", "", cid)),
+        onclick = sprintf("Shiny.setInputValue('exp_pick','%s',{priority:'event'});", gsub("[^A-Za-z0-9_]", "", cid)),
         tags$td(class = "name", totals$constituency_name[i]),
         lapply(months, function(m) {
           v <- cell_rows[month == m, sum(value, na.rm = TRUE)]

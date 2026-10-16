@@ -137,6 +137,35 @@ if (!GEOMETRY_SOURCE %in% c("risk_areas", "aoc")) {
 
 
 # -----------------------------------------------------------------------------
+# Refresh, staleness and cache settings. All optional.
+#
+#   FGS_AUTO_REFRESH_SECONDS  How often an open session checks for new data.
+#                             Default 120. 0 turns auto-refresh off.
+#   FGS_STALE_HOURS           Hours without a pipeline health update before the
+#                             stale-data banner shows. Default 3 (the pipeline
+#                             polls every 30 or 60 minutes).
+#   FGS_CACHE_SECONDS         How long query results are reused across
+#                             sessions. Default 600. 0 turns the cache off.
+# -----------------------------------------------------------------------------
+
+env_number <- function(name, default, min = 0) {
+  raw <- Sys.getenv(name, unset = as.character(default))
+  val <- suppressWarnings(as.numeric(raw))
+  if (is.na(val) || val < min) {
+    stop(name, " must be a number of at least ", min, ", not '", raw, "'.")
+  }
+  val
+}
+
+AUTO_REFRESH_SECONDS <- env_number("FGS_AUTO_REFRESH_SECONDS", 120)
+if (AUTO_REFRESH_SECONDS > 0 && AUTO_REFRESH_SECONDS < 30) {
+  stop("FGS_AUTO_REFRESH_SECONDS must be 0 (off) or at least 30.")
+}
+STALE_HOURS       <- env_number("FGS_STALE_HOURS", 3, min = 0.1)
+CACHE_TTL_SECONDS <- env_number("FGS_CACHE_SECONDS", 600)
+
+
+# -----------------------------------------------------------------------------
 # FGS colour palette.
 #
 # Hex values taken from the FGS User Guide Table 1. Named character vector

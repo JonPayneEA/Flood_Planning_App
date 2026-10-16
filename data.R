@@ -654,7 +654,7 @@ fetch_exposure <- function(n_months = 12L) {
 # -----------------------------------------------------------------------------
 
 fetch_constituency_shape <- function(constituency_id) {
-  cid <- gsub("[^A-Za-z0-9_-]", "", as.character(constituency_id))
+  cid <- gsub("[^A-Za-z0-9_]", "", as.character(constituency_id))
   dt <- db_query(sprintf("
     SELECT constituency_id, name AS constituency_name, geometry
     FROM %s
@@ -666,3 +666,131 @@ fetch_constituency_shape <- function(constituency_id) {
   dt[, geometry := NULL]
   sf::st_sf(dt, geometry = geom, crs = 4326)
 }
+
+
+# -----------------------------------------------------------------------------
+# fetch_constituency_risk_geometry()
+#
+# Boundaries of every constituency with a forecast risk in the pipeline's
+# latest complete statement (worst of the five days), joined to the situation
+# table for the colour and the popup. Only flagged constituencies are
+# returned, so the geometry stays small. This follows the situation table,
+# not the statement or day pickers.
+# -----------------------------------------------------------------------------
+
+fetch_constituency_risk_geometry <- function() {
+  dt <- db_query(sprintf("
+    SELECT
+      s.constituency_id,
+      s.constituency_name,
+      s.fgs_worst_rank,
+      s.fgs_worst_level,
+      s.fgs_worst_date,
+      s.fgs_worst_sources,
+      s.fgs_escalated,
+      s.severe_warnings,
+      s.warnings,
+      s.alerts,
+      s.mp_name,
+      c.geometry
+    FROM %s s
+    JOIN %s c
+      ON c.constituency_id = s.constituency_id
+    WHERE s.fgs_worst_rank >= 1
+      AND c.geometry IS NOT NULL
+  ", TBL_SITUATION, TBL_CONSTITUENCIES))
+
+  if (nrow(dt) == 0L) {
+    return(sf::st_sf(
+      constituency_id = character(), constituency_name = character(),
+      fgs_worst_rank = integer(), fgs_worst_level = character(),
+      fgs_worst_date = character(), fgs_worst_sources = character(),
+      fgs_escalated = logical(), severe_warnings = integer(),
+      warnings = integer(), alerts = integer(), mp_name = character(),
+      geometry = sf::st_sfc(), crs = 4326))
+  }
+  geom <- geojsonsf::geojson_sfc(dt$geometry)
+  dt[, geometry := NULL]
+  sf::st_sf(dt, geometry = geom, crs = 4326)
+}
+
+
+# -----------------------------------------------------------------------------
+# fetch_data_signature()
+#
+# One cheap query that changes whenever the pipeline publishes something new:
+# a new or amended statement, or a fresh health check (rebuilt every poll, so
+# it also moves when the situation tables are rebuilt). The auto-refresh
+# observer compares this string between ticks and reloads only on a change.
+# -----------------------------------------------------------------------------
+
+fetch_data_signature <- function() {
+  dt <- db_query(sprintf("
+    SELECT
+      (SELECT COALESCE(CAST(MAX(issued_at)        AS STRING), '') FROM %s) AS newest_statement,
+      (SELECT COUNT(*)                                            FROM %s) AS n_statements,
+      (SELECT COALESCE(CAST(MAX(last_modified_at) AS STRING), '') FROM %s) AS last_modified,
+      (SELECT COALESCE(CAST(MAX(checked_at)       AS STRING), '') FROM %s) AS health_checked
+  ", TBL_STATEMENTS, TBL_STATEMENTS, TBL_STATEMENTS, TBL_HEALTH))
+  if (nrow(dt) == 0L) return(NA_character_)
+  paste(unlist(dt[1L]), collapse = "|")
+}
+
+
+# =============================================================================
+# QUERY CACHE
+#
+# Results are shared by every session in the R process and reused for
+# CACHE_TTL_SECONDS. The data changes at most every poll (30 to 60 minutes)
+# and an issued statement is immutable until amended, so switching between
+# statements, days and filters should not go back to the warehouse each time.
+# The whole cache is cleared when the auto-refresh signature changes or
+# someone presses Refresh, so an amended statement is picked up promptly.
+#
+# data.tables are copied on the way out, so a caller that modifies one by
+# reference cannot corrupt the cached copy. Errors are never cached.
+# =============================================================================
+
+.fgs_cache <- new.env(parent = emptyenv())
+CACHE_MAX_ENTRIES <- 200L
+
+cache_clear <- function() {
+  rm(list = ls(.fgs_cache, all.names = TRUE), envir = .fgs_cache)
+  invisible(NULL)
+}
+
+with_cache <- function(fn, name, ttl = CACHE_TTL_SECONDS) {
+  force(fn); force(name); force(ttl)
+  function(...) {
+    if (ttl <= 0) return(fn(...))
+    args <- vapply(list(...), function(a) paste(format(a), collapse = ","), character(1))
+    key  <- paste(c(name, args), collapse = "|")
+    now  <- Sys.time()
+
+    hit <- .fgs_cache[[key]]
+    if (!is.null(hit) && as.numeric(difftime(now, hit$at, units = "secs")) < ttl) {
+      return(if (is.data.table(hit$value)) copy(hit$value) else hit$value)
+    }
+
+    value <- fn(...)
+    keys <- ls(.fgs_cache, all.names = TRUE)
+    if (length(keys) >= CACHE_MAX_ENTRIES) {
+      ages <- vapply(keys, function(k) as.numeric(.fgs_cache[[k]]$at), numeric(1))
+      rm(list = keys[which.min(ages)], envir = .fgs_cache)
+    }
+    assign(key, list(at = now, value = value), envir = .fgs_cache)
+    if (is.data.table(value)) copy(value) else value
+  }
+}
+
+# Statement-scoped queries and reference lookups. Not cached: the statement
+# list, the health table and the signature, which must always be fresh.
+fetch_risk_polygons                <- with_cache(fetch_risk_polygons,                "risk_polygons")
+fetch_ea_areas_for_statement       <- with_cache(fetch_ea_areas_for_statement,       "ea_areas")
+fetch_summary_counts               <- with_cache(fetch_summary_counts,               "summary_counts")
+fetch_ea_geometry                  <- with_cache(fetch_ea_geometry,                  "ea_geometry")
+fetch_constituency_geometry        <- with_cache(fetch_constituency_geometry,        "const_geometry")
+fetch_constituencies_for_statement <- with_cache(fetch_constituencies_for_statement, "const_meta")
+fetch_changes                      <- with_cache(fetch_changes,                      "changes")
+fetch_constituency_shape           <- with_cache(fetch_constituency_shape,           "const_shape")
+fetch_constituency_risk_geometry   <- with_cache(fetch_constituency_risk_geometry,   "const_risk_geometry", ttl = min(CACHE_TTL_SECONDS, 120))

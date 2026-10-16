@@ -44,10 +44,13 @@ this app handles.
 |---|---|
 | `app.R` | Entry point. Sources the other files and starts the app. |
 | `global.R` | Library loads, env vars, constants. |
-| `ui.R` | Layout, sidebar, panels, custom CSS, risk matrix grid builder. |
+| `helpers.R` | Pure functions (colours, popups, staleness, statement choice). Unit tested. |
+| `ui.R` | Layout, sidebar, panels, custom CSS, risk matrix grid builder. Every section is a function of the request, which bookmarking needs. |
 | `server.R` | Reactive logic, filtering, output bindings, map updates. |
-| `data.R` | Queries via brickster's DBI driver. |
-| `.env.example` | Template for connection credentials. |
+| `data.R` | Queries via brickster's DBI driver, and the shared query cache. |
+| `tests/` | Unit and view tests. No Databricks connection needed. |
+| `.env.example` | Template for connection credentials and optional settings. |
+| `.rscignore` | Keeps `.env`, tests and the README out of a Connect deploy. |
 
 ## Prerequisites
 
@@ -104,8 +107,65 @@ rsconnect::deployApp(
 )
 ```
 
+Optional settings, all in `.env.example`:
+
+| Variable | Default | Effect |
+|---|---|---|
+| `FGS_GEOMETRY_SOURCE` | `risk_areas` | Must match the pipeline. See above. |
+| `FGS_AUTO_REFRESH_SECONDS` | `120` | How often an open session checks for new data. `0` is off, otherwise at least 30. |
+| `FGS_STALE_HOURS` | `3` | Hours without a pipeline health update before the stale-data banner shows. |
+| `FGS_CACHE_SECONDS` | `600` | How long query results are shared across sessions. `0` is off. |
+
 Set the environment variables under the deployed app's *Vars* tab.
 Do not deploy `.env`; `.rscignore` already excludes it.
+
+## Behaviour worth knowing
+
+- **Auto-refresh.** Every `FGS_AUTO_REFRESH_SECONDS` an open session runs one
+  small query (newest statement, statement count, latest modification, latest
+  health check). Only if that changed does it reload the statement list and
+  the pipeline views, drop the cache and show "New pipeline data loaded". A
+  user on the newest statement follows to the new one; a user who chose an
+  older statement stays on it.
+- **Stale-data banner.** A banner shows above every tab when the pipeline is
+  failing, needs attention, cannot be read, or has stopped updating its own
+  health table (the quiet failure: nothing ran, so nothing failed). The
+  decision is `stale_status()` in `helpers.R`.
+- **Query cache.** Statement-scoped queries are cached in memory for
+  `FGS_CACHE_SECONDS`, shared by every session in the process, so switching
+  statement, day or filter does not return to the warehouse each time. The
+  cache is cleared on Refresh and whenever auto-refresh sees new data.
+  Memory only: a restart empties it.
+- **Shareable views.** The address bar follows the tab, statement, day and
+  filters. The "Copy link" button copies it. Opening the link restores that
+  view. Selections (a table row, a map click) are not part of the link.
+- **Constituency forecast risk layer.** A map layer that colours every
+  constituency with a forecast risk by its worst rank over five days. It
+  reads `constituency_flood_situation`, so it follows the pipeline's latest
+  statement, not the statement or day pickers. The older "Constituencies"
+  outline layer is unchanged and does follow them.
+
+## Tests
+
+```r
+Rscript tests/run_tests.R     # from the project root
+```
+
+Needs `testthat` plus the app's own packages. The view tests need `leaflet`
+and skip themselves without it. They cover the geometry-source filter on every
+tagged query, SQL safety of browser-supplied ids, the cache, the staleness
+rules, the statement-selection rules, and each new view on fake data. They do
+not draw a real map and do not touch Databricks.
+
+## Decisions that are not the app's to make
+
+- **Recording who reviewed or sent a briefing.** The drafts are read-only
+  here. The "MP audit log" tab needs the app to write status back to the
+  warehouse, which needs an owner and a rule for who may do it. Until that is
+  decided the tab stays a placeholder.
+- **Who may open the app.** It now shows MP names, emails, phone numbers and
+  draft briefing text. Make sure the Connect access list for this app matches
+  the people who should see that.
 
 ## Data dependencies
 
