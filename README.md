@@ -2,8 +2,9 @@
 
 R Shiny version of the FGS dashboard. Reads from Databricks Delta tables via
 **brickster's DBI driver** against a SQL warehouse. Designed for deployment
-to Posit Connect. First version covers only the Live View tab; analytics
-tabs are placeholders.
+to Posit Connect. Tabs: the FGS Interrogator (map and filters), Constituency
+situation, and Exposure history. The remaining analytics tabs are placeholders
+that wait on data the pipeline does not hold yet.
 
 ## Stack
 
@@ -12,6 +13,7 @@ tabs are placeholders.
 - **brickster** for Databricks SQL connectivity via the SQL Statement
   Execution API (no ODBC driver required, no Python dependency)
 - **DBI** as the standard database interface brickster plugs into
+- **DT** for the sortable constituency table
 - **sf** for the polygon geometry
 - **leaflet** for the map widget, with `leafletProxy()` for in-place updates
 - **htmltools** for the custom HTML chunks
@@ -40,12 +42,17 @@ this app handles.
 
 | File | Purpose |
 |---|---|
-| `app.R` | Entry point. Sources the other files and starts the app. |
+| `app.R` | The only entry point. Sources the files below and starts the app. They are `app_ui.R` and `app_server.R`, not `ui.R` and `server.R`, because Shiny prefers `ui.R`/`server.R` over `app.R` when both exist. |
 | `global.R` | Library loads, env vars, constants. |
-| `ui.R` | Layout, sidebar, panels, custom CSS, risk matrix grid builder. |
-| `server.R` | Reactive logic, filtering, output bindings, map updates. |
-| `data.R` | Queries via brickster's DBI driver. |
-| `.env.example` | Template for connection credentials. |
+| `demo.R` | Synthetic data for demo mode. Replaces every query. Fictional throughout. |
+| `theme.R` | Environment Agency colours and Bootstrap theme, in one place. Provisional palette. |
+| `helpers.R` | Pure functions (colours, popups, staleness, statement choice). Unit tested. |
+| `app_ui.R` | Layout, sidebar, panels, custom CSS, risk matrix grid builder. Every section is a function of the request, which bookmarking needs. |
+| `app_server.R` | Reactive logic, filtering, output bindings, map updates. |
+| `data.R` | Queries via brickster's DBI driver, and the shared query cache. |
+| `tests/` | Unit and view tests. No Databricks connection needed. |
+| `.env.example` | Template for connection credentials and optional settings. |
+| `.rscignore` | Keeps `.env`, tests and the README out of a Connect deploy. |
 
 ## Prerequisites
 
@@ -54,7 +61,7 @@ R 4.2 or later. Required packages:
 ```r
 install.packages(c(
   "shiny", "data.table", "brickster", "DBI",
-  "sf", "leaflet", "htmltools", "dotenv"
+  "sf", "leaflet", "htmltools", "dotenv", "DT"
 ))
 ```
 
@@ -78,6 +85,10 @@ pak::pak("databrickslabs/brickster")
      the warehouse ID is `abc123`.
    - `FGS_CATALOG`, `FGS_SCHEMA` -- the Unity Catalog location of the
      FGS tables.
+   - `FGS_GEOMETRY_SOURCE` -- optional, `risk_areas` (default) or `aoc`.
+     Must match `FGS_GEOMETRY_SOURCE` in the pipeline's `config.py`. The
+     intersection tables can hold both sources, and the app reads only this
+     one, so a mismatch shows the wrong set or an empty map.
 
 2. Open the project in RStudio (or VS Code with the R extension). Click
    *Run App*, or call:
@@ -98,12 +109,116 @@ rsconnect::deployApp(
 )
 ```
 
-Set the five environment variables under the deployed app's *Vars* tab.
+Optional settings, all in `.env.example`:
+
+| Variable | Default | Effect |
+|---|---|---|
+| `FGS_GEOMETRY_SOURCE` | `risk_areas` | Must match the pipeline. See above. |
+| `FGS_AUTO_REFRESH_SECONDS` | `120` | How often an open session checks for new data. `0` is off, otherwise at least 30. |
+| `FGS_STALE_HOURS` | `3` | Hours without a pipeline health update before the stale-data banner shows. |
+| `FGS_CACHE_SECONDS` | `600` | How long query results are shared across sessions. `0` is off. |
+| `FGS_DEMO_MODE` | off | `1` runs on generated data with no warehouse. See Demo mode. |
+
+Set the environment variables under the deployed app's *Vars* tab.
 Do not deploy `.env`; `.rscignore` already excludes it.
+
+## Demo mode
+
+```sh
+FGS_DEMO_MODE=1 Rscript -e 'shiny::runApp()'
+```
+
+Runs the whole app on generated data. It needs no Databricks token, no warehouse
+id, no `brickster`, no network beyond the map tiles, and no `.env`. A black
+ribbon on every screen says it is a demonstration, so a screenshot cannot be
+mistaken for live data.
+
+What it is for: showing the tool to senior forecasters and managers, and letting
+them try it, without access to live data.
+
+- **Nothing is read from or written to a warehouse.** In demo mode `db_query()`
+  and `db_connection()` refuse to run, and `tests/` checks both that no demo
+  function calls them and that no file in the app contains a write statement.
+- **It is interactive.** Pick a scenario (quiet, developing event, severe event),
+  simulate a pipeline problem to see the stale-data banner, and mark briefing
+  drafts reviewed, sent or rejected. Those actions, and the "MP audit log" tab
+  that lists them, live in the browser session only. They are lost when the page
+  closes, and one viewer cannot see another's.
+- **Everything is fictional.** Constituencies are a hexagon map of a rough outline
+  of England, not real boundaries. Constituency names, MPs, rivers and flood
+  areas are invented, and email addresses end in `example.invalid`, which can
+  never be delivered.
+- **One model feeds every table**, so the map, the overlaps, the situation
+  table, the changes and the briefings agree with each other.
+
+To put it in front of people, deploy the same bundle to Posit Connect as a
+second item and set only `FGS_DEMO_MODE=1`. It needs no credentials.
+
+## Look and feel
+
+Colours come from `theme.R`, and only from there. The palette is provisional:
+the greens are sampled from the Environment Agency logo, the blues and magenta
+were already in the app, and no official palette was available. Replace the
+values in `EA_PALETTE` with the brand file's, and `tests/` will fail if a swap
+breaks a contrast pair. The brand green is borderline for white text (4.43:1), so
+a darker green is used wherever text sits on it.
+
+The FGS risk colours (red, amber, yellow, green on the matrix, map, chips and
+heat grid) are deliberately **not** brand colours. They come from the FGS User
+Guide and keep a fixed meaning, and the brand green must never be read as the
+"Very Low" green. To add the logo, put the approved file at `www/ea-logo.svg`.
+
+## Behaviour worth knowing
+
+- **Auto-refresh.** Every `FGS_AUTO_REFRESH_SECONDS` an open session runs one
+  small query (newest statement, statement count, latest modification, latest
+  health check). Only if that changed does it reload the statement list and
+  the pipeline views, drop the cache and show "New pipeline data loaded". A
+  user on the newest statement follows to the new one; a user who chose an
+  older statement stays on it.
+- **Stale-data banner.** A banner shows above every tab when the pipeline is
+  failing, needs attention, cannot be read, or has stopped updating its own
+  health table (the quiet failure: nothing ran, so nothing failed). The
+  decision is `stale_status()` in `helpers.R`.
+- **Query cache.** Statement-scoped queries are cached in memory for
+  `FGS_CACHE_SECONDS`, shared by every session in the process, so switching
+  statement, day or filter does not return to the warehouse each time. The
+  cache is cleared on Refresh and whenever auto-refresh sees new data.
+  Memory only: a restart empties it.
+- **Shareable views.** The address bar follows the tab, statement, day and
+  filters. The "Copy link" button copies it. Opening the link restores that
+  view. Selections (a table row, a map click) are not part of the link.
+- **Constituency forecast risk layer.** A map layer that colours every
+  constituency with a forecast risk by its worst rank over five days. It
+  reads `constituency_flood_situation`, so it follows the pipeline's latest
+  statement, not the statement or day pickers. The older "Constituencies"
+  outline layer is unchanged and does follow them.
+
+## Tests
+
+```r
+Rscript tests/run_tests.R     # from the project root
+```
+
+Needs `testthat` plus the app's own packages (`brickster` is not needed). The
+view tests need `leaflet` and skip themselves without it. They cover the geometry-source filter on every
+tagged query, SQL safety of browser-supplied ids, the cache, the staleness
+rules, the statement-selection rules, and each new view on fake data. They do
+not draw a real map and do not touch Databricks.
+
+## Decisions that are not the app's to make
+
+- **Recording who reviewed or sent a briefing.** The drafts are read-only
+  here. The "MP audit log" tab needs the app to write status back to the
+  warehouse, which needs an owner and a rule for who may do it. Until that is
+  decided the tab stays a placeholder.
+- **Who may open the app.** It now shows MP names, emails, phone numbers and
+  draft briefing text. Make sure the Connect access list for this app matches
+  the people who should see that.
 
 ## Data dependencies
 
-Reads from four Delta tables in the configured catalog/schema:
+Reads from these Delta tables in the configured catalog/schema:
 
 - `fgs_statements`
 - `fgs_risk_polygons` with the six risk matrix columns: `risk_x`,
@@ -112,17 +227,36 @@ Reads from four Delta tables in the configured catalog/schema:
   columns from the polygon table
 - `fgs_constituency_intersections`
 
-If your intersection tables still use the older `risk_level_min` /
-`risk_level_max` schema, queries in `data.R` will need adjustment.
+Both intersection tables carry `geometry_source`, and every query filters on
+it (see `FGS_GEOMETRY_SOURCE` above). If your intersection tables still use the
+older `risk_level_min` / `risk_level_max` schema, queries in `data.R` will need
+adjustment.
+
+Pipeline products (FGS_Notebooks jobs 18 to 22), all plain tables:
+
+| Table | Used for |
+|---|---|
+| `pipeline_health` | Status badge in the header; click for each check. |
+| `fgs_constituency_changes` | "Since the previous statement" strip on the Interrogator. Follows the statement picker. |
+| `constituency_flood_situation` | Constituency situation tab: one row per constituency. Always the pipeline's latest complete statement. |
+| `mp_briefing_drafts` | Briefing draft shown when a constituency row is selected. Read only: nothing is sent. |
+| `fgs_constituency_exposure` | Exposure history tab: heat grid of constituencies by month, 12 months. |
+
+Each product is fetched defensively. If a table is missing or unreadable the
+view says so and the rest of the app carries on.
+
+The risk matrix labels follow the pipeline README: impact Minor to Extreme,
+likelihood Low to Very High.
 
 ## Known gaps for v1
 
-- EA flood area markers listed in the right-hand panel but not yet plotted
-  on the map. Requires joining the intersection table to the FWA / FAA
-  geometry tables.
-- Constituency layer toggle has no rendering yet.
+- Observed gauge levels are not in the constituency view yet. The pipeline
+  has not turned the readings and thresholds tables into events.
+- Warning issue times, forecast verification and event playback are
+  placeholders. Verification and playback depend on the Met Office licence
+  decision.
 - Public OpenStreetMap basemap. If the EA proxy blocks tile servers,
-  swap the `providers$OpenStreetMap` reference in `server.R` for an
+  swap the `providers$OpenStreetMap` reference in `app_server.R` for an
   internal tile URL.
 - No query-level caching. For the analytics tabs, wrap reactives in
   `bindCache()`.

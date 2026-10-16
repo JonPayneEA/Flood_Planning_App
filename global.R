@@ -7,7 +7,7 @@
 #   - Environment variable validation
 #   - Shared constants (colour palette, risk matrix metadata)
 #
-# Anything defined here is visible to ui.R and server.R via lexical scoping.
+# Anything defined here is visible to app_ui.R and app_server.R via lexical scoping.
 #
 # CONNECTION STRATEGY:
 #   brickster provides a DBI driver that wraps the Databricks SQL Statement
@@ -29,18 +29,33 @@
 # This is the lighter route.
 # -----------------------------------------------------------------------------
 
+# -----------------------------------------------------------------------------
+# Demo mode.
+#
+# FGS_DEMO_MODE=1 runs the whole app on generated data (demo.R). It never opens
+# a warehouse connection: brickster and DBI are not even loaded, no credentials
+# are needed, and db_query() refuses to run. Nothing is read from or written to
+# any warehouse. It exists so the tool can be shown, and tried, by people who
+# have no access to the live data.
+# -----------------------------------------------------------------------------
+
+DEMO_MODE <- tolower(Sys.getenv("FGS_DEMO_MODE", unset = "")) %in% c("1", "true", "yes", "on")
+
 library(shiny)
 library(bslib)        # Bootstrap 5 layouts -- needed for the CSS we use
 library(data.table)
-library(brickster)    # DBI driver for Databricks SQL warehouses (no ODBC needed)
-library(DBI)
 library(sf)
-library(geojsonsf)    # Parse GeoJSON strings to sf objects (storage format
-# used by the FGS pipeline -- GeoJSON in Delta all the
-# way through to Leaflet)
 library(leaflet)
+# The live data path only. Demo mode must not need (or touch) any of these.
+if (!DEMO_MODE) {
+  library(brickster)  # DBI driver for Databricks SQL warehouses (no ODBC needed)
+  library(DBI)
+  library(geojsonsf)  # Parse GeoJSON strings to sf objects (storage format
+                      # used by the FGS pipeline -- GeoJSON in Delta all the
+                      # way through to Leaflet)
+}
 library(htmltools)
-library(dotenv)
+library(DT)           # Sortable, searchable tables for the constituency views
 
 
 # -----------------------------------------------------------------------------
@@ -50,7 +65,14 @@ library(dotenv)
 # Posit Connect the env vars come from the deployed app's Vars panel.
 # -----------------------------------------------------------------------------
 
-if (file.exists(".env")) load_dot_env()
+# Only when a .env file exists, and never needed in demo mode or on Connect.
+if (file.exists(".env")) {
+  if (!requireNamespace("dotenv", quietly = TRUE)) {
+    stop("A .env file was found but the dotenv package is not installed. ",
+         "Run install.packages(\"dotenv\"), or remove .env and set the variables another way.")
+  }
+  dotenv::load_dot_env()
+}
 
 
 # -----------------------------------------------------------------------------
@@ -68,7 +90,7 @@ required_vars <- c(
   "FGS_SCHEMA"                # Schema within that catalog
 )
 
-missing_vars <- required_vars[!nzchar(Sys.getenv(required_vars))]
+missing_vars <- if (DEMO_MODE) character() else required_vars[!nzchar(Sys.getenv(required_vars))]
 if (length(missing_vars) > 0L) {
   stop(
     "Missing required environment variables: ",
@@ -87,8 +109,8 @@ if (length(missing_vars) > 0L) {
 # in source.
 # -----------------------------------------------------------------------------
 
-CAT <- Sys.getenv("FGS_CATALOG")
-SCH <- Sys.getenv("FGS_SCHEMA")
+CAT <- Sys.getenv("FGS_CATALOG", unset = if (DEMO_MODE) "demo" else "")
+SCH <- Sys.getenv("FGS_SCHEMA",  unset = if (DEMO_MODE) "demo" else "")
 
 TBL_STATEMENTS      <- paste(CAT, SCH, "fgs_statements",                 sep = ".")
 TBL_RISK_POLYGONS   <- paste(CAT, SCH, "fgs_risk_polygons",              sep = ".")
@@ -109,13 +131,67 @@ TBL_CONSTITUENCIES  <- paste(CAT, SCH, "parliamentary_constituencies",   sep = "
 TBL_EA_CONSTITUENCY_LOOKUP <- paste(CAT, SCH, "ea_area_constituency_lookup", sep = ".")
 TBL_MP_CONTACTS            <- paste(CAT, SCH, "mp_contact_details",         sep = ".")
 
+# Pipeline products (FGS_Notebooks jobs 18 to 22). Plain tables, no geometry.
+TBL_CHANGES   <- paste(CAT, SCH, "fgs_constituency_changes",    sep = ".")  # 18
+TBL_SITUATION <- paste(CAT, SCH, "constituency_flood_situation", sep = ".")  # 19
+TBL_BRIEFINGS <- paste(CAT, SCH, "mp_briefing_drafts",          sep = ".")  # 20
+TBL_EXPOSURE  <- paste(CAT, SCH, "fgs_constituency_exposure",   sep = ".")  # 21
+TBL_HEALTH    <- paste(CAT, SCH, "pipeline_health",             sep = ".")  # 22
+
+
+# -----------------------------------------------------------------------------
+# Geometry source.
+#
+# The pipeline intersects either the risk-area polygons or the Areas of
+# Concern (FGS_GEOMETRY_SOURCE in FGS_Notebooks/config.py) and tags every
+# intersection row with `geometry_source`. The two can coexist in the same
+# table, so the app must read only the source the pipeline is currently
+# built on, or counts double. Set FGS_GEOMETRY_SOURCE to the same value as
+# the pipeline. Optional: defaults to "risk_areas", the pipeline default.
+# -----------------------------------------------------------------------------
+
+GEOMETRY_SOURCE <- Sys.getenv("FGS_GEOMETRY_SOURCE", unset = "risk_areas")
+if (!GEOMETRY_SOURCE %in% c("risk_areas", "aoc")) {
+  stop("FGS_GEOMETRY_SOURCE must be 'risk_areas' or 'aoc', not '",
+       GEOMETRY_SOURCE, "'.")
+}
+
+
+# -----------------------------------------------------------------------------
+# Refresh, staleness and cache settings. All optional.
+#
+#   FGS_AUTO_REFRESH_SECONDS  How often an open session checks for new data.
+#                             Default 120. 0 turns auto-refresh off.
+#   FGS_STALE_HOURS           Hours without a pipeline health update before the
+#                             stale-data banner shows. Default 3 (the pipeline
+#                             polls every 30 or 60 minutes).
+#   FGS_CACHE_SECONDS         How long query results are reused across
+#                             sessions. Default 600. 0 turns the cache off.
+# -----------------------------------------------------------------------------
+
+env_number <- function(name, default, min = 0) {
+  raw <- Sys.getenv(name, unset = as.character(default))
+  val <- suppressWarnings(as.numeric(raw))
+  if (is.na(val) || val < min) {
+    stop(name, " must be a number of at least ", min, ", not '", raw, "'.")
+  }
+  val
+}
+
+AUTO_REFRESH_SECONDS <- env_number("FGS_AUTO_REFRESH_SECONDS", 120)
+if (AUTO_REFRESH_SECONDS > 0 && AUTO_REFRESH_SECONDS < 30) {
+  stop("FGS_AUTO_REFRESH_SECONDS must be 0 (off) or at least 30.")
+}
+STALE_HOURS       <- env_number("FGS_STALE_HOURS", 3, min = 0.1)
+CACHE_TTL_SECONDS <- env_number("FGS_CACHE_SECONDS", 600)
+
 
 # -----------------------------------------------------------------------------
 # FGS colour palette.
 #
 # Hex values taken from the FGS User Guide Table 1. Named character vector
 # so colour lookups read as RISK_COLOUR_HEX[<colour_label>]. The CSS classes
-# in ui.R use the same names (Red/Amber/Yellow/Green) for the swatches in
+# in app_ui.R use the same names (Red/Amber/Yellow/Green) for the swatches in
 # the right-hand panel.
 # -----------------------------------------------------------------------------
 
@@ -161,5 +237,16 @@ RISK_MATRIX <- data.table(
 )
 
 # Axis labels for the matrix UI, indexed by x and y respectively (1-based).
-IMPACT_LABELS     <- c("Minimal", "Minor", "Significant", "Severe")
-LIKELIHOOD_LABELS <- c("Very Low", "Low", "Medium", "High")
+# Aligned with the FGS Public API documentation as recorded in the pipeline
+# README (risk matrix labels).
+IMPACT_LABELS     <- c("Minor", "Moderate", "Significant", "Extreme")
+LIKELIHOOD_LABELS <- c("Low", "Medium", "High", "Very High")
+# Probability band behind each likelihood label (FGS Public API documentation).
+LIKELIHOOD_BANDS  <- c("10-25%", "25-50%", "50-75%", ">75%")
+# Overall risk level for each colour band, as in the pipeline's RISK_MATRIX.
+RISK_LEVEL_BY_COLOUR <- c(Green = "Very Low", Yellow = "Low", Amber = "Medium", Red = "High")
+
+# Forecast risk rank used by the constituency products (jobs 18 to 21).
+# 0 means nothing flagged. Colours reuse the FGS band palette.
+RANK_LABELS <- c("None", "Very Low", "Low", "Medium", "High")
+RANK_HEX    <- c("#e9ecef", "#4f9d4f", "#f0d040", "#e08020", "#b02020")

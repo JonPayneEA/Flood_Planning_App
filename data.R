@@ -30,6 +30,7 @@
 # -----------------------------------------------------------------------------
 
 db_connection <- function() {
+  if (DEMO_MODE) stop("Demo mode: no warehouse connection is available, by design.")
   DBI::dbConnect(
     brickster::DatabricksSQL(),
     warehouse_id = Sys.getenv("DATABRICKS_WAREHOUSE_ID")
@@ -54,6 +55,7 @@ db_connection <- function() {
 # -----------------------------------------------------------------------------
 
 db_query <- function(sql) {
+  if (DEMO_MODE) stop("Demo mode: no warehouse query can run, by design.")
   con <- db_connection()
   on.exit(DBI::dbDisconnect(con), add = TRUE)
   result <- DBI::dbGetQuery(con, sql)
@@ -146,7 +148,7 @@ fetch_latest_statement <- function() {
 #
 # The six risk matrix columns (risk_x, risk_y, impact_label, likelihood_label,
 # risk_level, risk_colour) are pulled through directly so downstream filtering
-# in server.R can work on the data.table representation before plotting.
+# in app_server.R can work on the data.table representation before plotting.
 # -----------------------------------------------------------------------------
 
 fetch_risk_polygons <- function(statement_id, day_index) {
@@ -224,8 +226,9 @@ fetch_ea_areas_for_statement <- function(statement_id, day_index) {
       risk_y,
       intersection_pct
     FROM %s
-    WHERE statement_id = %d
-      AND day_index    = %d
+    WHERE statement_id    = %d
+      AND day_index       = %d
+      AND geometry_source = '%s'
     ORDER BY
       CASE risk_colour
         WHEN 'Red'    THEN 1
@@ -235,7 +238,8 @@ fetch_ea_areas_for_statement <- function(statement_id, day_index) {
         ELSE 5
       END,
       intersection_pct DESC
-  ", TBL_EA_INTERSECT, as.integer(statement_id), as.integer(day_index)))
+  ", TBL_EA_INTERSECT, as.integer(statement_id), as.integer(day_index),
+     GEOMETRY_SOURCE))
 }
 
 
@@ -257,13 +261,15 @@ fetch_summary_counts <- function(statement_id, day_index) {
       (SELECT COUNT(*)
          FROM %s WHERE statement_id = %d AND day_index = %d) AS polygon_count,
       (SELECT COUNT(DISTINCT ea_area_code)
-         FROM %s WHERE statement_id = %d AND day_index = %d) AS ea_area_count,
+         FROM %s WHERE statement_id = %d AND day_index = %d
+          AND geometry_source = '%s') AS ea_area_count,
       (SELECT COUNT(DISTINCT constituency_id)
-         FROM %s WHERE statement_id = %d AND day_index = %d) AS constituency_count
+         FROM %s WHERE statement_id = %d AND day_index = %d
+          AND geometry_source = '%s') AS constituency_count
   ",
                          TBL_RISK_POLYGONS,   sid, did,
-                         TBL_EA_INTERSECT,    sid, did,
-                         TBL_CONST_INTERSECT, sid, did))
+                         TBL_EA_INTERSECT,    sid, did, GEOMETRY_SOURCE,
+                         TBL_CONST_INTERSECT, sid, did, GEOMETRY_SOURCE))
   
   if (nrow(dt) == 0L) {
     return(list(polygon_count = 0L, ea_area_count = 0L, constituency_count = 0L))
@@ -306,8 +312,9 @@ fetch_ea_geometry <- function(statement_id, day_index) {
         i.intersection_pct,
         i.source
       FROM %s i
-      WHERE i.statement_id = %d
-        AND i.day_index    = %d
+      WHERE i.statement_id    = %d
+        AND i.day_index       = %d
+        AND i.geometry_source = '%s'
     )
     SELECT
       a.ea_area_code,
@@ -327,7 +334,7 @@ fetch_ea_geometry <- function(statement_id, day_index) {
       ON g.ea_area_code = a.ea_area_code
     WHERE g.geometry IS NOT NULL
   ",
-                         TBL_EA_INTERSECT, sid, did,
+                         TBL_EA_INTERSECT, sid, did, GEOMETRY_SOURCE,
                          TBL_EA_FWA,
                          TBL_EA_FAA))
 
@@ -363,7 +370,7 @@ fetch_ea_geometry <- function(statement_id, day_index) {
 # affected set, constituency table for the shapes.
 #
 # source, risk_x, risk_y and intersection_pct are pulled through (not just
-# risk_colour/risk_level) so server.R can apply the same source, matrix-cell,
+# risk_colour/risk_level) so app_server.R can apply the same source, matrix-cell,
 # and threshold filters used for polygons and EA areas, rather than showing
 # every constituency touched by any polygon in the statement-day.
 # -----------------------------------------------------------------------------
@@ -385,8 +392,9 @@ fetch_constituency_geometry <- function(statement_id, day_index) {
         i.risk_level,
         i.intersection_pct
       FROM %s i
-      WHERE i.statement_id = %d
-        AND i.day_index    = %d
+      WHERE i.statement_id    = %d
+        AND i.day_index       = %d
+        AND i.geometry_source = '%s'
     )
     SELECT
       a.constituency_id,
@@ -403,7 +411,7 @@ fetch_constituency_geometry <- function(statement_id, day_index) {
       ON c.constituency_id = a.constituency_id
     WHERE c.geometry IS NOT NULL
   ",
-                         TBL_CONST_INTERSECT, sid, did,
+                         TBL_CONST_INTERSECT, sid, did, GEOMETRY_SOURCE,
                          TBL_CONSTITUENCIES))
 
   if (nrow(dt) == 0L) {
@@ -449,9 +457,11 @@ fetch_constituencies_for_statement <- function(statement_id, day_index) {
       risk_level,
       intersection_pct
     FROM %s
-    WHERE statement_id = %d
-      AND day_index    = %d
-  ", TBL_CONST_INTERSECT, as.integer(statement_id), as.integer(day_index)))
+    WHERE statement_id    = %d
+      AND day_index       = %d
+      AND geometry_source = '%s'
+  ", TBL_CONST_INTERSECT, as.integer(statement_id), as.integer(day_index),
+     GEOMETRY_SOURCE))
 }
 
 
@@ -481,3 +491,320 @@ fetch_ea_constituency_mp <- function() {
       ON m.constituency_name = l.constituency_name
   ", TBL_EA_CONSTITUENCY_LOOKUP, TBL_MP_CONTACTS))
 }
+
+
+
+# =============================================================================
+# PIPELINE PRODUCTS (FGS_Notebooks jobs 18 to 22)
+#
+# Plain tables built by the pipeline, so these queries do no spatial work and
+# no geometry parsing. Ranks: 1 Very Low, 2 Low, 3 Medium, 4 High, 0 nothing.
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# fetch_pipeline_health()
+#
+# One row per health check plus an `overall` row (job 22). Backs the status
+# badge in the header. The table is rebuilt on every poll, so it is tiny.
+# -----------------------------------------------------------------------------
+
+fetch_pipeline_health <- function() {
+  db_query(sprintf("
+    SELECT check_name, status, value, detail, checked_at
+    FROM %s
+  ", TBL_HEALTH))
+}
+
+
+# -----------------------------------------------------------------------------
+# fetch_changes()
+#
+# What changed in a statement against the one before it (job 18), per
+# constituency, forecast day and flood source. Unchanged cells are not
+# stored. History is kept, so the statement_id picks the right batch. Rows
+# are limited to the active geometry source.
+# -----------------------------------------------------------------------------
+
+fetch_changes <- function(statement_id) {
+  db_query(sprintf("
+    SELECT
+      constituency_id,
+      constituency_name,
+      forecast_date,
+      day_index,
+      source,
+      previous_rank,
+      new_rank,
+      rank_change,
+      change_type
+    FROM %s
+    WHERE statement_id    = %d
+      AND geometry_source = '%s'
+    ORDER BY new_rank DESC, rank_change DESC, constituency_name
+  ", TBL_CHANGES, as.integer(statement_id), GEOMETRY_SOURCE))
+}
+
+
+# -----------------------------------------------------------------------------
+# fetch_situation()
+#
+# One row per constituency (job 19): worst forecast risk over five days, risk
+# by day, escalation flag, warnings and alerts in force, and the MP. The
+# table holds the pipeline's latest complete statement only, whichever
+# statement the picker shows, so the caller should say so on screen.
+# Forecast and warnings stay in separate columns by design; no combined score.
+# -----------------------------------------------------------------------------
+
+fetch_situation <- function() {
+  db_query(sprintf("
+    SELECT
+      constituency_id,
+      constituency_name,
+      mp_matched,
+      mp_name,
+      mp_party,
+      mp_email,
+      mp_phone,
+      fgs_statement_id,
+      fgs_issued_at,
+      fgs_worst_rank,
+      fgs_worst_level,
+      fgs_worst_date,
+      fgs_worst_sources,
+      fgs_rank_day1, fgs_rank_day2, fgs_rank_day3, fgs_rank_day4, fgs_rank_day5,
+      fgs_changed,
+      fgs_escalated,
+      severe_warnings,
+      warnings,
+      alerts,
+      has_active_warning
+    FROM %s
+  ", TBL_SITUATION))
+}
+
+
+# -----------------------------------------------------------------------------
+# fetch_briefing_drafts()
+#
+# DRAFT briefings for MPs whose constituency reaches the pipeline's minimum
+# risk (job 20). Nothing is sent from here or from the pipeline: the app only
+# displays the text so a person can review and send it by their own route.
+# Returns the newest batch (highest statement_id) for the active geometry
+# source.
+# -----------------------------------------------------------------------------
+
+fetch_briefing_drafts <- function() {
+  db_query(sprintf("
+    SELECT
+      statement_id,
+      constituency_id,
+      constituency_name,
+      mp_name,
+      mp_email,
+      worst_rank,
+      worst_level,
+      worst_date,
+      is_escalation,
+      has_active_warning,
+      subject,
+      body,
+      status,
+      reviewed_by
+    FROM %s
+    WHERE geometry_source = '%s'
+      AND statement_id = (SELECT MAX(statement_id) FROM %s
+                          WHERE geometry_source = '%s')
+    ORDER BY worst_rank DESC, constituency_name
+  ", TBL_BRIEFINGS, GEOMETRY_SOURCE, TBL_BRIEFINGS, GEOMETRY_SOURCE))
+}
+
+
+# -----------------------------------------------------------------------------
+# fetch_exposure()
+#
+# Days each constituency sat at each risk rank, by calendar month and flood
+# source (job 21; source = 'any' is the worst across sources). Sparse: a
+# month with no flagged day has no row, and days_covered is the denominator.
+# Counts day 1 of the last statement issued on each date, so each date is
+# counted once. Limited to the last n_months calendar months.
+# -----------------------------------------------------------------------------
+
+fetch_exposure <- function(n_months = 12L) {
+  db_query(sprintf("
+    SELECT
+      constituency_id,
+      constituency_name,
+      month,
+      source,
+      days_medium_or_above,
+      days_flagged,
+      worst_rank,
+      days_covered
+    FROM %s
+    WHERE month >= date_format(add_months(current_date(), -%d), 'yyyy-MM')
+  ", TBL_EXPOSURE, as.integer(n_months) - 1L))
+}
+
+
+# -----------------------------------------------------------------------------
+# fetch_constituency_shape()
+#
+# One constituency's boundary, for the "show on map" jump from the pipeline
+# views. The id comes from a browser input, so it is reduced to safe
+# characters before it goes into the SQL.
+# -----------------------------------------------------------------------------
+
+fetch_constituency_shape <- function(constituency_id) {
+  cid <- gsub("[^A-Za-z0-9_]", "", as.character(constituency_id))
+  dt <- db_query(sprintf("
+    SELECT constituency_id, name AS constituency_name, geometry
+    FROM %s
+    WHERE constituency_id = '%s'
+      AND geometry IS NOT NULL
+  ", TBL_CONSTITUENCIES, cid))
+  if (nrow(dt) == 0L) return(NULL)
+  geom <- geojsonsf::geojson_sfc(dt$geometry)
+  dt[, geometry := NULL]
+  sf::st_sf(dt, geometry = geom, crs = 4326)
+}
+
+
+# -----------------------------------------------------------------------------
+# fetch_constituency_risk_geometry()
+#
+# Boundaries of every constituency with a forecast risk in the pipeline's
+# latest complete statement (worst of the five days), joined to the situation
+# table for the colour and the popup. Only flagged constituencies are
+# returned, so the geometry stays small. This follows the situation table,
+# not the statement or day pickers.
+# -----------------------------------------------------------------------------
+
+fetch_constituency_risk_geometry <- function() {
+  dt <- db_query(sprintf("
+    SELECT
+      s.constituency_id,
+      s.constituency_name,
+      s.fgs_worst_rank,
+      s.fgs_worst_level,
+      s.fgs_worst_date,
+      s.fgs_worst_sources,
+      s.fgs_escalated,
+      s.severe_warnings,
+      s.warnings,
+      s.alerts,
+      s.mp_name,
+      c.geometry
+    FROM %s s
+    JOIN %s c
+      ON c.constituency_id = s.constituency_id
+    WHERE s.fgs_worst_rank >= 1
+      AND c.geometry IS NOT NULL
+  ", TBL_SITUATION, TBL_CONSTITUENCIES))
+
+  if (nrow(dt) == 0L) {
+    return(sf::st_sf(
+      constituency_id = character(), constituency_name = character(),
+      fgs_worst_rank = integer(), fgs_worst_level = character(),
+      fgs_worst_date = character(), fgs_worst_sources = character(),
+      fgs_escalated = logical(), severe_warnings = integer(),
+      warnings = integer(), alerts = integer(), mp_name = character(),
+      geometry = sf::st_sfc(), crs = 4326))
+  }
+  geom <- geojsonsf::geojson_sfc(dt$geometry)
+  dt[, geometry := NULL]
+  sf::st_sf(dt, geometry = geom, crs = 4326)
+}
+
+
+# -----------------------------------------------------------------------------
+# fetch_data_signature()
+#
+# One cheap query that changes whenever the pipeline publishes something new:
+# a new or amended statement, or a fresh health check (rebuilt every poll, so
+# it also moves when the situation tables are rebuilt). The auto-refresh
+# observer compares this string between ticks and reloads only on a change.
+# -----------------------------------------------------------------------------
+
+fetch_data_signature <- function() {
+  dt <- db_query(sprintf("
+    SELECT
+      (SELECT COALESCE(CAST(MAX(issued_at)        AS STRING), '') FROM %s) AS newest_statement,
+      (SELECT COUNT(*)                                            FROM %s) AS n_statements,
+      (SELECT COALESCE(CAST(MAX(last_modified_at) AS STRING), '') FROM %s) AS last_modified,
+      (SELECT COALESCE(CAST(MAX(checked_at)       AS STRING), '') FROM %s) AS health_checked
+  ", TBL_STATEMENTS, TBL_STATEMENTS, TBL_STATEMENTS, TBL_HEALTH))
+  if (nrow(dt) == 0L) return(NA_character_)
+  paste(unlist(dt[1L]), collapse = "|")
+}
+
+
+# =============================================================================
+# QUERY CACHE
+#
+# Results are shared by every session in the R process and reused for
+# CACHE_TTL_SECONDS. The data changes at most every poll (30 to 60 minutes)
+# and an issued statement is immutable until amended, so switching between
+# statements, days and filters should not go back to the warehouse each time.
+# The whole cache is cleared when the auto-refresh signature changes or
+# someone presses Refresh, so an amended statement is picked up promptly.
+#
+# data.tables are copied on the way out, so a caller that modifies one by
+# reference cannot corrupt the cached copy. Errors are never cached.
+# =============================================================================
+
+.fgs_cache <- new.env(parent = emptyenv())
+CACHE_MAX_ENTRIES <- 200L
+
+cache_clear <- function() {
+  rm(list = ls(.fgs_cache, all.names = TRUE), envir = .fgs_cache)
+  invisible(NULL)
+}
+
+with_cache <- function(fn, name, ttl = CACHE_TTL_SECONDS) {
+  force(fn); force(name); force(ttl)
+  function(...) {
+    if (ttl <= 0) return(fn(...))
+    args <- vapply(list(...), function(a) paste(format(a), collapse = ","), character(1))
+    key  <- paste(c(name, args), collapse = "|")
+    now  <- Sys.time()
+
+    hit <- .fgs_cache[[key]]
+    if (!is.null(hit) && as.numeric(difftime(now, hit$at, units = "secs")) < ttl) {
+      return(if (is.data.table(hit$value)) copy(hit$value) else hit$value)
+    }
+
+    value <- fn(...)
+    keys <- ls(.fgs_cache, all.names = TRUE)
+    if (length(keys) >= CACHE_MAX_ENTRIES) {
+      ages <- vapply(keys, function(k) as.numeric(.fgs_cache[[k]]$at), numeric(1))
+      rm(list = keys[which.min(ages)], envir = .fgs_cache)
+    }
+    assign(key, list(at = now, value = value), envir = .fgs_cache)
+    if (is.data.table(value)) copy(value) else value
+  }
+}
+
+# Statement-scoped queries and reference lookups. Not cached: the statement
+# list, the health table and the signature, which must always be fresh.
+fetch_risk_polygons                <- with_cache(fetch_risk_polygons,                "risk_polygons")
+fetch_ea_areas_for_statement       <- with_cache(fetch_ea_areas_for_statement,       "ea_areas")
+fetch_summary_counts               <- with_cache(fetch_summary_counts,               "summary_counts")
+fetch_ea_geometry                  <- with_cache(fetch_ea_geometry,                  "ea_geometry")
+fetch_constituency_geometry        <- with_cache(fetch_constituency_geometry,        "const_geometry")
+fetch_constituencies_for_statement <- with_cache(fetch_constituencies_for_statement, "const_meta")
+fetch_changes                      <- with_cache(fetch_changes,                      "changes")
+fetch_constituency_shape           <- with_cache(fetch_constituency_shape,           "const_shape")
+fetch_constituency_risk_geometry   <- with_cache(fetch_constituency_risk_geometry,   "const_risk_geometry", ttl = min(CACHE_TTL_SECONDS, 120))
+
+
+# =============================================================================
+# DEMO MODE
+#
+# Replaces every fetch_* function with a generator over synthetic data. Sourced
+# last so it overrides the warehouse versions and bypasses their cache. db_query
+# and db_connection already refuse to run in demo mode, so a fetcher that was
+# missed would fail loudly instead of reaching for a warehouse.
+# =============================================================================
+
+if (DEMO_MODE) source("demo.R", local = TRUE)
