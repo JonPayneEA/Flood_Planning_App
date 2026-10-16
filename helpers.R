@@ -250,13 +250,15 @@ normalise_name <- function(x) {  # POC-ONLY
 #   inter      constituency_id, constituency_name, forecast_date, day_index,
 #              source, risk_level, intersection_pct
 #   changes    the statement's fgs_constituency_changes rows (or NULL)
+#   changes_available  FALSE if that table does not exist: escalation is then NA
 #   mp         constituency_name, mp_name, mp_party, mp_email, mp_phone
 #   all_const  every constituency (id, name), so quiet ones still get a row
 # -----------------------------------------------------------------------------
 
 POC_RANK_LEVELS <- c("Very Low", "Low", "Medium", "High")   # POC-ONLY
 
-aggregate_situation <- function(inter, changes, mp, all_const, statement_id, issued_at, min_pct = 0.01) {  # POC-ONLY
+aggregate_situation <- function(inter, changes, mp, all_const, statement_id, issued_at, min_pct = 0.01,
+                                 changes_available = TRUE) {  # POC-ONLY
   inter <- data.table::as.data.table(inter)
   all_const <- data.table::as.data.table(all_const)[, list(constituency_id, constituency_name)]
   out <- data.table::copy(all_const)
@@ -289,6 +291,8 @@ aggregate_situation <- function(inter, changes, mp, all_const, statement_id, iss
   ch <- if (is.null(changes)) data.table::data.table(constituency_id = character(), change_type = character()) else data.table::as.data.table(changes)
   out[, `:=`(fgs_changed   = constituency_id %in% ch$constituency_id,
              fgs_escalated = constituency_id %in% ch[change_type %in% c("new", "escalated"), constituency_id])]
+  # If the changes table is not there, escalation is UNKNOWN, not "none".
+  if (!changes_available) out[, `:=`(fgs_changed = NA, fgs_escalated = NA)]
 
   # MP details are today's, matched on a normalised name.
   mp <- data.table::as.data.table(mp)
@@ -336,4 +340,44 @@ empty_situation_message <- function(ranks, floor, other_filters = FALSE) {
   }
   sprintf("Nothing in this statement is forecast at %s or above. %d constituenc%s forecast at a lower risk: lower \"Minimum forecast risk\" to see %s.",
           RANK_LABELS[floor + 1L], lower, if (lower == 1L) "y is" else "ies are", if (lower == 1L) "it" else "them")
+}
+
+
+# -----------------------------------------------------------------------------
+# Warehouse errors the app can explain
+#
+# missing_table_info(): if an error message says a table does not exist, which
+# table, and which pipeline notebook builds it. Returns NULL for any other error.
+# is_connection_error(): the warehouse could not be reached at all.
+# -----------------------------------------------------------------------------
+
+PIPELINE_TABLE_JOBS <- c(
+  fgs_constituency_changes = 18L, constituency_flood_situation = 19L, mp_briefing_drafts = 20L,
+  fgs_constituency_exposure = 21L, pipeline_health = 22L, fgs_constituency_mp_contacts = 14L,
+  flood_warning_constituency_contacts = 13L, fgs_constituency_intersections = 7L,
+  fgs_ea_area_intersections = 7L, ea_area_constituency_lookup = 6L)
+
+missing_table_info <- function(msg) {
+  msg <- paste(as.character(msg), collapse = " ")
+  if (!grepl("TABLE_OR_VIEW_NOT_FOUND|table or view .* cannot be found", msg)) return(NULL)
+  m <- regmatches(msg, regexec("table or view `[^`]*`\\.`[^`]*`\\.`([^`]+)`", msg))[[1]]
+  tbl <- if (length(m) == 2L) m[2L] else "(unknown table)"
+  job <- unname(PIPELINE_TABLE_JOBS[tbl])
+  list(table = tbl, job = if (length(job) == 0L || is.na(job)) NA_integer_ else job)
+}
+
+is_connection_error <- function(msg) {
+  grepl("Failed to connect to warehouse|Failed to perform HTTP request|Could not resolve host|Timeout was reached|Connection (refused|reset)",
+        paste(as.character(msg), collapse = " "))
+}
+
+# gaps_message(): one sentence naming the missing tables and the notebook to run.
+gaps_message <- function(gaps, location = NULL) {
+  if (length(gaps) == 0L) return("")
+  one <- vapply(names(gaps), function(t) {
+    j <- gaps[[t]]
+    if (is.null(j) || is.na(j)) t else sprintf("%s (pipeline notebook %d)", t, as.integer(j))
+  }, character(1))
+  sprintf("Some pipeline tables are not %syet, so parts of the app are limited: %s. Press Refresh statements to retry.",
+          if (is.null(location)) "available " else paste0("in ", location, " "), paste(one, collapse = "; "))
 }

@@ -275,3 +275,98 @@ test_that("the map title shows the statement's real time, not midnight", {
     expect_false(grepl("UTC", output$map_title, fixed = TRUE))
   })
 })
+
+
+# ---- missing tables and unreachable warehouses ----------------------------------
+
+missing_changes <- paste("[TABLE_OR_VIEW_NOT_FOUND] The table or view `prd_dash_lab`.`flood_forecasting_unrestricted`.`fgs_constituency_changes`",
+                         "cannot be found. SQLSTATE: 42P01; line 12 pos 9")
+missing_briefings <- sub("fgs_constituency_changes", "mp_briefing_drafts", missing_changes)
+
+test_that("a missing changes table is explained on screen, not silently dropped", {
+  env <- make_server_env(list(fetch_changes = function(sid) stop(missing_changes)))
+  testServer(env$server, {
+    do.call(session$setInputs, base_inputs)
+    expect_match(html_of(output$changes_strip), "Change tracking unavailable")
+    expect_match(html_of(output$changes_strip), "fgs_constituency_changes")
+    expect_match(html_of(output$changes_strip), "notebook 18")
+    expect_match(html_of(output$ov_changes), "Change tracking unavailable")
+    expect_false(grepl("No change", html_of(output$ov_changes)))                # not claimed as 'no change'
+    expect_match(html_of(output$data_gaps_banner), "fgs_constituency_changes \\(pipeline notebook 18\\)")
+    expect_match(html_of(output$data_gaps_banner), "Refresh statements")
+  })
+})
+
+test_that("missing briefings are not mistaken for 'below the threshold'", {
+  env <- make_server_env(list(fetch_briefing_drafts = function(...) stop(missing_briefings)))
+  testServer(env$server, {
+    do.call(session$setInputs, base_inputs)
+    session$setInputs(situation_table_rows_selected = 1L)
+    h <- html_of(output$briefing_panel)
+    expect_match(h, "Briefing drafts unavailable"); expect_match(h, "mp_briefing_drafts"); expect_match(h, "notebook 20")
+    expect_false(grepl("below the pipeline", h))
+    expect_match(html_of(output$data_gaps_banner), "mp_briefing_drafts")
+  })
+})
+
+test_that("Refresh clears the gaps, and they reappear only if still missing", {
+  built <- FALSE
+  env <- make_server_env(list(fetch_changes = function(sid) if (!built) stop(missing_changes) else fake$changes(sid)))
+  testServer(env$server, {
+    do.call(session$setInputs, base_inputs)
+    expect_match(html_of(output$data_gaps_banner), "fgs_constituency_changes")
+    built <<- TRUE
+    session$setInputs(refresh_data = 1)
+    expect_null(output$data_gaps_banner)
+    expect_match(html_of(output$changes_strip), "1 up")
+  })
+})
+
+test_that("no gap banner when nothing is missing", {
+  env <- make_server_env()
+  testServer(env$server, { do.call(session$setInputs, base_inputs); expect_null(output$data_gaps_banner) })
+})
+
+test_that("an unreachable warehouse is not reported as a missing table", {
+  env <- make_server_env(list(fetch_changes = function(sid) stop("Failed to connect to warehouse 0a86ae40313bb7db: Failed to perform HTTP request.")))
+  testServer(env$server, {
+    do.call(session$setInputs, base_inputs)
+    expect_null(output$data_gaps_banner)
+    expect_match(html_of(output$changes_strip), "could not be loaded")
+  })
+})
+
+test_that("the console names the fetch that failed, once, not 'fn'", {
+  env <- make_server_env(list(fetch_changes = function(sid) stop(missing_changes)))
+  msgs <- character()
+  withCallingHandlers(
+    testServer(env$server, {
+      do.call(session$setInputs, base_inputs)
+      session$setInputs(statement_id = "6"); session$setInputs(statement_id = "7")      # switch back and forth
+      invisible(html_of(output$changes_strip))
+    }),
+    message = function(m) { msgs <<- c(msgs, conditionMessage(m)); invokeRestart("muffleMessage") })
+  failed <- grep("failed:", msgs, value = TRUE)
+  expect_true(any(grepl("fetch_changes failed", failed)))
+  expect_false(any(grepl("\\] fn failed", failed)))
+  expect_lte(sum(grepl("fetch_changes failed", failed)), 1L)                 # logged once, however often it is asked
+})
+
+test_that("the look-back still works when the changes table is missing", {
+  env <- make_server_env(list(
+    fetch_changes = function(sid) stop(missing_changes),
+    fetch_all_constituencies = function() data.table(constituency_id = c("c1", "c2"), constituency_name = c("Alpha", "Beta")),
+    fetch_mp_lookup = function() data.table(constituency_name = "Alpha", mp_name = "A MP", mp_party = "P", mp_email = "e", mp_phone = "t"),
+    fetch_constituency_intersections = function(sid) data.table(constituency_id = "c1", constituency_name = "Alpha",
+      forecast_date = "2026-10-02", day_index = 1L, source = "river", risk_level = "Medium", intersection_pct = 1)))
+  testServer(env$server, {
+    do.call(session$setInputs, modifyList(base_inputs, list(sit_min_rank = "0")))
+    session$setInputs(sit_statement = "6")
+    expect_equal(poc_past_id(), 6L)
+    s <- situation_clean()
+    expect_equal(nrow(s), 2L)
+    expect_equal(s[constituency_id == "c1", fgs_worst_rank], 3L)
+    expect_true(all(is.na(s$fgs_escalated)))                                  # unknown, not 'none'
+    expect_match(html_of(output$situation_kpis), "n/a")
+  })
+})

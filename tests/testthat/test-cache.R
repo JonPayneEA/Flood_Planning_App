@@ -55,3 +55,50 @@ test_that("cache_clear empties it, and the cache stays within its size cap", {
   d$cache_clear()
   expect_length(ls(d$.fgs_cache, all.names = TRUE), 0L)
 })
+
+
+missing_msg <- "[TABLE_OR_VIEW_NOT_FOUND] The table or view `c`.`s`.`fgs_constituency_changes` cannot be found. SQLSTATE: 42P01; line 12 pos 9"
+
+test_that("a missing table is remembered, so switching statements does not re-run a failing query", {
+  d <- load_data_layer(); d$cache_clear()
+  n <- 0L
+  f <- d$with_cache(function(x) { n <<- n + 1L; stop(missing_msg) }, "changes", ttl = 60)
+  expect_error(f(1), "TABLE_OR_VIEW_NOT_FOUND"); expect_error(f(1), "TABLE_OR_VIEW_NOT_FOUND"); expect_error(f(1), "TABLE_OR_VIEW_NOT_FOUND")
+  expect_equal(n, 1L)                                          # asked once, remembered twice
+  expect_error(f(2), "TABLE_OR_VIEW_NOT_FOUND"); expect_equal(n, 2L)   # a different statement is a different question
+})
+
+test_that("a missing table is remembered even where results are not cached", {
+  d <- load_data_layer(); d$cache_clear()
+  n <- 0L
+  f <- d$with_cache(function() { n <<- n + 1L; stop(missing_msg) }, "briefings", ttl = 0)
+  expect_error(f()); expect_error(f())
+  expect_equal(n, 1L)
+})
+
+test_that("Refresh (cache_clear) forgets a missing table, so a newly built one is found", {
+  d <- load_data_layer(); d$cache_clear()
+  built <- FALSE
+  f <- d$with_cache(function() if (!built) stop(missing_msg) else "now here", "changes", ttl = 0)
+  expect_error(f())
+  built <- TRUE
+  expect_error(f())                                            # still remembered as missing
+  d$cache_clear()
+  expect_equal(f(), "now here")
+})
+
+test_that("a network error is never remembered: the next attempt tries again", {
+  d <- load_data_layer(); d$cache_clear()
+  n <- 0L
+  f <- d$with_cache(function() { n <<- n + 1L; if (n < 3L) stop("Failed to connect to warehouse abc: Failed to perform HTTP request.") else "ok" }, "x", ttl = 60)
+  expect_error(f(), "Failed to connect"); expect_error(f(), "Failed to connect")
+  expect_equal(f(), "ok"); expect_equal(n, 3L)
+})
+
+test_that("the remembered error keeps its message, so the app can still name the table", {
+  d <- load_data_layer(); d$cache_clear()
+  f <- d$with_cache(function() stop(missing_msg), "changes", ttl = 60)
+  try(f(), silent = TRUE)
+  msg <- tryCatch(f(), error = function(e) conditionMessage(e))
+  expect_equal(missing_table_info(msg)$table, "fgs_constituency_changes")
+})

@@ -191,3 +191,46 @@ test_that("an empty situation table explains itself", {
   expect_equal(empty_situation_message(ranks, 3L, other_filters = TRUE), "No constituency matches these filters.")
   expect_equal(empty_situation_message(ranks, 0L), "No constituency matches these filters.")
 })
+
+
+# ---- warehouse errors the app can explain ---------------------------------------
+
+# The message as Databricks returned it (from the console of a real session).
+real_missing <- paste("[TABLE_OR_VIEW_NOT_FOUND] The table or view `prd_dash_lab`.`flood_forecasting_unrestricted`.`fgs_constituency_changes`",
+                      "cannot be found. Verify the spelling and correctness of the schema and catalog. If you did not qualify the name with a schema,",
+                      "verify the current_schema() output, or qualify the name with the correct schema and catalog. To tolerate the error on drop use DROP",
+                      "VIEW IF EXISTS or DROP TABLE IF EXISTS. SQLSTATE: 42P01; line 12 pos 9")
+
+test_that("missing_table_info names the table and the notebook that builds it", {
+  i <- missing_table_info(real_missing)
+  expect_equal(i$table, "fgs_constituency_changes"); expect_equal(i$job, 18L)
+  expect_equal(missing_table_info(sub("fgs_constituency_changes", "mp_briefing_drafts", real_missing))$job, 20L)
+  u <- missing_table_info(sub("fgs_constituency_changes", "something_else", real_missing))
+  expect_equal(u$table, "something_else"); expect_true(is.na(u$job))
+  expect_null(missing_table_info("Failed to connect to warehouse abc: Failed to perform HTTP request."))
+  expect_null(missing_table_info("division by zero"))
+})
+
+test_that("is_connection_error recognises an unreachable warehouse, and nothing else", {
+  expect_true(is_connection_error("Failed to connect to warehouse 0a86ae40313bb7db: Failed to perform HTTP request."))
+  expect_true(is_connection_error("Could not resolve host: adb-123.azuredatabricks.net"))
+  expect_false(is_connection_error(real_missing))
+  expect_false(is_connection_error("syntax error at line 3"))
+})
+
+test_that("gaps_message lists every missing table with its notebook", {
+  expect_equal(gaps_message(list()), "")
+  m <- gaps_message(list(fgs_constituency_changes = 18L, mp_briefing_drafts = 20L), "prd.sch")
+  expect_match(m, "not in prd.sch yet"); expect_match(m, "fgs_constituency_changes \\(pipeline notebook 18\\)")
+  expect_match(m, "mp_briefing_drafts \\(pipeline notebook 20\\)"); expect_match(m, "Refresh statements")
+  expect_match(gaps_message(list(odd_table = NA_integer_)), "odd_table")
+})
+
+test_that("a look-back without the changes table says escalation is unknown, not none", {
+  x <- agg_fixture()
+  s <- aggregate_situation(x$inter, NULL, x$mp, x$all_const, 1L, "2026-10-02T09:30:00", changes_available = FALSE)
+  expect_true(all(is.na(s$fgs_escalated))); expect_true(all(is.na(s$fgs_changed)))
+  expect_equal(s[constituency_id == "a", fgs_worst_rank], 4L)                   # the rest is unaffected
+  s2 <- aggregate_situation(x$inter, NULL, x$mp, x$all_const, 1L, "2026-10-02T09:30:00", changes_available = TRUE)
+  expect_false(any(s2$fgs_escalated))                                            # table exists, nothing changed: FALSE
+})

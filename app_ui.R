@@ -365,6 +365,10 @@ div.stat-card .stat-label {
 }
 .stale-bad  { background: #f9e5e5; border-color: #b02020; color: #6b1212; }
 .stale-warn { background: #fdf1e2; border-color: #e08020; color: #6b4300; }
+.gaps-banner {
+  margin: 0 15px 8px 15px; padding: 8px 12px; border-radius: 6px; font-size: 13px;
+  background: var(--ea-tint); border: 1px solid var(--ea-green-mid); color: var(--ea-ink);
+}
 .stale-banner .btn-link { margin-left: auto; padding: 0; font-size: 13px; }
 
 .header-right { display: flex; align-items: center; gap: 12px; }
@@ -856,6 +860,8 @@ ui <- function(request) {
     if (DEMO_MODE) make_demo_controls(),
     # Shown only when the pipeline is failing, stale or unreadable.
     uiOutput("stale_banner"),
+    # Shown only when a pipeline table has not been built yet.
+    uiOutput("data_gaps_banner"),
 
     do.call(tabsetPanel, c(list(id = "main_tabs"), Filter(Negate(is.null), tabs)))
   )

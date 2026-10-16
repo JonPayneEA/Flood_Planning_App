@@ -116,7 +116,7 @@ Optional settings, all in `.env.example`:
 | `FGS_GEOMETRY_SOURCE` | `risk_areas` | Must match the pipeline. See above. |
 | `FGS_AUTO_REFRESH_SECONDS` | `120` | How often an open session checks for new data. `0` is off, otherwise at least 30. |
 | `FGS_STALE_HOURS` | `3` | Hours without a pipeline health update before the stale-data banner shows. |
-| `FGS_CACHE_SECONDS` | `600` | How long query results are shared across sessions. `0` is off. |
+| `FGS_CACHE_SECONDS` | `600` | How long query results are shared across sessions. `0` is off (a missing table is still remembered for five minutes). |
 | `FGS_DEMO_MODE` | off | `1` runs on generated data with no warehouse. See Demo mode. |
 
 Set the environment variables under the deployed app's *Vars* tab.
@@ -184,6 +184,41 @@ How the look-back works, and what it cannot do:
 - The Overview always shows the latest statement, whatever is picked here.
 - `FGS_CONTACT_MIN_PCT` (default `0.01`) should match the pipeline's
   `config.py`, so a rebuilt table counts polygons the same way.
+
+## If a table is missing
+
+The pipeline builds the tables behind the newer views (notebooks 18 to 22), and
+a workspace that has not run them yet will answer `TABLE_OR_VIEW_NOT_FOUND`. The
+app does not fail. It says what is missing, on screen:
+
+- A banner under the header names each missing table and the notebook that
+  builds it, for example `fgs_constituency_changes (pipeline notebook 18)`.
+- The view that needs it says so in words ("Change tracking unavailable: ...")
+  instead of showing nothing or claiming "no changes".
+- The look-back still works without the changes table, with escalation shown as
+  n/a (unknown, not "none").
+- A missing table is remembered for five minutes so switching statement does
+  not repeat the failing query. **Refresh statements** forgets it at once, so run
+  the notebook, press Refresh, and the view appears.
+
+Which notebook builds which table, and when they run:
+
+| Table | Notebook | Master_polling step |
+|---|---|---|
+| `fgs_constituency_changes` | 18 | 6 |
+| `constituency_flood_situation` | 19 | 7 |
+| `mp_briefing_drafts` | 20 | 8 (refuses if step 7 is out of date) |
+| `pipeline_health` | 22 | 9 |
+| `fgs_constituency_exposure` | 21 | Master_daily |
+
+To find the cause, check which step of the last `Master_polling` run failed (a
+failure is recorded and the later steps still run), or list what exists:
+`SHOW TABLES IN <catalog>.<schema>`.
+
+**"Failed to connect to warehouse ... Failed to perform HTTP request"** is a
+different problem: the warehouse could not be reached (network, VPN or the
+warehouse stopping). The app shows a warning, keeps the last data, and tries
+again on the next refresh. It is not remembered, so it recovers by itself.
 
 ## If the map spins
 

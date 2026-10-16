@@ -83,11 +83,15 @@ server <- function(input, output, session) {
 
   # Refresh also drops the shared query cache, so an amended statement is
   # re-read rather than served from memory.
+  # ignoreInit: an actionButton starts at 0, so without this the handler also ran
+  # once at session start, wiping the cache and the missing-table gaps that the
+  # first loads had only just found.
   observeEvent(input$refresh_data, {
     cache_clear()
+    reset_gaps()
     load_statements(keep_selected = TRUE)
     data_version(isolate(data_version()) + 1L)
-  })
+  }, ignoreInit = TRUE)
 
 
   # ---------------------------------------------------------------------------
@@ -906,12 +910,53 @@ server <- function(input, output, session) {
   # does not depend on any of these.
   # ===========================================================================
 
+  # Tables the pipeline has not built yet (name -> notebook number). Filled by
+  # safe_fetch() when the warehouse says a table does not exist, cleared on
+  # Refresh, and shown on screen so a missing table is never a silent gap.
+  # One reactiveVal holding a named list, not reactiveValues: a reactiveValues
+  # entry cannot be deleted (assigning NULL leaves the key listed), so a cleared
+  # gap would still show.
+  data_gaps <- reactiveVal(list())
+  reset_gaps <- function() data_gaps(list())
+  has_gap <- function(table) table %in% names(isolate(data_gaps()))
+
+  logged_failures <- new.env()    # one console line per distinct failure, not one per click
+
+  # Runs one fetch. Never throws: returns NULL on failure, after saying why in
+  # the console (naming the fetch) and, for the two failures we can explain, on
+  # screen: a table that does not exist yet, and a warehouse that cannot be reached.
   safe_fetch <- function(fn, ...) {
+    label <- deparse(substitute(fn))
     tryCatch(fn(...), error = function(e) {
-      message("[", format(Sys.time(), "%H:%M:%S"), "] ", deparse(substitute(fn)),
-              " failed: ", conditionMessage(e))
+      msg <- conditionMessage(e)
+      key <- paste(label, substr(msg, 1L, 80L))
+      if (is.null(logged_failures[[key]])) {
+        assign(key, TRUE, envir = logged_failures)
+        message("[", format(Sys.time(), "%H:%M:%S"), "] ", label, " failed: ", msg)
+      }
+      gap <- missing_table_info(msg)
+      if (!is.null(gap)) {
+        g <- isolate(data_gaps())
+        if (!(gap$table %in% names(g))) { g[[gap$table]] <- gap$job; data_gaps(g) }
+      } else if (is_connection_error(msg)) {
+        showNotification("Could not reach the Databricks warehouse. The app is showing the last data it has and will keep trying.",
+                         type = "warning", id = "warehouse_unreachable", duration = 12)
+      }
       NULL
     })
+  }
+
+  # Shown above every tab when a pipeline table is missing.
+  output$data_gaps_banner <- renderUI({
+    g <- data_gaps()
+    if (length(g) == 0L) return(NULL)
+    tags$div(class = "gaps-banner", role = "status", gaps_message(g, location = paste0(CAT, ".", SCH)))
+  })
+
+  gap_text <- function(table, what) {
+    j <- PIPELINE_TABLE_JOBS[table]
+    sprintf("%s unavailable: the table %s was not found%s.", what, table,
+            if (is.na(j)) "" else sprintf(" (built by pipeline notebook %d)", j))
   }
 
   # Rank number -> label, for display. Out-of-range or NA becomes "None".
@@ -1123,6 +1168,11 @@ server <- function(input, output, session) {
 
   output$ov_changes <- renderUI({
     ch <- changes()
+    if (is.null(ch)) {
+      return(tags$p(class = "text-muted",
+        if (has_gap("fgs_constituency_changes")) gap_text("fgs_constituency_changes", "Change tracking")
+        else "Changes against the previous statement could not be loaded."))
+    }
     per <- summarise_changes(ch)
     if (nrow(per) == 0L) {
       return(tags$p(class = "text-muted", "No change against the previous statement (or this is the first complete one)."))
@@ -1171,6 +1221,7 @@ server <- function(input, output, session) {
       last_signature(sig)
       if (!is.null(old) && !identical(old, sig)) {
         cache_clear()
+        reset_gaps()
         load_statements(keep_selected = TRUE)
         load_products()
         data_version(isolate(data_version()) + 1L)
@@ -1348,7 +1399,13 @@ server <- function(input, output, session) {
 
   output$changes_strip <- renderUI({
     ch <- changes()
-    if (is.null(ch)) return(NULL)
+    if (is.null(ch)) {
+      # No data, not "no changes": say which, instead of showing nothing.
+      return(tags$div(class = "changes-wrap",
+        tags$div(class = "changes-strip text-muted",
+          if (has_gap("fgs_constituency_changes")) gap_text("fgs_constituency_changes", "Change tracking")
+          else "Changes against the previous statement could not be loaded.")))
+    }
     if (nrow(ch) == 0L) {
       return(tags$div(class = "changes-wrap",
         tags$div(class = "changes-strip text-muted",
@@ -1569,7 +1626,7 @@ server <- function(input, output, session) {
     }
     tags$div(class = "kpi-row",
       card(sum(d$fgs_worst_rank >= 3L, na.rm = TRUE), "Forecast Medium or above", TRUE),
-      card(sum(d$fgs_escalated, na.rm = TRUE),        "Escalated since last statement"),
+      card(if (all(is.na(d$fgs_escalated))) "n/a" else sum(d$fgs_escalated, na.rm = TRUE), "Escalated since last statement"),
       card(if (is.null(poc_past_id())) sum(d$has_active_warning, na.rm = TRUE) else "n/a", "Warning or alert in force"))
   })
 
@@ -1592,7 +1649,7 @@ server <- function(input, output, session) {
       Sources      = fgs_worst_sources,
       d1 = fgs_rank_day1, d2 = fgs_rank_day2, d3 = fgs_rank_day3,
       d4 = fgs_rank_day4, d5 = fgs_rank_day5,
-      Escalated    = fifelse(as.logical(fgs_escalated), "Yes", ""),
+      Escalated    = fifelse(is.na(fgs_escalated), "n/a", fifelse(as.logical(fgs_escalated), "Yes", "")),
       Severe       = severe_warnings,
       Warnings     = warnings,
       Alerts       = alerts
@@ -1649,6 +1706,13 @@ server <- function(input, output, session) {
     draft <- if (is.null(b)) NULL else b[constituency_id == cid]
     map_btn <- tags$button(type = "button", class = "btn btn-sm btn-outline-secondary",
                            onclick = goto_js(cid), icon("map-location-dot"), " Show on map")
+    if (is.null(b)) {                                        # the drafts could not be read at all
+      return(tags$div(
+        tags$div(class = "d-flex justify-content-between align-items-center", tags$h6(cname), map_btn),
+        tags$p(class = "text-muted",
+               if (has_gap("mp_briefing_drafts")) gap_text("mp_briefing_drafts", "Briefing drafts")
+               else "Briefing drafts could not be loaded.")))
+    }
 
     if (is.null(draft) || nrow(draft) == 0L) {
       return(tags$div(

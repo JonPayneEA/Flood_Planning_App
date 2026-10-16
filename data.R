@@ -775,9 +775,12 @@ fetch_constituency_intersections <- function(statement_id) {  # POC-ONLY
 }
 
 fetch_situation_for_statement <- function(statement_id, issued_at = NA) {  # POC-ONLY
+  # The changes table comes from pipeline notebook 18 and may not exist yet. The
+  # look-back must degrade (escalation unknown), not fail with it.
+  changes <- tryCatch(fetch_changes(statement_id), error = function(e) NULL)
   aggregate_situation(
     inter = fetch_constituency_intersections(statement_id),
-    changes = fetch_changes(statement_id),
+    changes = changes, changes_available = !is.null(changes),
     mp = fetch_mp_lookup(),
     all_const = fetch_all_constituencies(),
     statement_id = statement_id, issued_at = issued_at, min_pct = CONTACT_MIN_PCT)
@@ -798,32 +801,51 @@ fetch_situation_for_statement <- function(statement_id, issued_at = NA) {  # POC
 # reference cannot corrupt the cached copy. Errors are never cached.
 # =============================================================================
 
-.fgs_cache <- new.env(parent = emptyenv())
+.fgs_cache     <- new.env(parent = emptyenv())
+.fgs_neg_cache <- new.env(parent = emptyenv())
 CACHE_MAX_ENTRIES <- 200L
+NEG_CACHE_SECONDS <- 300     # how long a "table does not exist" answer is remembered
 
 cache_clear <- function() {
-  rm(list = ls(.fgs_cache, all.names = TRUE), envir = .fgs_cache)
+  rm(list = ls(.fgs_cache,     all.names = TRUE), envir = .fgs_cache)
+  rm(list = ls(.fgs_neg_cache, all.names = TRUE), envir = .fgs_neg_cache)
   invisible(NULL)
 }
 
+# A missing table stays missing until someone runs a pipeline notebook, so asking
+# again on every statement switch only costs a round trip and fills the console.
+# That one kind of error is remembered for NEG_CACHE_SECONDS, and forgotten on
+# Refresh or when the pipeline publishes. Network errors are never remembered:
+# they are usually brief and the next attempt should try again.
 with_cache <- function(fn, name, ttl = CACHE_TTL_SECONDS) {
   force(fn); force(name); force(ttl)
   function(...) {
-    if (ttl <= 0) return(fn(...))
     args <- vapply(list(...), function(a) paste(format(a), collapse = ","), character(1))
     key  <- paste(c(name, args), collapse = "|")
     now  <- Sys.time()
 
-    hit <- .fgs_cache[[key]]
-    if (!is.null(hit) && as.numeric(difftime(now, hit$at, units = "secs")) < ttl) {
-      return(if (is.data.table(hit$value)) copy(hit$value) else hit$value)
+    bad <- .fgs_neg_cache[[key]]
+    if (!is.null(bad) && as.numeric(difftime(now, bad$at, units = "secs")) < NEG_CACHE_SECONDS) stop(bad$msg, call. = FALSE)
+
+    if (ttl > 0) {
+      hit <- .fgs_cache[[key]]
+      if (!is.null(hit) && as.numeric(difftime(now, hit$at, units = "secs")) < ttl) {
+        return(if (is.data.table(hit$value)) copy(hit$value) else hit$value)
+      }
     }
 
     t0 <- Sys.time()
-    value <- fn(...)
+    value <- tryCatch(fn(...), error = function(e) {
+      if (!is.null(missing_table_info(conditionMessage(e)))) {
+        assign(key, list(at = Sys.time(), msg = conditionMessage(e)), envir = .fgs_neg_cache)
+      }
+      stop(e)
+    })
     took <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
     # A slow query otherwise looks like a hung map. Say so in the R console.
     if (took > 5) message(sprintf("[%s] %s took %.0f s", format(Sys.time(), "%H:%M:%S"), name, took))
+    if (ttl <= 0) return(value)
+
     keys <- ls(.fgs_cache, all.names = TRUE)
     if (length(keys) >= CACHE_MAX_ENTRIES) {
       ages <- vapply(keys, function(k) as.numeric(.fgs_cache[[k]]$at), numeric(1))
@@ -848,6 +870,13 @@ fetch_all_constituencies           <- with_cache(fetch_all_constituencies,      
 fetch_mp_lookup                    <- with_cache(fetch_mp_lookup,                    "mp_lookup")                                                 # POC-ONLY
 fetch_situation_for_statement      <- with_cache(fetch_situation_for_statement,      "situation_for_statement")                                   # POC-ONLY
 fetch_constituency_risk_geometry   <- with_cache(fetch_constituency_risk_geometry,   "const_risk_geometry", ttl = min(CACHE_TTL_SECONDS, 120))
+
+# Fresh on every call (these are reloaded each poll), but a missing table is remembered.
+fetch_pipeline_health              <- with_cache(fetch_pipeline_health,              "health",    ttl = 0)
+fetch_situation                    <- with_cache(fetch_situation,                    "situation", ttl = 0)
+fetch_briefing_drafts              <- with_cache(fetch_briefing_drafts,              "briefings", ttl = 0)
+fetch_exposure                     <- with_cache(fetch_exposure,                     "exposure",  ttl = 0)
+fetch_data_signature               <- with_cache(fetch_data_signature,               "signature", ttl = 0)
 
 
 # =============================================================================
