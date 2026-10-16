@@ -627,10 +627,11 @@ fetch_changes_log <- function(statement_id) {
 # constituency when at least TARGET_AREA_MIN_PCT of the area lies inside it, the
 # same rule the pipeline uses for warning contacts. An area spanning several
 # constituencies counts once in each; an area under several days or polygons
-# counts once.
+# counts once. min_rank keeps only areas under polygons at that risk rank or
+# above (0 keeps all; 1 Very Low, 2 Low, 3 Medium, 4 High).
 # -----------------------------------------------------------------------------
 
-fetch_potential_areas <- function(statement_id) {
+fetch_potential_areas <- function(statement_id, min_rank = 0L) {
   db_query(sprintf("
     SELECT
       l.constituency_id,
@@ -641,11 +642,12 @@ fetch_potential_areas <- function(statement_id) {
       FROM %s
       WHERE statement_id    = %d
         AND geometry_source = '%s'
+        AND CASE risk_level WHEN 'Very Low' THEN 1 WHEN 'Low' THEN 2 WHEN 'Medium' THEN 3 WHEN 'High' THEN 4 ELSE 0 END >= %d
     ) e
     JOIN %s l ON l.ea_area_code = e.ea_area_code
     WHERE l.intersection_pct >= %s
     GROUP BY l.constituency_id
-  ", TBL_EA_INTERSECT, as.integer(statement_id), GEOMETRY_SOURCE,
+  ", TBL_EA_INTERSECT, as.integer(statement_id), GEOMETRY_SOURCE, as.integer(min_rank),
      TBL_EA_CONSTITUENCY_LOOKUP, format(TARGET_AREA_MIN_PCT, scientific = FALSE)))
 }
 

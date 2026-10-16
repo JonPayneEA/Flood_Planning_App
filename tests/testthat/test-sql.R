@@ -53,12 +53,13 @@ test_that("queries read the configured catalog and schema, and no table by bare 
 
 test_that("the potential-areas query counts distinct areas, with the share floor and the lookup join", {
   d <- load_data_layer("risk_areas")
-  suppressWarnings(d$fetch_potential_areas(7))
+  suppressWarnings(d$fetch_potential_areas(7, 3L))
   q <- gsub("\\s+", " ", d$captured[length(d$captured)])
   expect_match(q, "COUNT\\(DISTINCT CASE WHEN LOWER\\(e.ea_area_type\\) = 'flood_warning'")
   expect_match(q, "COUNT\\(DISTINCT CASE WHEN LOWER\\(e.ea_area_type\\) = 'flood_alert'")
   expect_match(q, "statement_id = 7")
   expect_match(q, "JOIN cat.sch.ea_area_constituency_lookup l ON l.ea_area_code = e.ea_area_code", fixed = FALSE)
+  expect_match(q, "WHEN 'Medium' THEN 3 WHEN 'High' THEN 4 ELSE 0 END >= 3")      # min_rank reaches the SQL
   expect_match(q, "l.intersection_pct >= 0.01")
   expect_match(q, "GROUP BY l.constituency_id")
 })

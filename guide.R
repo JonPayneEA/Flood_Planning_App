@@ -230,7 +230,7 @@ guide_products <- function(s) {
         "Worst is the highest of those five. On is the first date it occurs. Sources are the flood sources at that worst risk, taken across all days.",
         "The five day columns show the worst risk on each day. Escalated is yes if the forecast rose against the previous statement on any day or source.",
         "The in force columns count the Severe Flood Warnings, Flood Warnings and Flood Alerts in force that overlap the constituency. An area that spans several constituencies is counted once in each.",
-        sprintf("Warning areas and alert areas under the forecast are the potential ones: flood warning areas and flood alert areas that sit under a risk polygon of the statement, on any of the five days. An area counts when at least %s of it lies inside the constituency, and counts once however many days or polygons cover it. These are places where a warning or alert could be issued. None of them need be in force.", guide_pct(th$warning_min_pct)),
+        sprintf("Warning areas and alert areas under the forecast are the potential ones: flood warning areas and flood alert areas that sit under a risk polygon of the statement, on any of the five days. An area counts when at least %s of it lies inside the constituency, and counts once however many days or polygons cover it. The minimum forecast risk filter also sets which polygons count: at Medium, only areas under Medium or High polygons are counted. These are places where a warning or alert could be issued. None of them need be in force.", guide_pct(th$warning_min_pct)),
         "The MP is matched to the constituency on a normalised name (lower case, accents folded, \"&\" as \"and\"). A seat with no match is shown as vacant or unmatched."
       ),
       read = c(
@@ -240,7 +240,7 @@ guide_products <- function(s) {
       limits = c(
         "The table holds the latest complete statement, whatever is picked on the map.",
         "Forecast and warnings are separate columns on purpose. There is no combined score.",
-        "Areas under the forecast are not split by risk level or severity. An area under a Very Low polygon counts the same as one under a High polygon, and Severe does not apply to a potential warning.",
+        "With the minimum risk on Any, an area under a Very Low polygon counts the same as one under a High polygon, so broad low-risk polygons raise the counts. Raise the minimum risk to count only areas under higher-risk polygons. Severe does not apply to a potential warning.",
         "A vacancy and a name that fails to match look the same. The pipeline's health check watches for a jump in unmatched seats."
       )
     ),

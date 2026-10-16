@@ -445,7 +445,7 @@ potential_cells <- function(fetch) {
 }
 
 test_that("areas under the forecast are attached per constituency, zero where none", {
-  r <- potential_cells(function(sid) data.table(constituency_id = c("c1", "c3"), warning_areas = c(2L, 0L), alert_areas = c(5L, 1L)))
+  r <- potential_cells(function(sid, ...) data.table(constituency_id = c("c1", "c3"), warning_areas = c(2L, 0L), alert_areas = c(5L, 1L)))
   expect_equal(r$pot_warning_areas[r$constituency_id == "c1"], 2L)
   expect_equal(r$pot_alert_areas[r$constituency_id == "c3"], 1L)
   expect_equal(r$pot_warning_areas[r$constituency_id == "c2"], 0L)          # c2 is under no polygon
@@ -453,8 +453,20 @@ test_that("areas under the forecast are attached per constituency, zero where no
 })
 
 test_that("an empty result means none under any polygon, and a failed read shows n/a", {
-  none <- potential_cells(function(sid) data.table(constituency_id = character(), warning_areas = integer(), alert_areas = integer()))
+  none <- potential_cells(function(sid, ...) data.table(constituency_id = character(), warning_areas = integer(), alert_areas = integer()))
   expect_true(all(none$pot_warning_areas == 0L))
-  failed <- suppressMessages(potential_cells(function(sid) stop(missing_changes)))
+  failed <- suppressMessages(potential_cells(function(sid, ...) stop(missing_changes)))
   expect_true(all(is.na(failed$pot_warning_areas)))
+})
+
+test_that("the minimum forecast risk filter is passed to the potential-areas query", {
+  seen <- NULL
+  env <- make_server_env(list(fetch_potential_areas = function(sid, min_rank = 0L) { seen <<- c(seen, min_rank); data.table(constituency_id = character(), warning_areas = integer(), alert_areas = integer()) }))
+  testServer(env$server, {
+    do.call(session$setInputs, base_inputs)          # base sit_min_rank is "3"
+    situation_clean()
+    session$setInputs(sit_min_rank = "0")
+    situation_clean()
+  })
+  expect_equal(seen, c(3L, 0L))
 })

@@ -630,9 +630,9 @@ fetch_changes_log <- function(statement_id) {
              days_compared_to = NA_character_, n_changes = nrow(ch), status = "compared")
 }
 
-fetch_potential_areas <- function(statement_id) {
+fetch_potential_areas <- function(statement_id, min_rank = 0L) {
   scn <- demo_current()$scenario; sid <- as.integer(statement_id)
-  ea <- rbindlist(lapply(1:5, function(d) demo_ea_inter(scn, sid, d)[, .(ea_area_code, ea_area_type)]))
+  ea <- rbindlist(lapply(1:5, function(d) { x <- demo_ea_inter(scn, sid, d); x[match(risk_level, RANK_LABELS) - 1L >= min_rank, .(ea_area_code, ea_area_type)] }))
   g <- demo_geometry()
   lk <- fetch_ea_constituency_mp()[constituency_overlap_pct >= TARGET_AREA_MIN_PCT, .(ea_area_code, constituency_name)]
   m <- merge(unique(ea), lk, by = "ea_area_code")

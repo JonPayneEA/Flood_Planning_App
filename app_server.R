@@ -1606,7 +1606,8 @@ server <- function(input, output, session) {
       if (is.null(s) || nrow(s) == 0L) return(NULL)
       sid <- as.integer(s$fgs_statement_id[1L])
     }
-    safe_fetch(fetch_potential_areas, sid)
+    mr <- suppressWarnings(as.integer(input$sit_min_rank)); if (length(mr) != 1L || is.na(mr)) mr <- 0L
+    safe_fetch(fetch_potential_areas, sid, mr)
   })
 
   situation_clean <- reactive({
@@ -1658,7 +1659,9 @@ server <- function(input, output, session) {
       sprintf("Latest complete statement: id %s, issued %s. ",
               d$fgs_statement_id[1L], fmt_statement_time(d$fgs_issued_at[1L], "%Y-%m-%d %H:%M")),
       "Forecast and warnings are separate measures and are not combined. ",
-      "Warning and alert areas under the forecast are potential: places where one could be issued.")
+      "Warning and alert areas under the forecast are potential: places where one could be issued. ",
+      if (isTRUE(suppressWarnings(as.integer(input$sit_min_rank)) > 0L))
+        sprintf("They are counted under polygons at %s risk or above, following the minimum forecast risk filter.", RANK_LABELS[as.integer(input$sit_min_rank) + 1L]))
   })
 
   output$situation_kpis <- renderUI({
