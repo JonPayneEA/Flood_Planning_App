@@ -923,8 +923,8 @@ cache_clear <- function() {
 # That one kind of error is remembered for NEG_CACHE_SECONDS, and forgotten on
 # Refresh or when the pipeline publishes. Network errors are never remembered:
 # they are usually brief and the next attempt should try again.
-with_cache <- function(fn, name, ttl = CACHE_TTL_SECONDS) {
-  force(fn); force(name); force(ttl)
+with_cache <- function(fn, name, ttl = CACHE_TTL_SECONDS, group = NULL) {
+  force(fn); force(name); force(ttl); force(group)
   function(...) {
     args <- vapply(list(...), function(a) paste(format(a), collapse = ","), character(1))
     key  <- paste(c(name, args), collapse = "|")
@@ -957,27 +957,38 @@ with_cache <- function(fn, name, ttl = CACHE_TTL_SECONDS) {
       ages <- vapply(keys, function(k) as.numeric(.fgs_cache[[k]]$at), numeric(1))
       rm(list = keys[which.min(ages)], envir = .fgs_cache)
     }
-    assign(key, list(at = now, value = value), envir = .fgs_cache)
+    # A group (for example the map geometry) has its own, smaller rolling cap:
+    # drop the oldest of that group until there is room for this entry.
+    if (!is.null(group)) {
+      repeat {
+        gk <- Filter(function(k) identical(.fgs_cache[[k]]$group, group) && !identical(k, key),
+                     ls(.fgs_cache, all.names = TRUE))
+        if (length(gk) < GEOMETRY_CACHE_ENTRIES) break
+        gages <- vapply(gk, function(k) as.numeric(.fgs_cache[[k]]$at), numeric(1))
+        rm(list = gk[which.min(gages)], envir = .fgs_cache)
+      }
+    }
+    assign(key, list(at = now, value = value, group = group), envir = .fgs_cache)
     if (is.data.table(value)) copy(value) else value
   }
 }
 
 # Statement-scoped queries and reference lookups. Not cached: the statement
 # list, the health table and the signature, which must always be fresh.
-fetch_risk_polygons                <- with_cache(fetch_risk_polygons,                "risk_polygons")
+fetch_risk_polygons                <- with_cache(fetch_risk_polygons,                "risk_polygons", group = "geometry")
 fetch_ea_areas_for_statement       <- with_cache(fetch_ea_areas_for_statement,       "ea_areas")
 fetch_summary_counts               <- with_cache(fetch_summary_counts,               "summary_counts")
-fetch_ea_geometry                  <- with_cache(fetch_ea_geometry,                  "ea_geometry")
-fetch_constituency_geometry        <- with_cache(fetch_constituency_geometry,        "const_geometry")
+fetch_ea_geometry                  <- with_cache(fetch_ea_geometry,                  "ea_geometry", group = "geometry")
+fetch_constituency_geometry        <- with_cache(fetch_constituency_geometry,        "const_geometry", group = "geometry")
 fetch_constituencies_for_statement <- with_cache(fetch_constituencies_for_statement, "const_meta")
 fetch_changes                      <- with_cache(fetch_changes,                      "changes")
 fetch_potential_areas              <- with_cache(fetch_potential_areas,              "potential_areas")
 fetch_changes_log                  <- with_cache(fetch_changes_log,                  "changes_log", ttl = min(CACHE_TTL_SECONDS, 60))
-fetch_constituency_shape           <- with_cache(fetch_constituency_shape,           "const_shape")
+fetch_constituency_shape           <- with_cache(fetch_constituency_shape,           "const_shape", group = "geometry")
 fetch_all_constituencies           <- with_cache(fetch_all_constituencies,           "all_constituencies", ttl = max(CACHE_TTL_SECONDS, 0) * 6)  # POC-ONLY
 fetch_mp_lookup                    <- with_cache(fetch_mp_lookup,                    "mp_lookup")                                                 # POC-ONLY
 fetch_situation_for_statement      <- with_cache(fetch_situation_for_statement,      "situation_for_statement")                                   # POC-ONLY
-fetch_constituency_risk_geometry   <- with_cache(fetch_constituency_risk_geometry,   "const_risk_geometry", ttl = min(CACHE_TTL_SECONDS, 120))
+fetch_constituency_risk_geometry   <- with_cache(fetch_constituency_risk_geometry,   "const_risk_geometry", ttl = min(CACHE_TTL_SECONDS, 120), group = "geometry")
 
 # Fresh on every call (these are reloaded each poll), but a missing table is remembered.
 fetch_pipeline_health              <- with_cache(fetch_pipeline_health,              "health",    ttl = 0)
