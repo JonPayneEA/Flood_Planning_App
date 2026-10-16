@@ -38,6 +38,11 @@ HTTPS to your existing SQL warehouse, with no driver to install and no
 Python to manage. Performance is comparable to ODBC for the data volumes
 this app handles.
 
+One cost is real: brickster sends a `SELECT 1` test query every time it opens
+a connection, so a connection per query doubles the requests. The app opens
+one connection and reuses it for every query (rebuilding it after 30 minutes
+or after a network failure), so that overhead is paid once, not per query.
+
 ## Files
 
 | File | Purpose |
@@ -116,6 +121,7 @@ Optional settings, all in `.env.example`:
 |---|---|---|
 | `FGS_GEOMETRY_SOURCE` | `risk_areas` | Must match the pipeline. See above. |
 | `FGS_AUTO_REFRESH_SECONDS` | `120` | How often an open session checks for new data. `0` is off, otherwise at least 30. |
+| `FGS_QUERY_RETRIES` | `2` | Extra attempts after a network failure (0 to 5), with pauses of 1.5 s then 3 s. SQL errors and missing tables are never retried. |
 | `FGS_STALE_HOURS` | `3` | Hours without a pipeline health update before the stale-data banner shows. |
 | `FGS_CACHE_SECONDS` | `600` | How long query results are shared across sessions. `0` is off (a missing table is still remembered for five minutes). |
 | `FGS_DEMO_MODE` | off | `1` runs on generated data with no warehouse. See Demo mode. |
@@ -269,6 +275,9 @@ Guide and keep a fixed meaning, and the brand green must never be read as the
   the pipeline views, drop the cache and show "New pipeline data loaded". A
   user on the newest statement follows to the new one; a user who chose an
   older statement stays on it.
+- **Warehouse outages.** A network failure drops the shared connection and is
+  retried. The console logs the first failure, at most one reminder a minute
+  while it persists, and one line when the warehouse is reachable again.
 - **Stale-data banner.** A banner shows above every tab when the pipeline is
   failing, needs attention, cannot be read, or has stopped updating its own
   health table (the quiet failure: nothing ran, so nothing failed). The

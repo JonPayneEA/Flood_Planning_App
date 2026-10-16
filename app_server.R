@@ -930,7 +930,9 @@ server <- function(input, output, session) {
     tryCatch(fn(...), error = function(e) {
       msg <- conditionMessage(e)
       key <- paste(label, substr(msg, 1L, 80L))
-      if (is.null(logged_failures[[key]])) {
+      # A dropped connection is logged by the database layer (db_query), which knows how
+      # long it has lasted. Logging it here too would repeat it.
+      if (!is_connection_error(msg) && is.null(logged_failures[[key]])) {
         assign(key, TRUE, envir = logged_failures)
         message("[", format(Sys.time(), "%H:%M:%S"), "] ", label, " failed: ", msg)
       }

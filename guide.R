@@ -314,7 +314,7 @@ guide_products <- function(s) {
       read = c(
         sprintf("The red or amber banner appears when a check is failing or needs attention. It also appears when the health table has not updated for %s hours, which means the pipeline may have stopped: nothing ran, so nothing failed.", s$stale_hours),
         "A second banner names any pipeline table that does not exist yet, and the notebook that builds it. A view that depends on a missing table says so in words.",
-        "A brief warning appears if the Databricks warehouse cannot be reached. The app keeps the last data and tries again."
+        "A brief warning appears if the Databricks warehouse cannot be reached. The app retries a network failure twice before giving up, keeps the last data, and tries again on the next refresh."
       ),
       limits = c(
         "The thresholds above are the pipeline's defaults. They are set in its config file, which this app cannot read."
