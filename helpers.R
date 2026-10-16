@@ -209,6 +209,26 @@ summarise_changes <- function(ch) {
 
 
 # -----------------------------------------------------------------------------
+# no_change_message()
+#
+# Said when the changes table holds no rows for a statement. The pipeline stores
+# differences only, so no rows means every constituency, day and source holds
+# the same risk as in the statement before. A calm "nothing moved" is a result,
+# so it names the statement it was compared with. `recent` is the statement
+# list, newest first. With no earlier statement in it, nothing was compared.
+# -----------------------------------------------------------------------------
+no_change_message <- function(recent, statement_id) {
+  none <- "No earlier statement to compare with, so no changes are recorded."
+  if (is.null(recent) || nrow(recent) == 0L || is.null(statement_id)) return(none)
+  pos <- match(as.character(statement_id), as.character(recent$statement_id))
+  if (is.na(pos) || pos >= nrow(recent)) return(none)
+  prev <- recent[pos + 1L]
+  sprintf("No change since statement #%s (issued %s). Every constituency, day and source holds the same risk.",
+          prev$statement_id, fmt_statement_time(prev$issued_at))
+}
+
+
+# -----------------------------------------------------------------------------
 # with_layer_guard()
 #
 # Runs one map layer's drawing code so that its "busy" flag is ALWAYS cleared,
