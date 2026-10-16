@@ -122,6 +122,7 @@ Optional settings, all in `.env.example`:
 | `FGS_GEOMETRY_SOURCE` | `risk_areas` | Must match the pipeline. See above. |
 | `FGS_AUTO_REFRESH_SECONDS` | `120` | How often an open session checks for new data. `0` is off, otherwise at least 30. |
 | `FGS_QUERY_RETRIES` | `2` | Extra attempts after a network failure (0 to 5), with pauses of 1.5 s then 3 s. SQL errors and missing tables are never retried. |
+| `FGS_WARNING_CONTACT_MIN_PCT` | `0.01` | Share of a flood warning or alert area that must lie inside a constituency for it to count as under that constituency's forecast. Match the pipeline's `WARNING_CONTACT_MIN_PCT`. |
 | `FGS_STALE_HOURS` | `3` | Hours without a pipeline health update before the stale-data banner shows. |
 | `FGS_CACHE_SECONDS` | `600` | How long query results are shared across sessions. `0` is off (a missing table is still remembered for five minutes). |
 | `FGS_DEMO_MODE` | off | `1` runs on generated data with no warehouse. See Demo mode. |

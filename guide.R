@@ -221,14 +221,16 @@ guide_products <- function(s) {
 
     list(
       id = "situation", title = "Constituency situation", where = "Constituency situation",
-      answers = "For every constituency: what is the forecast, what is in force, and who is the MP?",
-      tables = c("constituency_flood_situation", "fgs_constituency_changes", "mp_contact_details", "parliamentary_constituencies"),
+      answers = "For every constituency: what is the forecast, what could be issued, what is in force, and who is the MP?",
+      tables = c("constituency_flood_situation", "fgs_constituency_changes", "mp_contact_details", "parliamentary_constituencies",
+                 "fgs_ea_area_intersections", "ea_area_constituency_lookup"),
       steps = c(
         "Every constituency has a row, so a constituency with nothing flagged is shown as None.",
         sprintf("For each constituency the pipeline takes the worst risk on each day, across all flood sources. Polygons covering less than %s of the constituency are ignored.", guide_pct(th$contact_min_pct)),
         "Worst is the highest of those five. On is the first date it occurs. Sources are the flood sources at that worst risk, taken across all days.",
         "The five day columns show the worst risk on each day. Escalated is yes if the forecast rose against the previous statement on any day or source.",
-        "Severe, Warnings and Alerts count the Severe Flood Warnings, Flood Warnings and Flood Alerts in force that overlap the constituency. An area that spans several constituencies is counted once in each.",
+        "The in force columns count the Severe Flood Warnings, Flood Warnings and Flood Alerts in force that overlap the constituency. An area that spans several constituencies is counted once in each.",
+        sprintf("Warning areas and alert areas under the forecast are the potential ones: flood warning areas and flood alert areas that sit under a risk polygon of the statement, on any of the five days. An area counts when at least %s of it lies inside the constituency, and counts once however many days or polygons cover it. These are places where a warning or alert could be issued. None of them need be in force.", guide_pct(th$warning_min_pct)),
         "The MP is matched to the constituency on a normalised name (lower case, accents folded, \"&\" as \"and\"). A seat with no match is shown as vacant or unmatched."
       ),
       read = c(
@@ -238,6 +240,7 @@ guide_products <- function(s) {
       limits = c(
         "The table holds the latest complete statement, whatever is picked on the map.",
         "Forecast and warnings are separate columns on purpose. There is no combined score.",
+        "Areas under the forecast are not split by risk level or severity. An area under a Very Low polygon counts the same as one under a High polygon, and Severe does not apply to a potential warning.",
         "A vacancy and a name that fails to match look the same. The pipeline's health check watches for a jump in unmatched seats."
       )
     ),
@@ -334,14 +337,14 @@ guide_products <- function(s) {
       steps = c(
         "The situation table holds the latest statement only. For an earlier statement the app rebuilds it from the overlaps the pipeline keeps for every statement.",
         sprintf("It applies the same rules as the pipeline: polygons covering less than %s of a constituency are ignored, then the worst risk per day, then the worst of the five, with its first date and sources.", guide_pct(s$contact_min_pct)),
-        "Escalation comes from the changes table for that statement. Briefing drafts come from the drafts the pipeline kept for it.",
+        "Escalation comes from the changes table for that statement. Briefing drafts come from the drafts the pipeline kept for it. The warning and alert areas under the forecast are rebuilt from the area overlaps kept for every statement, so they work for any past date.",
         "Choosing the newest statement gives the live table, with its warnings."
       ),
       read = c(
         "A box above the table says when a look-back is on."
       ),
       limits = c(
-        "Warnings and alerts in force are not kept for past statements, so they show not available.",
+        "Warnings and alerts in force are not kept for past statements, so they show not available. The areas under the forecast are kept, and are shown.",
         "MP details are today's, matched on a normalised name.",
         "If the changes table does not exist, escalation shows not available. It does not show none.",
         "Reviews cannot be recorded against a past statement.",

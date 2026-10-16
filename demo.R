@@ -630,6 +630,17 @@ fetch_changes_log <- function(statement_id) {
              days_compared_to = NA_character_, n_changes = nrow(ch), status = "compared")
 }
 
+fetch_potential_areas <- function(statement_id) {
+  scn <- demo_current()$scenario; sid <- as.integer(statement_id)
+  ea <- rbindlist(lapply(1:5, function(d) demo_ea_inter(scn, sid, d)[, .(ea_area_code, ea_area_type)]))
+  g <- demo_geometry()
+  lk <- fetch_ea_constituency_mp()[constituency_overlap_pct >= TARGET_AREA_MIN_PCT, .(ea_area_code, constituency_name)]
+  m <- merge(unique(ea), lk, by = "ea_area_code")
+  m[, constituency_id := g$table$constituency_id[match(constituency_name, g$table$constituency_name)]]
+  m[, .(warning_areas = uniqueN(ea_area_code[ea_area_type == "flood_warning"]),
+        alert_areas   = uniqueN(ea_area_code[ea_area_type == "flood_alert"])), by = constituency_id]
+}
+
 fetch_situation <- function() copy(demo_situation(demo_current()$scenario))
 
 fetch_briefing_drafts <- function(statement_id = NULL) {

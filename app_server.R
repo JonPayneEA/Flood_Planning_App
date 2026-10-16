@@ -1596,7 +1596,33 @@ server <- function(input, output, session) {
     if (is.null(id)) briefing_effective() else safe_fetch(fetch_briefing_drafts, id)
   })
 
-  situation_clean <- reactive(clean_situation(situation_view()))
+  # Potential warnings and alerts: flood warning and alert areas under the
+  # statement's risk polygons, per constituency (fetch_potential_areas). NULL
+  # when they cannot be read, which shows as n/a and never blocks the table.
+  potential_areas <- reactive({
+    sid <- poc_past_id()
+    if (is.null(sid)) {
+      s <- situation_rv()
+      if (is.null(s) || nrow(s) == 0L) return(NULL)
+      sid <- as.integer(s$fgs_statement_id[1L])
+    }
+    safe_fetch(fetch_potential_areas, sid)
+  })
+
+  situation_clean <- reactive({
+    d <- clean_situation(situation_view())
+    p <- potential_areas()
+    if (is.null(p)) {
+      d[, `:=`(pot_warning_areas = NA_integer_, pot_alert_areas = NA_integer_)]
+    } else if (nrow(p) == 0L) {                                # none under any polygon
+      d[, `:=`(pot_warning_areas = 0L, pot_alert_areas = 0L)]
+    } else {
+      m <- match(d$constituency_id, p$constituency_id)
+      d[, `:=`(pot_warning_areas = data.table::fcoalesce(as.integer(p$warning_areas[m]), 0L),
+               pot_alert_areas   = data.table::fcoalesce(as.integer(p$alert_areas[m]), 0L))]
+    }
+    d[]
+  })
 
   situation_filtered <- reactive({
     d <- situation_clean()
@@ -1625,13 +1651,14 @@ server <- function(input, output, session) {
       return(tags$div(class = "alert alert-secondary mb-2",
         tags$strong("Look-back (proof of concept). "),
         sprintf("Statement #%s, issued %s. ", d$fgs_statement_id[1L], fmt_statement_time(d$fgs_issued_at[1L], "%Y-%m-%d %H:%M")),
-        "Risks and escalation are rebuilt from the stored intersections. Warnings and alerts in force are not kept ",
-        "for past statements, so they show n/a. MP details are today's."))
+        "Risks, escalation and the warning and alert areas under the forecast are rebuilt from the stored ",
+        "intersections. Warnings and alerts in force are not kept for past statements, so they show n/a. MP details are today's."))
     }
     tags$div(class = "text-muted mb-2",
       sprintf("Latest complete statement: id %s, issued %s. ",
               d$fgs_statement_id[1L], fmt_statement_time(d$fgs_issued_at[1L], "%Y-%m-%d %H:%M")),
-      "Forecast and warnings are separate measures and are not combined.")
+      "Forecast and warnings are separate measures and are not combined. ",
+      "Warning and alert areas under the forecast are potential: places where one could be issued.")
   })
 
   output$situation_kpis <- renderUI({
@@ -1670,11 +1697,15 @@ server <- function(input, output, session) {
       Escalated    = fifelse(is.na(fgs_escalated), "n/a", fifelse(as.logical(fgs_escalated), "Yes", "")),
       Severe       = severe_warnings,
       Warnings     = warnings,
-      Alerts       = alerts
+      Alerts       = alerts,
+      WarnAreas    = fifelse(is.na(pot_warning_areas), "n/a", as.character(pot_warning_areas)),
+      AlertAreas   = fifelse(is.na(pot_alert_areas),   "n/a", as.character(pot_alert_areas))
     )]
     setnames(tbl, c("d1", "d2", "d3", "d4", "d5"), day_names)
-    if (!is.null(poc_past_id())) {                             # POC-ONLY: not held for past statements
-      for (cn in c("Severe", "Warnings", "Alerts")) tbl[, (cn) := rep("n/a", .N)]
+    setnames(tbl, c("Severe", "Warnings", "Alerts", "WarnAreas", "AlertAreas"),
+             c("Severe in force", "Warnings in force", "Alerts in force", "Warning areas under forecast", "Alert areas under forecast"))
+    if (!is.null(poc_past_id())) {                             # POC-ONLY: in force is not held for past statements
+      for (cn in c("Severe in force", "Warnings in force", "Alerts in force")) tbl[, (cn) := rep("n/a", .N)]
     }
     rank_cols <- c("Worst", day_names)
     labels_js <- jsonlite::toJSON(RANK_LABELS, auto_unbox = FALSE)
@@ -1705,7 +1736,8 @@ server <- function(input, output, session) {
       out <- d[, .(constituency_name, mp_name, mp_party, mp_email, mp_phone,
                    fgs_worst_level, fgs_worst_date, fgs_worst_sources,
                    fgs_rank_day1, fgs_rank_day2, fgs_rank_day3, fgs_rank_day4, fgs_rank_day5,
-                   fgs_escalated, severe_warnings, warnings, alerts)]
+                   fgs_escalated, severe_warnings, warnings, alerts,
+                   potential_warning_areas = pot_warning_areas, potential_alert_areas = pot_alert_areas)]
       data.table::fwrite(out, file)
     }
   )

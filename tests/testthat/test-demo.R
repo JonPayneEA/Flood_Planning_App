@@ -238,3 +238,14 @@ test_that("briefings exist for past statements and are built from that statement
   }
   expect_equal(unique(demo_env$demo_briefings_for("severe", 4812L)$statement_id), 4812L)
 })
+
+test_that("demo potential areas are well formed and agree with the intersections they come from", {
+  sid <- max(demo_env$demo_statements_table("developing")$statement_id)
+  p <- demo_env$fetch_potential_areas(sid)                      # the default scenario is developing
+  expect_true(all(c("constituency_id", "warning_areas", "alert_areas") %in% names(p)))
+  expect_false(anyDuplicated(p$constituency_id) > 0L)
+  expect_true(all(p$warning_areas >= 0L & p$alert_areas >= 0L))
+  expect_gt(sum(p$warning_areas + p$alert_areas), 0L)           # a developing storm puts some areas under polygons
+  ea <- data.table::rbindlist(lapply(1:5, function(d) demo_env$demo_ea_inter("developing", sid, d)))
+  expect_lte(max(p$warning_areas), data.table::uniqueN(ea$ea_area_code[ea$ea_area_type == "flood_warning"]))
+})

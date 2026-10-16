@@ -195,6 +195,11 @@ POC_FEATURES <- tolower(Sys.getenv("FGS_POC_FEATURES", unset = "1")) %in% c("1",
 # the situation table for a past statement (POC-ONLY look-back).
 CONTACT_MIN_PCT <- env_number("FGS_CONTACT_MIN_PCT", 0.01)
 
+# A flood warning or alert area counts as "under the forecast" for a constituency
+# when at least this share of the AREA lies inside the constituency. Mirrors the
+# pipeline's WARNING_CONTACT_MIN_PCT in config.py (0.01 = 1%).
+TARGET_AREA_MIN_PCT <- env_number("FGS_WARNING_CONTACT_MIN_PCT", 0.01)
+
 AUTO_REFRESH_SECONDS <- env_number("FGS_AUTO_REFRESH_SECONDS", 120)
 if (AUTO_REFRESH_SECONDS > 0 && AUTO_REFRESH_SECONDS < 30) {
   stop("FGS_AUTO_REFRESH_SECONDS must be 0 (off) or at least 30.")

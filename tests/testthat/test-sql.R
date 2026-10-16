@@ -21,8 +21,9 @@ for (src in c("risk_areas", "aoc")) {
       d$fetch_constituencies_for_statement(1, 1)
       d$fetch_changes(1)
       d$fetch_briefing_drafts()
+      d$fetch_potential_areas(1)
     })
-    expect_length(d$captured, 7L)
+    expect_length(d$captured, 8L)
     for (q in d$captured) {
       expect_match(q, sprintf("geometry_source\\s*=\\s*'%s'", src), info = substr(q, 1, 120))
     }
@@ -48,4 +49,16 @@ test_that("queries read the configured catalog and schema, and no table by bare 
   d <- load_data_layer()
   suppressWarnings({ d$fetch_changes(1); d$fetch_situation(); d$fetch_pipeline_health(); d$fetch_exposure(12) })
   for (q in d$captured) expect_match(q, "cat\\.sch\\.")
+})
+
+test_that("the potential-areas query counts distinct areas, with the share floor and the lookup join", {
+  d <- load_data_layer("risk_areas")
+  suppressWarnings(d$fetch_potential_areas(7))
+  q <- gsub("\\s+", " ", d$captured[length(d$captured)])
+  expect_match(q, "COUNT\\(DISTINCT CASE WHEN LOWER\\(e.ea_area_type\\) = 'flood_warning'")
+  expect_match(q, "COUNT\\(DISTINCT CASE WHEN LOWER\\(e.ea_area_type\\) = 'flood_alert'")
+  expect_match(q, "statement_id = 7")
+  expect_match(q, "JOIN cat.sch.ea_area_constituency_lookup l ON l.ea_area_code = e.ea_area_code", fixed = FALSE)
+  expect_match(q, "l.intersection_pct >= 0.01")
+  expect_match(q, "GROUP BY l.constituency_id")
 })

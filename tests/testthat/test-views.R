@@ -430,3 +430,31 @@ test_that("an unavailable log table falls back to trusting the empty result, wit
     expect_false(any(grepl("fgs_changes_log", html_of(output$data_gaps_banner))))
   })
 })
+
+# ---- potential warning and alert areas on Constituency situation ----------------------
+
+potential_cells <- function(fetch) {
+  env <- make_server_env(list(fetch_potential_areas = fetch))
+  out <- NULL
+  testServer(env$server, {
+    do.call(session$setInputs, base_inputs)
+    session$setInputs(sit_min_rank = "0")
+    out <<- situation_clean()[, .(constituency_id, pot_warning_areas, pot_alert_areas)]
+  })
+  out
+}
+
+test_that("areas under the forecast are attached per constituency, zero where none", {
+  r <- potential_cells(function(sid) data.table(constituency_id = c("c1", "c3"), warning_areas = c(2L, 0L), alert_areas = c(5L, 1L)))
+  expect_equal(r$pot_warning_areas[r$constituency_id == "c1"], 2L)
+  expect_equal(r$pot_alert_areas[r$constituency_id == "c3"], 1L)
+  expect_equal(r$pot_warning_areas[r$constituency_id == "c2"], 0L)          # c2 is under no polygon
+  expect_equal(r$pot_alert_areas[r$constituency_id == "c2"], 0L)
+})
+
+test_that("an empty result means none under any polygon, and a failed read shows n/a", {
+  none <- potential_cells(function(sid) data.table(constituency_id = character(), warning_areas = integer(), alert_areas = integer()))
+  expect_true(all(none$pot_warning_areas == 0L))
+  failed <- suppressMessages(potential_cells(function(sid) stop(missing_changes)))
+  expect_true(all(is.na(failed$pot_warning_areas)))
+})
