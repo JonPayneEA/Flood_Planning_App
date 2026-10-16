@@ -133,6 +133,7 @@ TBL_MP_CONTACTS            <- paste(CAT, SCH, "mp_contact_details",         sep 
 
 # Pipeline products (FGS_Notebooks jobs 18 to 22). Plain tables, no geometry.
 TBL_CHANGES   <- paste(CAT, SCH, "fgs_constituency_changes",    sep = ".")  # 18
+TBL_CHANGES_LOG <- paste(CAT, SCH, "fgs_changes_log",             sep = ".")  # 18 (one row per comparison made)
 TBL_SITUATION <- paste(CAT, SCH, "constituency_flood_situation", sep = ".")  # 19
 TBL_BRIEFINGS <- paste(CAT, SCH, "mp_briefing_drafts",          sep = ".")  # 20
 TBL_EXPOSURE  <- paste(CAT, SCH, "fgs_constituency_exposure",   sep = ".")  # 21

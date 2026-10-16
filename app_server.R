@@ -1177,7 +1177,7 @@ server <- function(input, output, session) {
     }
     per <- summarise_changes(ch)
     if (nrow(per) == 0L) {
-      return(tags$p(class = "text-muted", no_change_message(recent_rv(), selected_statement()$statement_id)))
+      return(tags$p(class = "text-muted", no_change_message(recent_rv(), selected_statement()$statement_id, changes_log())))
     }
     n_up <- sum(per$up); n_down <- sum(!per$up)
     show <- rbind(head(per[up == TRUE], 5L), head(per[up == FALSE], 3L))
@@ -1362,6 +1362,15 @@ server <- function(input, output, session) {
     safe_fetch(fetch_changes, stmt$statement_id)
   })
 
+  # Did job 18 really compare this statement? NULL when its log table is not
+  # there (older pipeline), which falls back to trusting an empty result. Never
+  # a data gap: the panel still works without it.
+  changes_log <- reactive({
+    stmt <- selected_statement()
+    req(stmt)
+    tryCatch(fetch_changes_log(stmt$statement_id), error = function(e) NULL)
+  })
+
   # Shared helpers for the views below.
   rank_chip <- function(r) {
     r <- suppressWarnings(as.integer(r)); r[is.na(r) | r < 0L | r > 4L] <- 0L
@@ -1420,7 +1429,7 @@ server <- function(input, output, session) {
     if (nrow(ch) == 0L) {
       return(tags$div(class = "changes-wrap",
         tags$div(class = "changes-strip text-muted",
-          no_change_message(recent_rv(), selected_statement()$statement_id))))
+          no_change_message(recent_rv(), selected_statement()$statement_id, changes_log()))))
     }
     per <- summarise_changes(ch)
     n_up <- sum(per$up); n_down <- sum(!per$up)

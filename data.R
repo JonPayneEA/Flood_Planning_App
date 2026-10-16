@@ -592,6 +592,31 @@ fetch_changes <- function(statement_id) {
 
 
 # -----------------------------------------------------------------------------
+# fetch_changes_log()
+#
+# One row if job 18 compared this statement with the one before it, none if it
+# has not. n_changes = 0 is a real "nothing moved". The table is newer than the
+# rest, so a caller treats an error (table missing) as "unknown", not a gap.
+# -----------------------------------------------------------------------------
+
+fetch_changes_log <- function(statement_id) {
+  db_query(sprintf("
+    SELECT
+      statement_id,
+      previous_statement_id,
+      previous_issued_at,
+      days_compared_from,
+      days_compared_to,
+      n_changes,
+      status
+    FROM %s
+    WHERE statement_id    = %d
+      AND geometry_source = '%s'
+  ", TBL_CHANGES_LOG, as.integer(statement_id), GEOMETRY_SOURCE))
+}
+
+
+# -----------------------------------------------------------------------------
 # fetch_situation()
 #
 # One row per constituency (job 19): worst forecast risk over five days, risk
@@ -910,6 +935,7 @@ fetch_ea_geometry                  <- with_cache(fetch_ea_geometry,             
 fetch_constituency_geometry        <- with_cache(fetch_constituency_geometry,        "const_geometry")
 fetch_constituencies_for_statement <- with_cache(fetch_constituencies_for_statement, "const_meta")
 fetch_changes                      <- with_cache(fetch_changes,                      "changes")
+fetch_changes_log                  <- with_cache(fetch_changes_log,                  "changes_log", ttl = min(CACHE_TTL_SECONDS, 60))
 fetch_constituency_shape           <- with_cache(fetch_constituency_shape,           "const_shape")
 fetch_all_constituencies           <- with_cache(fetch_all_constituencies,           "all_constituencies", ttl = max(CACHE_TTL_SECONDS, 0) * 6)  # POC-ONLY
 fetch_mp_lookup                    <- with_cache(fetch_mp_lookup,                    "mp_lookup")                                                 # POC-ONLY

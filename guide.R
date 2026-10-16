@@ -44,12 +44,12 @@ GUIDE_TABLES <- data.frame(
   table = c("fgs_statements", "fgs_risk_polygons", "fgs_ea_area_intersections", "fgs_constituency_intersections",
             "ea_flood_warning_areas", "ea_flood_alert_areas", "parliamentary_constituencies",
             "ea_area_constituency_lookup", "mp_contact_details",
-            "fgs_constituency_changes", "constituency_flood_situation", "mp_briefing_drafts",
+            "fgs_constituency_changes", "fgs_changes_log", "constituency_flood_situation", "mp_briefing_drafts",
             "fgs_constituency_exposure", "pipeline_health"),
-  notebook = c("01", "01", "07", "07", "03", "03", "05", "06", "04", "18", "19", "20", "21", "22"),
+  notebook = c("01", "01", "07", "07", "03", "03", "05", "06", "04", "18", "18", "19", "20", "21", "22"),
   refresh = c("Each FGS issue or amendment", "Each FGS issue or amendment", "Each FGS issue", "Each FGS issue",
               "Weekly", "Weekly", "Quarterly, or after an election", "Weekly and quarterly", "Weekly",
-              "Every poll", "Every poll", "Every poll", "Daily", "Every poll"),
+              "Every poll", "Every poll", "Every poll", "Every poll", "Daily", "Every poll"),
   holds = c("One row per statement: the headline and the forecast text.",
             "One row per risk polygon, flood source and day, with impact, likelihood and risk level.",
             "Each FGS shape that overlaps an EA flood warning or alert area.",
@@ -60,6 +60,7 @@ GUIDE_TABLES <- data.frame(
             "Which EA areas overlap which constituencies.",
             "Current MPs and their contact details.",
             "What changed in the forecast against the previous statement. History is kept.",
+            "One row per statement that was compared, with the number of differences. Tells \"nothing moved\" from \"not compared yet\".",
             "One row per constituency: the forecast, the warnings in force and the MP. The latest statement only.",
             "Draft briefings for MPs. Nothing is sent. Older statements' drafts are kept.",
             "Days each constituency sat at each risk level, by month. Sparse.",
@@ -199,12 +200,13 @@ guide_products <- function(s) {
     list(
       id = "changes", title = "Changed since the previous statement", where = "FGS Interrogator",
       answers = "What is different from the last statement?",
-      tables = c("fgs_constituency_changes"),
+      tables = c("fgs_constituency_changes", "fgs_changes_log"),
       steps = c(
         "The pipeline takes the two newest complete statements.",
         "It compares only the dates both cover. Day 1 of the newer statement is day 2 of the older one, so a day that rolls off the end, or is newly added, is never reported as a change.",
         sprintf("For each constituency, date and flood source it takes the worst risk in each statement. Polygons covering less than %s of a constituency are ignored.", guide_pct(th$contact_min_pct)),
         "It stores every difference and nothing else. A change is new (nothing before, a risk now), escalated (the rank rose), de-escalated (the rank fell but a risk remains) or cleared (a risk before, none now).",
+        "It also writes one row to a log for each comparison, including when nothing changed, so an empty result can be told from a comparison that has not run yet.",
         "This app reduces the rows to one per constituency: its highest new risk, with a count of other cells that changed. Rises come first. Up means new or escalated; down means de-escalated or cleared."
       ),
       read = c(

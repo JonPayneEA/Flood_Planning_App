@@ -620,6 +620,16 @@ fetch_pipeline_health <- function() demo_health(demo_current()$problem)
 
 fetch_changes <- function(statement_id) demo_changes_for(demo_current()$scenario, as.integer(statement_id))
 
+fetch_changes_log <- function(statement_id) {
+  st <- demo_statements_table(demo_current()$scenario)
+  idx <- match(as.integer(statement_id), st$statement_id)
+  if (is.na(idx) || idx == 1L) return(data.table())      # the oldest has nothing before it, so is never compared
+  ch <- demo_changes_for(demo_current()$scenario, as.integer(statement_id))
+  data.table(statement_id = as.integer(statement_id), previous_statement_id = st$statement_id[idx - 1L],
+             previous_issued_at = st$issued_at[idx - 1L], days_compared_from = NA_character_,
+             days_compared_to = NA_character_, n_changes = nrow(ch), status = "compared")
+}
+
 fetch_situation <- function() copy(demo_situation(demo_current()$scenario))
 
 fetch_briefing_drafts <- function(statement_id = NULL) {

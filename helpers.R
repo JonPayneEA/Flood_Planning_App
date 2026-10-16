@@ -216,13 +216,27 @@ summarise_changes <- function(ch) {
 # the same risk as in the statement before. A calm "nothing moved" is a result,
 # so it names the statement it was compared with. `recent` is the statement
 # list, newest first. With no earlier statement in it, nothing was compared.
+# `log` (fetch_changes_log) says whether job 18 really made the comparison.
 # -----------------------------------------------------------------------------
-no_change_message <- function(recent, statement_id) {
+no_change_message <- function(recent, statement_id, log = NULL) {
   none <- "No earlier statement to compare with, so no changes are recorded."
   if (is.null(recent) || nrow(recent) == 0L || is.null(statement_id)) return(none)
   pos <- match(as.character(statement_id), as.character(recent$statement_id))
   if (is.na(pos) || pos >= nrow(recent)) return(none)
   prev <- recent[pos + 1L]
+  # `log` is job 18's record of the comparison: NULL when that table is not
+  # there to ask, no rows when 18 has not compared this statement yet.
+  if (!is.null(log)) {
+    if (nrow(log) == 0L)
+      return(sprintf("Not yet compared with statement #%s. Notebook 18 has not run for this statement.", prev$statement_id))
+    lg <- log[1L]
+    if (identical(as.character(lg$status), "no_shared_days"))
+      return(sprintf("Not compared: this statement and #%s share no forecast days.", lg$previous_statement_id))
+    days <- if (!is.na(lg$days_compared_from) && !is.na(lg$days_compared_to))
+      sprintf(", %s to %s", format(as.Date(lg$days_compared_from), "%a %d"), format(as.Date(lg$days_compared_to), "%a %d")) else ""
+    return(sprintf("No change since statement #%s (issued %s%s). Every constituency, day and source holds the same risk.",
+                   lg$previous_statement_id, fmt_statement_time(lg$previous_issued_at), days))
+  }
   sprintf("No change since statement #%s (issued %s). Every constituency, day and source holds the same risk.",
           prev$statement_id, fmt_statement_time(prev$issued_at))
 }

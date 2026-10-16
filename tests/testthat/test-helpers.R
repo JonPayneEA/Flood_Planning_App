@@ -331,3 +331,12 @@ test_that("no_change_message names the statement it was compared with", {
   expect_match(no_change_message(recent, 4921L), "No earlier statement")
   expect_match(no_change_message(recent[0], 1L), "No earlier statement")
 })
+
+test_that("no_change_message reads job 18's log when it has one", {
+  recent <- data.table(statement_id = c(4922L, 4921L), issued_at = c("2026-10-16T09:30:00", "2026-10-15T09:30:00"))
+  lg <- data.table(statement_id = 4922L, previous_statement_id = 4921L, previous_issued_at = "2026-10-15T09:30:00",
+                   days_compared_from = NA_character_, days_compared_to = NA_character_, n_changes = 0L, status = "compared")
+  expect_match(no_change_message(recent, 4922L, lg), "No change since statement #4921 \\(issued Thu 15 Oct 09:30\\)")
+  expect_match(no_change_message(recent, 4922L, lg[0]), "Not yet compared")
+  expect_match(no_change_message(recent, 4921L, lg[0]), "No earlier statement")     # nothing to compare, whatever the log says
+})
