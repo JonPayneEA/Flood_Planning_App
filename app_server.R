@@ -1176,8 +1176,11 @@ server <- function(input, output, session) {
         else "Changes against the previous statement could not be loaded."))
     }
     per <- summarise_changes(ch)
+    headline <- headline_counts_message(changes_log(), nrow(per))
     if (nrow(per) == 0L) {
-      return(tags$p(class = "text-muted", no_change_message(recent_rv(), selected_statement()$statement_id, changes_log())))
+      return(tagList(
+        tags$p(class = "text-muted", no_change_message(recent_rv(), selected_statement()$statement_id, changes_log())),
+        if (!is.null(headline)) tags$p(class = "text-muted", headline)))
     }
     n_up <- sum(per$up); n_down <- sum(!per$up)
     show <- rbind(head(per[up == TRUE], 5L), head(per[up == FALSE], 3L))
@@ -1191,6 +1194,7 @@ server <- function(input, output, session) {
     tagList(
       tags$p(tags$strong(n_up), " up, ", tags$strong(n_down), " down (constituencies)."),
       tags$table(class = "ov-table", tags$tbody(rows)),
+      if (!is.null(headline)) tags$p(class = "text-muted mt-2 mb-0", headline),
       tags$div(class = "ov-foot", "Rises first. ", nav_link("Open the map", "FGS Interrogator"))
     )
   })
@@ -1429,7 +1433,8 @@ server <- function(input, output, session) {
     if (nrow(ch) == 0L) {
       return(tags$div(class = "changes-wrap",
         tags$div(class = "changes-strip text-muted",
-          no_change_message(recent_rv(), selected_statement()$statement_id, changes_log()))))
+          no_change_message(recent_rv(), selected_statement()$statement_id, changes_log()),
+          { hl <- headline_counts_message(changes_log(), 0L); if (!is.null(hl)) tags$div(class = "mt-1", hl) })))
     }
     per <- summarise_changes(ch)
     n_up <- sum(per$up); n_down <- sum(!per$up)

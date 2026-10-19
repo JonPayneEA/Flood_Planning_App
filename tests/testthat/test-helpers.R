@@ -340,3 +340,24 @@ test_that("no_change_message reads job 18's log when it has one", {
   expect_match(no_change_message(recent, 4922L, lg[0]), "Not yet compared")
   expect_match(no_change_message(recent, 4921L, lg[0]), "No earlier statement")     # nothing to compare, whatever the log says
 })
+
+test_that("headline counts say 30 to none, and why no day-by-day change is listed", {
+  lg <- data.table(statement_id = 4925L, previous_statement_id = 4924L, n_changes = 0L, status = "compared",
+                   flagged_previous = 30L, flagged_new = 0L, medium_plus_previous = 0L, medium_plus_new = 0L)
+  m <- headline_counts_message(lg, 0L)
+  expect_match(m, "30 in statement #4924, none in this one")
+  expect_match(m, "At Medium or above: none and none")
+  expect_match(m, "days this statement no longer covers")
+  expect_false(grepl("no longer covers", headline_counts_message(lg, 5L)))     # changes are listed, no explanation needed
+  same <- copy(lg)[, `:=`(flagged_new = 30L)]
+  expect_false(grepl("no longer covers", headline_counts_message(same, 0L)))   # counts agree, nothing to explain
+})
+
+test_that("headline counts are left out when the log or its columns are not there", {
+  lg <- data.table(statement_id = 1L, previous_statement_id = 0L, n_changes = 0L, status = "compared")
+  expect_null(headline_counts_message(lg, 0L))                      # an older log, without the counts
+  expect_null(headline_counts_message(NULL, 0L))
+  expect_null(headline_counts_message(lg[0], 0L))
+  lg2 <- cbind(lg, data.table(flagged_previous = NA_integer_, flagged_new = 2L, medium_plus_previous = 0L, medium_plus_new = 0L))
+  expect_null(headline_counts_message(lg2, 0L))                     # a missing count, not a made-up zero
+})

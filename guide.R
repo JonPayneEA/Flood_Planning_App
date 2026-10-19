@@ -207,6 +207,7 @@ guide_products <- function(s) {
         sprintf("For each constituency, date and flood source it takes the worst risk in each statement. Polygons covering less than %s of a constituency are ignored.", guide_pct(th$contact_min_pct)),
         "It stores every difference and nothing else. A change is new (nothing before, a risk now), escalated (the rank rose), de-escalated (the rank fell but a risk remains) or cleared (a risk before, none now).",
         "It also writes one row to a log for each comparison, including when nothing changed, so an empty result can be told from a comparison that has not run yet.",
+        "The same log row counts the constituencies each statement flags over all five of its own days, at any risk and at Medium or above. That is how a forecast that has gone from 30 constituencies at Very Low to none still shows, even when the days it sat on have rolled off the newer statement.",
         "This app reduces the rows to one per constituency: its highest new risk, with a count of other cells that changed. Rises come first. Up means new or escalated; down means de-escalated or cleared."
       ),
       read = c(
@@ -215,6 +216,7 @@ guide_products <- function(s) {
       ),
       limits = c(
         "Only one statement back is compared. The first complete statement has nothing to compare with.",
+        "The day-by-day changes leave out days the newer statement no longer covers, on purpose. A risk on a day that has rolled off is not a change in the forecast, so it is not listed there. The headline counts line above them is where it shows.",
         "The history is kept, so any statement's changes can be read. The look-back does not need this table to work, but escalation then shows as not available."
       )
     ),

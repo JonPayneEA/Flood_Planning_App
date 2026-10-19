@@ -595,20 +595,17 @@ fetch_changes <- function(statement_id) {
 # fetch_changes_log()
 #
 # One row if job 18 compared this statement with the one before it, none if it
-# has not. n_changes = 0 is a real "nothing moved". The table is newer than the
+# has not. n_changes = 0 is a real "nothing moved". flagged_* and medium_plus_*
+# count the constituencies each statement flags over all five of its own days. The table is newer than the
 # rest, so a caller treats an error (table missing) as "unknown", not a gap.
 # -----------------------------------------------------------------------------
 
 fetch_changes_log <- function(statement_id) {
+  # SELECT * on purpose: the headline counts (flagged_*, medium_plus_*) arrive with a
+  # later version of job 18. Until it has run, the log table has no such columns, and
+  # naming them would fail the whole query and lose the rest of the row.
   db_query(sprintf("
-    SELECT
-      statement_id,
-      previous_statement_id,
-      previous_issued_at,
-      days_compared_from,
-      days_compared_to,
-      n_changes,
-      status
+    SELECT *
     FROM %s
     WHERE statement_id    = %d
       AND geometry_source = '%s'

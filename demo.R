@@ -625,9 +625,14 @@ fetch_changes_log <- function(statement_id) {
   idx <- match(as.integer(statement_id), st$statement_id)
   if (is.na(idx) || idx == 1L) return(data.table())      # the oldest has nothing before it, so is never compared
   ch <- demo_changes_for(demo_current()$scenario, as.integer(statement_id))
+  scn <- demo_current()$scenario
+  now_rk  <- demo_situation_for(scn, as.integer(statement_id))$fgs_worst_rank
+  prev_rk <- demo_situation_for(scn, st$statement_id[idx - 1L])$fgs_worst_rank
   data.table(statement_id = as.integer(statement_id), previous_statement_id = st$statement_id[idx - 1L],
              previous_issued_at = st$issued_at[idx - 1L], days_compared_from = NA_character_,
-             days_compared_to = NA_character_, n_changes = nrow(ch), status = "compared")
+             days_compared_to = NA_character_, n_changes = nrow(ch), status = "compared",
+             flagged_previous = sum(prev_rk >= 1L, na.rm = TRUE), flagged_new = sum(now_rk >= 1L, na.rm = TRUE),
+             medium_plus_previous = sum(prev_rk >= 3L, na.rm = TRUE), medium_plus_new = sum(now_rk >= 3L, na.rm = TRUE))
 }
 
 fetch_potential_areas <- function(statement_id, min_rank = 0L) {

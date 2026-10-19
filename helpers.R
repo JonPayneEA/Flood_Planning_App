@@ -218,6 +218,34 @@ summarise_changes <- function(ch) {
 # list, newest first. With no earlier statement in it, nothing was compared.
 # `log` (fetch_changes_log) says whether job 18 really made the comparison.
 # -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# headline_counts_message()
+#
+# The day-by-day comparison only covers days both statements share, so a forecast
+# that sits on a day that has rolled off shows no change there. "30 constituencies
+# at Very Low yesterday, none today" is still a real change in the forecast, so job
+# 18 also logs how many constituencies each statement flags over all five of its own
+# days. This turns that log row into one line. NULL when the log, or those columns
+# (an older pipeline), are not there. `n_changes` is the number of day-by-day
+# changes found: when it is zero and the counts differ, the line says why.
+# -----------------------------------------------------------------------------
+headline_counts_message <- function(log, n_changes = NA_integer_) {
+  need <- c("flagged_previous", "flagged_new", "medium_plus_previous", "medium_plus_new")
+  if (is.null(log) || nrow(log) == 0L || !all(c(need, "previous_statement_id") %in% names(log))) return(NULL)
+  lg <- log[1L]
+  v  <- vapply(need, function(n) suppressWarnings(as.integer(lg[[n]])), integer(1))
+  if (anyNA(v)) return(NULL)
+  num  <- function(x) if (x == 0L) "none" else as.character(x)
+  text <- sprintf("Constituencies with a forecast risk: %s in statement #%s, %s in this one. At Medium or above: %s and %s.",
+                  num(v[["flagged_previous"]]), lg$previous_statement_id, num(v[["flagged_new"]]),
+                  num(v[["medium_plus_previous"]]), num(v[["medium_plus_new"]]))
+  differs <- v[["flagged_previous"]] != v[["flagged_new"]] || v[["medium_plus_previous"]] != v[["medium_plus_new"]]
+  if (isTRUE(n_changes == 0L) && differs)
+    text <- paste(text, "The difference is on days this statement no longer covers, so no individual change is listed.")
+  text
+}
+
+
 no_change_message <- function(recent, statement_id, log = NULL) {
   none <- "No earlier statement to compare with, so no changes are recorded."
   if (is.null(recent) || nrow(recent) == 0L || is.null(statement_id)) return(none)
