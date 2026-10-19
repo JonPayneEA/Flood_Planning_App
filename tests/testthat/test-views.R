@@ -470,3 +470,12 @@ test_that("the minimum forecast risk filter is passed to the potential-areas que
   })
   expect_equal(seen, c(3L, 0L))
 })
+
+test_that("the Overview shows 30 to none beside a no-change result, and nothing extra without the counts", {
+  lg <- log_row(0L)[, `:=`(flagged_previous = 30L, flagged_new = 0L, medium_plus_previous = 0L, medium_plus_new = 0L)]
+  t <- changes_text(lg)
+  expect_match(t[["ov"]], "No change since statement #6")
+  expect_match(t[["ov"]], "30 in statement #6, none in this one")
+  expect_match(t[["strip"]], "30 in statement #6, none in this one")
+  expect_false(grepl("forecast risk: ", changes_text(log_row(0L))[["ov"]]))       # an older log: no counts line
+})

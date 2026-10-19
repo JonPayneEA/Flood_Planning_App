@@ -276,7 +276,7 @@ Guide and keep a fixed meaning, and the brand green must never be read as the
   the pipeline views, drop the cache and show "New pipeline data loaded". A
   user on the newest statement follows to the new one; a user who chose an
   older statement stays on it.
-- **Changes panel.** It reads `fgs_changes_log` (written by notebook 18) to tell
+- **Changes panel.** Below the list it shows how many constituencies each statement flags over all five of its own days (any risk, and Medium or above), so "30 yesterday, none today" shows even when those days have rolled off and no day-by-day change is listed. This needs the newer notebook 18; without it the line is left out. It reads `fgs_changes_log` (written by notebook 18) to tell
   "compared, nothing moved" from "not compared yet". Without that table, an empty
   result is trusted as no change, as before. The table is never reported as missing.
 - **Warehouse outages.** A network failure drops the shared connection and is
