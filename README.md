@@ -125,6 +125,7 @@ Optional settings, all in `.env.example`:
 | `FGS_WARNING_CONTACT_MIN_PCT` | `0.01` | Share of a flood warning or alert area that must lie inside a constituency for it to count as under that constituency's forecast. Match the pipeline's `WARNING_CONTACT_MIN_PCT`. |
 | `FGS_STALE_HOURS` | `3` | Hours without a pipeline health update before the stale-data banner shows. |
 | `FGS_CACHE_SECONDS` | `600` | How long query results are shared across sessions. `0` is off (a missing table is still remembered for five minutes). |
+| `FGS_CACHE_GEOMETRY_ENTRIES` | `30` | How many map-geometry results the shared cache keeps. One entry is one layer for one statement and day. The oldest is dropped first, so memory stays bounded. Other results are capped separately at 200. |
 | `FGS_DEMO_MODE` | off | `1` runs on generated data with no warehouse. See Demo mode. |
 
 Set the environment variables under the deployed app's *Vars* tab.

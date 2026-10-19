@@ -207,6 +207,12 @@ if (AUTO_REFRESH_SECONDS > 0 && AUTO_REFRESH_SECONDS < 30) {
 STALE_HOURS       <- env_number("FGS_STALE_HOURS", 3, min = 0.1)
 CACHE_TTL_SECONDS <- env_number("FGS_CACHE_SECONDS", 600)
 
+# Map geometry is the heavy part of the shared cache: one entry is one layer for
+# one statement and day, and holds every polygon. The cache keeps only the newest
+# this many geometry entries and drops the oldest, so memory stays bounded however
+# much people browse. Light results are limited separately, by count (200).
+GEOMETRY_CACHE_ENTRIES <- as.integer(env_number("FGS_CACHE_GEOMETRY_ENTRIES", 30, min = 1))
+
 # How many times a query is retried after a network failure (not after a SQL
 # error, which is never retried). 0 turns retrying off. Each retry waits 1.5 s,
 # then 3 s, and the wait blocks the app's R process, so keep this small.

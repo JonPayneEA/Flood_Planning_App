@@ -102,3 +102,28 @@ test_that("the remembered error keeps its message, so the app can still name the
   msg <- tryCatch(f(), error = function(e) conditionMessage(e))
   expect_equal(missing_table_info(msg)$table, "fgs_constituency_changes")
 })
+
+test_that("geometry entries roll at their own cap, oldest first, and leave other entries alone", {
+  d <- load_data_layer(); d$cache_clear()
+  d$GEOMETRY_CACHE_ENTRIES <- 3L
+  ctr <- make_counter()
+  geo   <- d$with_cache(ctr$fn, "geo",   ttl = 60, group = "geometry")
+  light <- d$with_cache(ctr$fn, "light", ttl = 60)
+  light(1)
+  for (i in 1:5) { geo(i); Sys.sleep(0.01) }
+  keys <- ls(d$.fgs_cache)
+  expect_equal(sum(grepl("^geo\\|", keys)), 3L)               # only the newest three geometry entries remain
+  expect_false("geo|1" %in% keys); expect_false("geo|2" %in% keys)
+  expect_true(all(c("geo|3", "geo|4", "geo|5") %in% keys))
+  expect_true("light|1" %in% keys)                            # the light entry was not evicted by geometry
+  before <- ctr$calls(); geo(5); expect_equal(ctr$calls(), before)   # the newest is still a hit
+})
+
+test_that("the geometry fetchers are all in the capped group", {
+  src <- readLines(file.path(app_root, "data.R"), warn = FALSE)
+  for (nm in c("fetch_risk_polygons", "fetch_ea_geometry", "fetch_constituency_geometry", "fetch_constituency_shape", "fetch_constituency_risk_geometry")) {
+    line <- grep(paste0("^", nm, "\\s*<- with_cache"), src, value = TRUE)
+    expect_length(line, 1L)
+    expect_match(line, 'group = "geometry"', info = nm)
+  }
+})
