@@ -51,7 +51,7 @@ or after a network failure), so that overhead is paid once, not per query.
 | `global.R` | Library loads, env vars, constants. |
 | `guide.R` | The Guide tab: how each product is calculated. All the wording is here and is tested against the code and the pipeline's `config.py`. |
 | `demo.R` | Synthetic data for demo mode. Replaces every query. Fictional throughout. |
-| `theme.R` | Environment Agency colours and Bootstrap theme, in one place. Provisional palette. |
+| `theme.R` | Logo palette, Bootstrap theme and header mark, in one place. |
 | `helpers.R` | Pure functions (colours, popups, staleness, statement choice). Unit tested. |
 | `app_ui.R` | Layout, sidebar, panels, custom CSS, risk matrix grid builder. Every section is a function of the request, which bookmarking needs. |
 | `app_server.R` | Reactive logic, filtering, output bindings, map updates. |
@@ -257,17 +257,19 @@ or line with a bug report.
 
 ## Look and feel
 
-Colours come from `theme.R`, and only from there. The palette is provisional:
-the greens are sampled from the Environment Agency logo, the blues and magenta
-were already in the app, and no official palette was available. Replace the
-values in `EA_PALETTE` with the brand file's, and `tests/` will fail if a swap
-breaks a contrast pair. The brand green is borderline for white text (4.43:1), so
-a darker green is used wherever text sits on it.
+Colours come from `theme.R`, and only from there. The palette is sampled from the
+tool's logo: a navy field, white house and sky-blue waves. Change the values in
+`APP_PALETTE` and `tests/` will fail if a swap breaks a contrast pair. The sky and
+cyan blues are decoration only, because they are too light for text on white.
+
+The header shows the logo mark, drawn inline from `theme.R` (`app_logo()`), so no
+file has to ship. To use the artwork itself, drop a mark-only file (no lettering)
+at `www/logo.svg` or `www/logo.png`; it replaces the drawn mark.
 
 The FGS risk colours (red, amber, yellow, green on the matrix, map, chips and
 heat grid) are deliberately **not** brand colours. They come from the FGS User
-Guide and keep a fixed meaning, and the brand green must never be read as the
-"Very Low" green. To add the logo, put the approved file at `www/ea-logo.svg`.
+Guide and keep a fixed meaning. The frame is blue so that it is never read as the
+"Very Low" green, and magenta stays reserved for flood warning areas on the map.
 
 ## Behaviour worth knowing
 

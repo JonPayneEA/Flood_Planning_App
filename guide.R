@@ -95,7 +95,7 @@ guide_foundations <- function(s) {
       show = "matrix",
       limits = c(
         "The pipeline takes matrix positions from the FGS Public API documentation. The documentation gives positions only, so the risk level and colour for each cell come from the FGS User Guide. They should be checked against the published guide.",
-        "The risk colours are fixed by the User Guide and always carry their name as text. The green of this app's header is the Environment Agency's, not a risk colour."
+        "The risk colours are fixed by the User Guide and always carry their name as text. The blue frame of this app (header, tabs, buttons) is branding, not a risk colour."
       )
     ),
     list(
