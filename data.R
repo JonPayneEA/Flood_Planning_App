@@ -400,10 +400,11 @@ fetch_ea_geometry <- function(statement_id, day_index) {
     ))
   }
 
-  # Geometry comes back as GeoJSON strings, same as the risk polygons.
+  # Geometry comes back as GeoJSON strings, same as the risk polygons. A collection
+  # (a polygon with a stray line beside it) is reduced to its polygon parts.
   geom <- geojsonsf::geojson_sfc(dt$geometry)
   dt[, geometry := NULL]
-  sf::st_sf(dt, geometry = geom, crs = 4326)
+  polygons_only(sf::st_sf(dt, geometry = geom, crs = 4326))
 }
 
 
@@ -476,7 +477,7 @@ fetch_constituency_geometry <- function(statement_id, day_index) {
 
   geom <- geojsonsf::geojson_sfc(dt$geometry)
   dt[, geometry := NULL]
-  sf::st_sf(dt, geometry = geom, crs = 4326)
+  polygons_only(sf::st_sf(dt, geometry = geom, crs = 4326))
 }
 
 

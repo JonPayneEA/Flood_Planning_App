@@ -302,6 +302,31 @@ with_layer_guard <- function(label, busy, expr, notify = function(msg) invisible
 
 
 # -----------------------------------------------------------------------------
+# polygons_only()
+#
+# The polygon layers (EA flood areas, constituencies) are drawn with
+# leaflet::addPolygons(), which only understands POLYGON and MULTIPOLYGON. A
+# source geometry can arrive as a GEOMETRYCOLLECTION (a polygon with a stray line
+# or point beside it), and one such row stops the whole layer with "Don't know how
+# to get polygon data from object of class XY,GEOMETRYCOLLECTION,sfg". Collections
+# are reduced to their polygon parts and every other non-polygon row is dropped, so
+# one odd shape cannot take the layer down.
+# -----------------------------------------------------------------------------
+
+polygons_only <- function(shape) {
+  if (is.null(shape) || nrow(shape) == 0L) return(shape)
+  type <- as.character(sf::st_geometry_type(shape))
+  coll <- type == "GEOMETRYCOLLECTION"
+  if (any(coll)) {
+    parts <- suppressWarnings(sf::st_collection_extract(shape[coll, ], "POLYGON"))
+    shape <- rbind(shape[!coll, ], parts)
+    type  <- as.character(sf::st_geometry_type(shape))
+  }
+  shape[type %in% c("POLYGON", "MULTIPOLYGON"), ]
+}
+
+
+# -----------------------------------------------------------------------------
 # normalise_name()                                              POC-ONLY
 #
 # Key for matching a constituency name to an MP record, where the two tables
