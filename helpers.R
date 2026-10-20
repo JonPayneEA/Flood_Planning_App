@@ -327,6 +327,20 @@ polygons_only <- function(shape) {
 
 
 # -----------------------------------------------------------------------------
+# line_rows()
+#
+# TRUE for the rows of an sf object whose geometry is a line. Coastal FGS
+# geometries are lines along the coast, not areas. Drawn with addPolygons() a line
+# is closed into a filled shape, so the layer draws them with addPolylines() instead.
+# -----------------------------------------------------------------------------
+
+line_rows <- function(shape) {
+  if (is.null(shape) || nrow(shape) == 0L) return(logical())
+  as.character(sf::st_geometry_type(shape)) %in% c("LINESTRING", "MULTILINESTRING")
+}
+
+
+# -----------------------------------------------------------------------------
 # normalise_name()                                              POC-ONLY
 #
 # Key for matching a constituency name to an MP record, where the two tables

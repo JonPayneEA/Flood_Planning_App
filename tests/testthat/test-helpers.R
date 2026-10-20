@@ -383,3 +383,15 @@ test_that("polygons_only passes empty and polygon-only input through", {
   one  <- sf::st_sf(code = "a", geometry = sf::st_sfc(poly, crs = 4326))
   expect_equal(polygons_only(one), one)
 })
+
+
+test_that("line_rows picks out line geometries and nothing else", {
+  poly <- sf::st_polygon(list(rbind(c(0, 0), c(1, 0), c(1, 1), c(0, 0))))
+  line <- sf::st_linestring(rbind(c(5, 5), c(6, 6)))
+  multi <- sf::st_multilinestring(list(rbind(c(0, 0), c(1, 1)), rbind(c(2, 2), c(3, 3))))
+  shape <- sf::st_sf(code = c("a", "b", "c"), geometry = sf::st_sfc(poly, line, multi, crs = 4326))
+  expect_equal(line_rows(shape), c(FALSE, TRUE, TRUE))
+  expect_equal(line_rows(shape[1, ]), FALSE)
+  expect_equal(line_rows(sf::st_sf(code = character(), geometry = sf::st_sfc(), crs = 4326)), logical())
+  expect_equal(line_rows(NULL), logical())
+})
