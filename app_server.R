@@ -1095,7 +1095,7 @@ server <- function(input, output, session) {
       return(tags$div(class = "alert alert-warning", "The latest statement could not be read. Check the pipeline status above."))
     }
     worst <- max(d$sit$fgs_worst_rank, 0L, na.rm = TRUE)
-    colour <- if (worst == 0L) EA_PALETTE$green else RANK_HEX[worst + 1L]
+    colour <- if (worst == 0L) APP_PALETTE$bright else RANK_HEX[worst + 1L]
     tags$div(
       class = "ov-headline", style = paste0("border-left-color:", colour, ";"),
       tags$div(class = "ov-kicker",
@@ -1540,7 +1540,7 @@ server <- function(input, output, session) {
     proxy <- leaflet::leafletProxy("live_map")
     proxy <- leaflet::clearGroup(proxy, "goto")
     proxy <- leaflet::addPolygons(proxy, data = shape, group = "goto",
-                                  color = EA_PALETTE$blue_dark, weight = 3, fill = FALSE,
+                                  color = APP_PALETTE$blue, weight = 3, fill = FALSE,
                                   label = shape$constituency_name[1L])
     leaflet::flyToBounds(proxy,
                          lng1 = bbox[["xmin"]], lat1 = bbox[["ymin"]],

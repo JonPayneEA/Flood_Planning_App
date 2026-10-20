@@ -116,30 +116,30 @@ matrix_filter_ui <- function() {
 custom_css <- "
 /* --- 1. Layout chrome ----------------------------------------------------- */
 
-body { background: var(--ea-bg); font-size: 14px; }
+body { background: var(--app-bg); font-size: 14px; }
 
-.shiny-sidebar { background: var(--ea-tint); padding: 20px; height: 100%; }
+.shiny-sidebar { background: var(--app-tint); padding: 20px; height: 100%; }
 
 .shiny-sidebar h6 {
   font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
-  color: var(--ea-muted); margin-top: 16px; margin-bottom: 8px;
+  color: var(--app-muted); margin-top: 16px; margin-bottom: 8px;
 }
 .shiny-sidebar h6:first-child { margin-top: 0; }
 
 .panel-section {
-  background: var(--ea-surface); border: 1px solid var(--ea-line); border-radius: 4px;
+  background: var(--app-surface); border: 1px solid var(--app-line); border-radius: 4px;
   padding: 14px; margin-bottom: 12px;
 }
 .panel-h {
   font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;
-  color: var(--ea-muted); padding-bottom: 6px; border-bottom: 1px solid var(--ea-tint);
+  color: var(--app-muted); padding-bottom: 6px; border-bottom: 1px solid var(--app-tint);
 }
 
 /* --- 2. Stat cards -------------------------------------------------------- */
 
 div.stat-card {
-  background: var(--ea-surface);
-  border: 1px solid var(--ea-line);
+  background: var(--app-surface);
+  border: 1px solid var(--app-line);
   border-radius: 4px;
   padding: 12px;
   text-align: center;
@@ -148,22 +148,22 @@ div.stat-card {
   display: block;
   cursor: default;
 }
-div.stat-card .stat-num { font-size: 24px; font-weight: 700; line-height: 1; color: var(--ea-ink); }
-div.stat-card .stat-num.accent { color: var(--ea-green-dark); }
+div.stat-card .stat-num { font-size: 24px; font-weight: 700; line-height: 1; color: var(--app-ink); }
+div.stat-card .stat-num.accent { color: var(--app-blue); }
 div.stat-card .stat-label {
   font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em;
-  color: var(--ea-muted); margin-top: 4px;
+  color: var(--app-muted); margin-top: 4px;
 }
 
 /* --- Affected-area list rows --------------------------------------------- */
 
 .area-row {
   display: flex; align-items: center; padding: 6px 0;
-  border-bottom: 1px solid var(--ea-tint); font-size: 13px;
+  border-bottom: 1px solid var(--app-tint); font-size: 13px;
   cursor: pointer;
 }
 .area-row:last-child { border-bottom: none; }
-.area-row:hover { background: var(--ea-bg); }
+.area-row:hover { background: var(--app-bg); }
 .risk-bar { width: 4px; height: 22px; margin-right: 10px; border-radius: 1px; }
 .risk-bar.red    { background: #b02020; }
 .risk-bar.amber  { background: #e08020; }
@@ -205,7 +205,7 @@ div.stat-card .stat-label {
 .matrix-cell.red    { background: #b02020; }
 
 .matrix-col-header {
-  font-size: 10px; color: var(--ea-muted); text-align: left;
+  font-size: 10px; color: var(--app-muted); text-align: left;
   transform: rotate(35deg);
   transform-origin: bottom left;
   white-space: nowrap;
@@ -213,8 +213,8 @@ div.stat-card .stat-label {
   z-index: 10;
   align-self: start;
 }
-.matrix-row-header { font-size: 10px; color: var(--ea-muted); text-align: right; padding-right: 4px; line-height: 1.15; }
-.matrix-row-header .band { font-size: 9px; color: var(--ea-muted); }
+.matrix-row-header { font-size: 10px; color: var(--app-muted); text-align: right; padding-right: 4px; line-height: 1.15; }
+.matrix-row-header .band { font-size: 9px; color: var(--app-muted); }
 
 .matrix-likelihood-label {
   writing-mode: vertical-rl;
@@ -222,13 +222,13 @@ div.stat-card .stat-label {
   text-align: center;
   font-size: 10px;
   font-weight: 600;
-  color: var(--ea-muted);
+  color: var(--app-muted);
 }
 .matrix-impact-label {
   text-align: center;
   font-size: 10px;
   font-weight: 600;
-  color: var(--ea-muted);
+  color: var(--app-muted);
 }
 
 /* --- 4. Quiet-state notice ------------------------------------------------ */
@@ -237,9 +237,9 @@ div.stat-card .stat-label {
    A neutral light-blue rather than warning-amber, because this is a normal
    operational state. */
 .quiet-notice {
-  background: var(--ea-tint);
-  border: 1px solid var(--ea-green-mid);
-  color: var(--ea-ink);
+  background: var(--app-tint);
+  border: 1px solid var(--app-ice);
+  color: var(--app-ink);
   border-radius: 4px;
   padding: 10px 14px;
   margin-bottom: 12px;
@@ -265,8 +265,8 @@ div.stat-card .stat-label {
 .map-spinner {
   width: 36px;
   height: 36px;
-  border: 4px solid var(--ea-line);
-  border-top-color: var(--ea-green-dark);
+  border: 4px solid var(--app-line);
+  border-top-color: var(--app-navy);
   border-radius: 50%;
   animation: map-spin 0.8s linear infinite;
 }
@@ -277,9 +277,9 @@ div.stat-card .stat-label {
 /* --- 6. Headline notice & statement info boxes ----------------------------- */
 
 .headline-notice {
-  background: var(--ea-surface);
-  border: 1px solid var(--ea-line);
-  border-left: 4px solid var(--ea-line);  /* colour overridden inline from risk keyword */
+  background: var(--app-surface);
+  border: 1px solid var(--app-line);
+  border-left: 4px solid var(--app-line);  /* colour overridden inline from risk keyword */
   border-radius: 4px;
   padding: 10px 14px;
   margin-bottom: 12px;
@@ -293,9 +293,9 @@ div.stat-card .stat-label {
   gap: 8px;
 }
 .source-info-card {
-  background: var(--ea-surface);
-  border: 1px solid var(--ea-line);
-  border-left: 4px solid var(--ea-line);  /* width fixed; colour overridden inline per card */
+  background: var(--app-surface);
+  border: 1px solid var(--app-line);
+  border-left: 4px solid var(--app-line);  /* width fixed; colour overridden inline per card */
   border-radius: 4px;
   padding: 10px 14px;
 }
@@ -303,12 +303,12 @@ div.stat-card .stat-label {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--ea-muted);
+  color: var(--app-muted);
   margin-bottom: 4px;
 }
 .source-info-value {
   font-size: 13px;
-  color: var(--ea-ink);
+  color: var(--app-ink);
   line-height: 1.4;
 }
 
@@ -331,11 +331,11 @@ div.stat-card .stat-label {
 .health-warn .dot { background: #e08020; }
 .health-fail { color: #8b1a1a; border-color: #b02020; background: #f9e5e5; }
 .health-fail .dot { background: #b02020; }
-.health-unknown { color: var(--ea-muted); border-color: var(--ea-line-strong); background: var(--ea-tint); }
-.health-unknown .dot { background: var(--ea-line-strong); }
+.health-unknown { color: var(--app-muted); border-color: var(--app-line-strong); background: var(--app-tint); }
+.health-unknown .dot { background: var(--app-line-strong); }
 
 .changes-strip {
-  background: var(--ea-surface); border: 1px solid var(--ea-line); border-radius: 6px;
+  background: var(--app-surface); border: 1px solid var(--app-line); border-radius: 6px;
   padding: 8px 12px; margin-bottom: 12px; font-size: 13px;
 }
 .changes-strip summary { cursor: pointer; }
@@ -350,12 +350,12 @@ div.stat-card .stat-label {
 
 .rank-chip {
   display: inline-block; min-width: 54px; text-align: center;
-  padding: 1px 6px; border-radius: 3px; font-size: 11px; color: var(--ea-ink);
+  padding: 1px 6px; border-radius: 3px; font-size: 11px; color: var(--app-ink);
 }
 .exposure-grid { border-collapse: collapse; font-size: 12px; }
 .exposure-grid th { font-weight: 500; padding: 2px 6px; text-align: center; white-space: nowrap; }
 .exposure-grid td.name { text-align: left; padding: 2px 10px 2px 0; white-space: nowrap; }
-.exposure-grid td.cell { min-width: 40px; height: 24px; text-align: center; border: 2px solid var(--ea-bg); }
+.exposure-grid td.cell { min-width: 40px; height: 24px; text-align: center; border: 2px solid var(--app-bg); }
 .exposure-grid td.total { padding-left: 10px; font-weight: 600; }
 /* --- 7. Header group, changes overlay, KPI row, legends ------------------ */
 
@@ -367,12 +367,12 @@ div.stat-card .stat-label {
 .stale-warn { background: #fdf1e2; border-color: #e08020; color: #6b4300; }
 .gaps-banner {
   margin: 0 15px 8px 15px; padding: 8px 12px; border-radius: 6px; font-size: 13px;
-  background: var(--ea-tint); border: 1px solid var(--ea-green-mid); color: var(--ea-ink);
+  background: var(--app-tint); border: 1px solid var(--app-ice); color: var(--app-ink);
 }
 .stale-banner .btn-link { margin-left: auto; padding: 0; font-size: 13px; }
 
 .header-right { display: flex; align-items: center; gap: 12px; }
-.asof { font-size: 12px; color: var(--ea-muted); }
+.asof { font-size: 12px; color: var(--app-muted); }
 
 .changes-wrap { position: relative; height: 42px; margin-bottom: 10px; z-index: 1100; }
 .changes-wrap .changes-strip {
@@ -380,19 +380,19 @@ div.stat-card .stat-label {
   box-shadow: 0 2px 8px rgba(0,0,0,0.12);
 }
 .changes-strip .chg-row { cursor: pointer; }
-.changes-strip .chg-row:hover { background: var(--ea-tint); }
+.changes-strip .chg-row:hover { background: var(--app-tint); }
 .changes-strip .chg-group td {
   font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em;
-  color: var(--ea-muted); padding-top: 8px;
+  color: var(--app-muted); padding-top: 8px;
 }
-.changes-strip .chg-hint { font-size: 11px; color: var(--ea-muted); margin-top: 4px; }
-.changes-strip .chg-more { color: var(--ea-muted); font-size: 11px; }
+.changes-strip .chg-hint { font-size: 11px; color: var(--app-muted); margin-top: 4px; }
+.changes-strip .chg-more { color: var(--app-muted); font-size: 11px; }
 
 .kpi-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
 .kpi-row .stat-card { flex: 1 1 180px; margin: 0; }
 
 .legend-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
-              font-size: 11px; color: var(--ea-muted); margin: 8px 0; }
+              font-size: 11px; color: var(--app-muted); margin: 8px 0; }
 .legend-bar { width: 160px; height: 10px; border-radius: 2px;
               background: linear-gradient(to right, #fff3bf, #e08020, #b02020); }
 
@@ -406,147 +406,155 @@ div.stat-card .stat-label {
 .exp-bar { height: 8px; background: #e08020; border-radius: 2px; }
 
 .empty-state {
-  padding: 32px; text-align: center; color: var(--ea-muted); background: var(--ea-surface);
-  border: 1px dashed var(--ea-line-strong); border-radius: 6px;
+  padding: 32px; text-align: center; color: var(--app-muted); background: var(--app-surface);
+  border: 1px dashed var(--app-line-strong); border-radius: 6px;
 }
 
 /* Planned tabs sit in a quiet dropdown rather than as four dead tabs. */
-.nav-tabs .dropdown-toggle { color: var(--ea-muted); }
+.nav-tabs .dropdown-toggle { color: var(--app-muted); }
 
 .briefing-body {
-  white-space: pre-wrap; background: var(--ea-surface); border: 1px solid var(--ea-line);
+  white-space: pre-wrap; background: var(--app-surface); border: 1px solid var(--app-line);
   border-radius: 6px; padding: 12px; font-size: 13px;
 }
 
-/* --- 8. Environment Agency frame (colours from theme.R) ------------------- */
+/* --- 8. Brand frame (colours from theme.R) --------------------------------- */
 
-body { font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; color: var(--ea-ink); }
-a { color: var(--ea-blue-dark); }
+body { font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; color: var(--app-ink); }
+a { color: var(--app-blue); }
 
 /* Full-bleed header band. */
 .app-header {
-  background: var(--ea-green-dark); color: var(--ea-surface);
+  background: linear-gradient(135deg, var(--app-navy) 0%, var(--app-navy) 55%, var(--app-navy-deep) 100%);
+  color: var(--app-surface); position: relative; overflow: hidden;
   margin: 0 calc(-0.5 * var(--bs-gutter-x, 1.5rem)) 0 calc(-0.5 * var(--bs-gutter-x, 1.5rem));
   padding: 14px calc(0.5 * var(--bs-gutter-x, 1.5rem));
-  border-bottom: 4px solid var(--ea-green);
+  border-bottom: 4px solid var(--app-sky);
 }
-.app-header h2 { color: var(--ea-surface); font-weight: 700; letter-spacing: 0.01em; }
-.app-header .app-sub { font-size: 12px; color: rgba(255,255,255,0.85); margin-top: 2px; }
+/* A soft wave along the foot of the header, echoing the logo. Decorative. */
+.app-header::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 18px; opacity: 0.9; pointer-events: none;
+  background: url(data:image/svg+xml,%3Csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20viewBox=%270%200%201200%2018%27%20preserveAspectRatio=%27none%27%3E%3Cpath%20d=%27M0%2012%20C150%200%20300%2018%20450%209%20S750%200%20900%2010%20S1100%2014%201200%206%20V18%20H0Z%27%20fill=%27%230161BD%27%20fill-opacity=%27.45%27/%3E%3C/svg%3E) bottom / 100% 100% no-repeat;
+}
+.app-header h2 { color: var(--app-surface); font-weight: 800; letter-spacing: 0.01em; }
+.app-header h2 .hl { color: var(--app-cyan); }
+.app-header .app-sub { font-size: 12px; color: var(--app-ice); margin-top: 2px; }
 .app-header .asof { color: rgba(255,255,255,0.88); }
 .app-header .btn-outline-secondary {
-  color: var(--ea-surface); border-color: rgba(255,255,255,0.7); background: transparent;
+  color: var(--app-surface); border-color: rgba(255,255,255,0.7); background: transparent;
 }
-.app-header .btn-outline-secondary:hover { background: rgba(255,255,255,0.14); color: var(--ea-surface); }
-.ea-logo { height: 36px; margin-right: 14px; }
+.app-header .btn-outline-secondary:hover { background: rgba(255,255,255,0.14); color: var(--app-surface); }
+.brand-mark { height: 46px; margin-right: 14px; flex: none; }
 .header-left { display: flex; align-items: center; }
 
-/* Tabs: green rule on the active tab. */
-.nav-tabs { border-bottom: 1px solid var(--ea-line); margin-top: 10px; }
-.nav-tabs .nav-link { color: var(--ea-blue-dark); border: 0; border-top: 3px solid transparent; border-radius: 0; }
+/* Tabs: sky rule on the active tab. */
+.nav-tabs { border-bottom: 1px solid var(--app-line); margin-top: 10px; }
+.nav-tabs .nav-link { color: var(--app-blue); font-weight: 600; border: 0; border-top: 3px solid transparent; border-radius: 0; }
 .nav-tabs .nav-link.active {
-  color: var(--ea-ink); background: var(--ea-surface); font-weight: 700;
-  border-top: 3px solid var(--ea-green); border-left: 1px solid var(--ea-line); border-right: 1px solid var(--ea-line);
+  color: var(--app-navy); background: var(--app-surface); font-weight: 700;
+  border-top: 3px solid var(--app-sky); border-left: 1px solid var(--app-line); border-right: 1px solid var(--app-line);
 }
 
 /* Buttons and focus. */
-.btn-outline-secondary { color: var(--ea-green-dark); border-color: var(--ea-green-dark); }
-.btn-outline-secondary:hover { background: var(--ea-green-dark); color: var(--ea-surface); border-color: var(--ea-green-dark); }
-.btn-primary { background: var(--ea-green-dark); border-color: var(--ea-green-dark); }
-:focus-visible { outline: 3px solid var(--ea-blue); outline-offset: 2px; }
+.btn-outline-secondary { color: var(--app-navy); border-color: var(--app-navy); }
+.btn-outline-secondary:hover { background: var(--app-navy); color: var(--app-surface); border-color: var(--app-navy); }
+.btn-primary { background: var(--app-blue); border-color: var(--app-blue); }
+:focus-visible { outline: 3px solid var(--app-blue); outline-offset: 2px; }
 
 /* Cards and panels sit on white with a hairline. */
 div.stat-card, .panel-section, .changes-strip, .briefing-body, .empty-state {
-  background: var(--ea-surface); border-color: var(--ea-line);
+  background: var(--app-surface); border-color: var(--app-line);
 }
-.shiny-sidebar { background: var(--ea-tint); }
-table.dataTable thead th { color: var(--ea-ink); border-bottom: 2px solid var(--ea-green); }
+div.stat-card { border-top: 3px solid var(--app-sky); }
+.shiny-sidebar { background: var(--app-tint); }
+table.dataTable thead th { color: var(--app-ink); border-bottom: 2px solid var(--app-sky); }
 .dataTables_wrapper .dataTables_paginate .paginate_button.current {
-  background: var(--ea-green-dark) !important; color: var(--ea-surface) !important; border-color: var(--ea-green-dark) !important;
+  background: var(--app-navy) !important; color: var(--app-surface) !important; border-color: var(--app-navy) !important;
 }
-.exposure-grid td.name { color: var(--ea-ink); }
-.irs--shiny .irs-bar, .irs--shiny .irs-handle { background: var(--ea-green-dark); border-color: var(--ea-green-dark); }
-.irs--shiny .irs-single, .irs--shiny .irs-from, .irs--shiny .irs-to { background: var(--ea-green-dark); }
-.form-check-input:checked { background-color: var(--ea-green-dark); border-color: var(--ea-green-dark); }
-.stat-card .stat-num.accent { color: var(--ea-green-dark); }
+.exposure-grid td.name { color: var(--app-ink); }
+.irs--shiny .irs-bar, .irs--shiny .irs-handle { background: var(--app-navy); border-color: var(--app-navy); }
+.irs--shiny .irs-single, .irs--shiny .irs-from, .irs--shiny .irs-to { background: var(--app-navy); }
+.form-check-input:checked { background-color: var(--app-navy); border-color: var(--app-navy); }
+.stat-card .stat-num.accent { color: var(--app-blue); }
 
 /* Demonstration ribbon and controls (demo mode only). */
 .demo-ribbon {
-  background: var(--ea-ink); color: var(--ea-surface); font-size: 12px; font-weight: 700;
+  background: var(--app-ink); color: var(--app-surface); font-size: 12px; font-weight: 700;
   letter-spacing: 0.06em; text-transform: uppercase; text-align: center; padding: 5px 12px;
   margin: 0 calc(-0.5 * var(--bs-gutter-x, 1.5rem));
 }
 .demo-controls {
   display: flex; gap: 18px; align-items: flex-end; flex-wrap: wrap; font-size: 13px;
-  background: var(--ea-tint); border-bottom: 1px solid var(--ea-line);
+  background: var(--app-tint); border-bottom: 1px solid var(--app-line);
   padding: 8px calc(0.5 * var(--bs-gutter-x, 1.5rem));
   margin: 0 calc(-0.5 * var(--bs-gutter-x, 1.5rem));
 }
 .demo-controls .form-group, .demo-controls .checkbox { margin: 0; }
-.demo-controls label { font-size: 12px; color: var(--ea-muted); }
-.demo-note { font-size: 12px; color: var(--ea-muted); }
-.poc-tag { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ea-ink);
-           background: var(--ea-green-mid); border-radius: 8px; padding: 1px 7px; margin-left: 4px; }
+.demo-controls label { font-size: 12px; color: var(--app-muted); }
+.demo-note { font-size: 12px; color: var(--app-muted); }
+.poc-tag { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--app-ink);
+           background: var(--app-ice); border-radius: 8px; padding: 1px 7px; margin-left: 4px; }
 
 /* Overview. */
-.ov-headline { background: var(--ea-surface); border: 1px solid var(--ea-line); border-left: 6px solid var(--ea-green);
+.ov-headline { background: var(--app-surface); border: 1px solid var(--app-line); border-left: 6px solid var(--app-bright);
                border-radius: 4px; padding: 14px 18px; margin-bottom: 14px; }
-.ov-headline .ov-kicker { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ea-muted); }
+.ov-headline .ov-kicker { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--app-muted); }
 .ov-headline .ov-text { font-size: 19px; line-height: 1.35; margin-top: 4px; }
 .ov-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 14px; }
 .ov-grid .stat-card { margin: 0; }
 .ov-outlook { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 16px; }
-.ov-day { background: var(--ea-surface); border: 1px solid var(--ea-line); border-radius: 4px; padding: 10px; text-align: center; }
-.ov-day .d { font-size: 12px; color: var(--ea-muted); }
-.ov-day .n { font-size: 12px; margin-top: 6px; color: var(--ea-ink); }
+.ov-day { background: var(--app-surface); border: 1px solid var(--app-line); border-radius: 4px; padding: 10px; text-align: center; }
+.ov-day .d { font-size: 12px; color: var(--app-muted); }
+.ov-day .n { font-size: 12px; margin-top: 6px; color: var(--app-ink); }
 .ov-day .rank-chip { margin-top: 6px; min-width: 70px; }
 .ov-cols { display: grid; grid-template-columns: 3fr 2fr; gap: 14px; }
 @media (max-width: 992px) { .ov-cols, .ov-outlook { grid-template-columns: 1fr; } }
-.ov-panel { background: var(--ea-surface); border: 1px solid var(--ea-line); border-radius: 4px; padding: 12px 14px; }
-.ov-panel h6 { margin: 0 0 8px 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ea-muted); }
+.ov-panel { background: var(--app-surface); border: 1px solid var(--app-line); border-radius: 4px; padding: 12px 14px; }
+.ov-panel h6 { margin: 0 0 8px 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--app-muted); }
 .ov-table { width: 100%; font-size: 13px; }
-.ov-table td, .ov-table th { padding: 4px 6px; border-bottom: 1px solid var(--ea-line); }
+.ov-table td, .ov-table th { padding: 4px 6px; border-bottom: 1px solid var(--app-line); }
 .ov-table tr.clickable { cursor: pointer; }
-.ov-table tr.clickable:hover { background: var(--ea-tint); }
-.ov-foot { font-size: 12px; color: var(--ea-muted); margin-top: 10px; }
+.ov-table tr.clickable:hover { background: var(--app-tint); }
+.ov-foot { font-size: 12px; color: var(--app-muted); margin-top: 10px; }
 
 /* --- 9. Guide ------------------------------------------------------------- */
 
 .guide { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 24px; align-items: start; }
 .guide-nav { position: sticky; top: 8px; max-height: calc(100vh - 24px); overflow-y: auto;
-             background: var(--ea-surface); border: 1px solid var(--ea-line); border-radius: 4px; padding: 12px; font-size: 13px; }
-.guide-nav-h { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ea-muted); margin-bottom: 6px; }
+             background: var(--app-surface); border: 1px solid var(--app-line); border-radius: 4px; padding: 12px; font-size: 13px; }
+.guide-nav-h { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--app-muted); margin-bottom: 6px; }
 .guide-nav ul { list-style: none; padding: 0; margin: 0; }
 .guide-nav li { margin: 0; }
 .guide-nav a { display: block; padding: 4px 6px; border-radius: 3px; text-decoration: none; }
-.guide-nav a:hover { background: var(--ea-tint); }
+.guide-nav a:hover { background: var(--app-tint); }
 .guide-content { max-width: 880px; }
 .guide-intro h2 { margin: 0 0 6px 0; }
 .guide-search { max-width: 360px; margin-bottom: 12px; }
-.guide-part { font-size: 12px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--ea-muted); margin: 22px 0 8px 0; }
-.guide-card { background: var(--ea-surface); border: 1px solid var(--ea-line); border-left: 5px solid var(--ea-green);
+.guide-part { font-size: 12px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--app-muted); margin: 22px 0 8px 0; }
+.guide-card { background: var(--app-surface); border: 1px solid var(--app-line); border-left: 5px solid var(--app-bright);
               border-radius: 4px; padding: 14px 18px; margin-bottom: 14px; scroll-margin-top: 8px; }
-.guide-card.guide-poc { border-left-color: var(--ea-green-mid); }
+.guide-card.guide-poc { border-left-color: var(--app-ice); }
 .guide-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .guide-head h3 { margin: 0; font-size: 18px; }
-.guide-card h4 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ea-muted); margin: 14px 0 4px 0; }
+.guide-card h4 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--app-muted); margin: 14px 0 4px 0; }
 .guide-card ol, .guide-card ul { padding-left: 20px; margin-bottom: 4px; }
 .guide-card li { margin-bottom: 4px; }
 .guide-q { margin: 8px 0 4px 0; }
-.guide-where, .guide-tables { font-size: 12px; color: var(--ea-muted); margin: 2px 0; }
-.guide-gap { font-size: 11px; background: var(--ea-tint); border: 1px solid var(--ea-green-mid); border-radius: 8px; padding: 1px 8px; color: var(--ea-ink); }
+.guide-where, .guide-tables { font-size: 12px; color: var(--app-muted); margin: 2px 0; }
+.guide-gap { font-size: 11px; background: var(--app-tint); border: 1px solid var(--app-ice); border-radius: 8px; padding: 1px 8px; color: var(--app-ink); }
 .guide-matrix-wrap { overflow-x: auto; margin: 10px 0; }
 .guide-matrix { border-collapse: separate; border-spacing: 3px; font-size: 12px; }
-.guide-matrix caption { caption-side: bottom; font-size: 11px; color: var(--ea-muted); padding-top: 6px; }
+.guide-matrix caption { caption-side: bottom; font-size: 11px; color: var(--app-muted); padding-top: 6px; }
 .guide-matrix th { font-weight: 500; text-align: center; padding: 3px 8px; }
 .guide-matrix th[scope=row] { text-align: right; white-space: nowrap; }
 .guide-cell { width: 92px; height: 40px; text-align: center; font-weight: 700; border-radius: 3px; }
-.guide-cell.green  { background: #4f9d4f; color: var(--ea-surface); }
-.guide-cell.yellow { background: #f0d040; color: var(--ea-ink); }
-.guide-cell.amber  { background: #e08020; color: var(--ea-ink); }
-.guide-cell.red    { background: #b02020; color: var(--ea-surface); }
+.guide-cell.green  { background: #4f9d4f; color: var(--app-surface); }
+.guide-cell.yellow { background: #f0d040; color: var(--app-ink); }
+.guide-cell.amber  { background: #e08020; color: var(--app-ink); }
+.guide-cell.red    { background: #b02020; color: var(--app-surface); }
 .guide-table { width: 100%; font-size: 13px; border-collapse: collapse; margin-top: 6px; }
-.guide-table th, .guide-table td { padding: 6px 8px; border-bottom: 1px solid var(--ea-line); vertical-align: top; text-align: left; }
-.guide-table thead th { border-bottom: 2px solid var(--ea-green); }
+.guide-table th, .guide-table td { padding: 6px 8px; border-bottom: 1px solid var(--app-line); vertical-align: top; text-align: left; }
+.guide-table thead th { border-bottom: 2px solid var(--app-bright); }
 .guide-lineage { display: block; overflow-x: auto; }
 .guide-glossary dt { font-weight: 700; margin-top: 8px; }
 .guide-glossary dd { margin: 0 0 2px 0; }
@@ -878,15 +886,15 @@ ui <- function(request) {
   )
 
   bslib::page_fluid(
-    theme = ea_theme(),
+    theme = app_theme(),
     tags$head(tags$title(if (DEMO_MODE) "Flood Intelligence Tool (demonstration)" else "Flood Intelligence Tool"),
-              tags$style(HTML(paste(ea_css_variables(), custom_css)))),
+              tags$style(HTML(paste(app_css_variables(), custom_css)))),
     if (DEMO_MODE) tags$div(class = "demo-ribbon", "Demonstration: synthetic data. Nothing is connected, saved or sent."),
     tags$div(
       class = "app-header",
       tags$div(class = "header-left",
-               ea_logo(),
-               tags$div(tags$h2("Flood Intelligence Tool"),
+               app_logo(),
+               tags$div(tags$h2("Flood ", tags$span(class = "hl", "Intelligence"), " Tool"),
                         tags$div(class = "app-sub", "Flood Guidance Statement: forecast, constituencies and flood areas"))),
       tags$div(class = "header-right",
                uiOutput("data_asof"),

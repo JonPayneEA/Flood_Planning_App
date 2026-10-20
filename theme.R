@@ -1,56 +1,58 @@
 # =============================================================================
 # theme.R
-# Environment Agency styling, in one place.
+# Look and feel for the Flood Intelligence Tool, in one place.
 #
-# PROVISIONAL. No official EA palette was available when this was written.
-#   - green (#008A4B), green_mid, green_tint: sampled from the EA logo, not
-#     taken from brand guidelines.
-#   - blue (#54BCE7) and magenta (#BE0553): already in this app, labelled there
-#     as EA Pantone 2985 and 227.
-#   - Everything else is a neutral or a darker step chosen for contrast.
-# To use the official values, change this list and nothing else. tests/
-# checks the contrast pairs below, so a bad swap fails a test.
+# The palette is sampled from the tool's own logo (navy field, white house,
+# sky-blue waves). To restyle the app, change this list and nothing else.
+# tests/ checks the contrast pairs below, so a bad swap fails a test.
 #
 # NOT in this file, on purpose: the FGS risk colours (red, amber, yellow, green
 # on the matrix, map, chips and heat grid). They come from the FGS User Guide
-# and carry a fixed meaning. The brand green must never be mistaken for the
-# "Very Low" risk green, so the brand sits in the frame (header, tabs, buttons,
-# surfaces) and the risk colours stay in the data.
+# and carry a fixed meaning. The brand sits in the frame (header, tabs, buttons,
+# surfaces) and the risk colours stay in the data. The frame is blue so that it
+# is never mistaken for the "Very Low" risk green.
+#
+# magenta is the colour of flood warning areas on the map and is not brand.
 # =============================================================================
 
-EA_PALETTE <- list(
-  green       = "#008A4B",   # brand fill, borders, decoration. White text on it is 4.43:1, so not for text
-  green_dark  = "#00663B",   # header, white-on-green text, green text on light surfaces (7.09:1 with white)
-  green_mid   = "#83C0A0",
-  green_tint  = "#E5F0E9",   # sidebar and quiet surfaces
-  blue        = "#54BCE7",   # brand blue. Decorative only: 2.16:1 on white
-  blue_dark   = "#00548B",   # links and focus (7.95:1 on white)
+APP_PALETTE <- list(
+  navy        = "#053D7E",   # header, white-on-navy text, navy text on light surfaces (11:1 with white)
+  navy_deep   = "#01306C",   # header gradient end
+  blue        = "#0161BD",   # links, focus, primary buttons (white text 6.2:1)
+  bright      = "#038CF4",   # decoration: borders, rules, accents. Not for text
+  sky         = "#38C1FB",   # decoration: header rule, stat-card edge. Not for text on white
+  cyan        = "#75D2FA",   # text on navy only (title highlight)
+  ice         = "#9ED8F8",   # soft borders and chips
+  tint        = "#EAF4FC",   # sidebar and quiet surfaces
   magenta     = "#BE0553",   # flood warning areas on the map
-  ink         = "#1D1D1B",   # body text
-  ink_muted   = "#505A5F",   # secondary text (6.56:1 on the page background)
-  line        = "#CBD5CF",   # hairlines
-  line_strong = "#9AA8A0",
-  bg          = "#F4F7F5",   # page background
+  ink         = "#10253F",   # body text
+  ink_muted   = "#475A70",   # secondary text
+  line        = "#CCDAE8",   # hairlines
+  line_strong = "#9FB3C8",
+  bg          = "#F3F7FB",   # page background
   surface     = "#FFFFFF"    # cards and panels
 )
 
 # Contrast pairs that must hold (foreground, background, minimum ratio).
 # Used by tests/testthat/test-theme.R.
-EA_CONTRAST_PAIRS <- list(
-  list("surface",    "green_dark", 4.5),
+APP_CONTRAST_PAIRS <- list(
+  list("surface",    "navy",       4.5),
+  list("cyan",       "navy",       4.5),
+  list("surface",    "blue",       4.5),
   list("ink",        "surface",    7),
   list("ink",        "bg",         7),
-  list("ink",        "green_tint", 7),
+  list("ink",        "tint",       7),
   list("ink_muted",  "bg",         4.5),
   list("ink_muted",  "surface",    4.5),
-  list("blue_dark",  "surface",    4.5),
-  list("blue_dark",  "bg",         4.5),
-  list("green_dark", "surface",    4.5),
-  list("green_dark", "green_tint", 4.5),
+  list("blue",       "surface",    4.5),
+  list("blue",       "bg",         4.5),
+  list("blue",       "tint",       4.5),
+  list("navy",       "surface",    4.5),
+  list("navy",       "tint",       4.5),
   list("magenta",    "surface",    4.5)
 )
 
-ea_contrast <- function(fg, bg) {
+app_contrast <- function(fg, bg) {
   lum <- function(hex) {
     v <- grDevices::col2rgb(hex)[, 1] / 255
     v <- ifelse(v <= 0.03928, v / 12.92, ((v + 0.055) / 1.055)^2.4)
@@ -62,15 +64,15 @@ ea_contrast <- function(fg, bg) {
 
 # Bootstrap 5 theme. System sans-serif stack, so nothing is fetched from the
 # network (the app must run on a locked-down estate and the demo offline).
-ea_theme <- function() {
-  p <- EA_PALETTE
+app_theme <- function() {
+  p <- APP_PALETTE
   bslib::bs_theme(
     version = 5,
-    primary = p$green_dark, secondary = p$ink_muted, success = p$green,
-    info = p$blue_dark, danger = p$magenta,
+    primary = p$navy, secondary = p$ink_muted, success = p$blue,
+    info = p$blue, danger = p$magenta,
     bg = p$surface, fg = p$ink,
     "body-bg" = p$bg, "body-color" = p$ink,
-    "link-color" = p$blue_dark, "link-hover-color" = p$ink,
+    "link-color" = p$blue, "link-hover-color" = p$navy,
     "font-family-base" = "Arial, 'Helvetica Neue', Helvetica, sans-serif",
     "border-radius" = "4px", "btn-border-radius" = "4px",
     "border-color" = p$line
@@ -78,26 +80,32 @@ ea_theme <- function() {
 }
 
 # CSS custom properties used by the rules in app_ui.R. Defined once here.
-ea_css_variables <- function() {
-  p <- EA_PALETTE
+app_css_variables <- function() {
+  p <- APP_PALETTE
   paste0(":root {",
-         "--ea-green:", p$green, ";--ea-green-dark:", p$green_dark, ";",
-         "--ea-green-mid:", p$green_mid, ";--ea-tint:", p$green_tint, ";",
-         "--ea-blue:", p$blue, ";--ea-blue-dark:", p$blue_dark, ";",
-         "--ea-magenta:", p$magenta, ";--ea-ink:", p$ink, ";",
-         "--ea-muted:", p$ink_muted, ";--ea-line:", p$line, ";",
-         "--ea-line-strong:", p$line_strong, ";--ea-bg:", p$bg, ";",
-         "--ea-surface:", p$surface, ";}")
+         "--app-navy:", p$navy, ";--app-navy-deep:", p$navy_deep, ";",
+         "--app-blue:", p$blue, ";--app-bright:", p$bright, ";",
+         "--app-sky:", p$sky, ";--app-cyan:", p$cyan, ";--app-ice:", p$ice, ";",
+         "--app-tint:", p$tint, ";--app-magenta:", p$magenta, ";",
+         "--app-ink:", p$ink, ";--app-muted:", p$ink_muted, ";",
+         "--app-line:", p$line, ";--app-line-strong:", p$line_strong, ";",
+         "--app-bg:", p$bg, ";--app-surface:", p$surface, ";",
+         "--bs-link-color:", p$blue, ";--bs-body-bg:", p$bg, ";--bs-body-color:", p$ink, ";}")
 }
 
-# Optional logo. Drop an approved file at www/ea-logo.svg (or .png) and it
-# appears in the header. None is bundled: the logo is a protected mark and the
-# approved artwork should come from the brand team.
-ea_logo <- function() {
-  for (f in c("ea-logo.svg", "ea-logo.png")) {
+# The logo mark (house on waves), drawn inline so no file has to ship. If an
+# approved mark-only file is dropped at www/logo.svg (or .png) it is used instead.
+app_logo <- function() {
+  for (f in c("logo.svg", "logo.png")) {
     if (file.exists(file.path("www", f))) {
-      return(htmltools::tags$img(src = f, alt = "Environment Agency", class = "ea-logo"))
+      return(htmltools::tags$img(src = f, alt = "", class = "brand-mark"))
     }
   }
-  NULL
+  htmltools::HTML(paste0(
+    '<svg class="brand-mark" viewBox="0 0 120 100" role="img" aria-label="Flood Intelligence Tool">',
+    '<path d="M60 6 L104 42 H94 V66 H26 V42 H16 Z" fill="#FAFBFB"/>',
+    '<rect x="52" y="44" width="16" height="22" rx="2" fill="', APP_PALETTE$navy, '"/>',
+    '<path d="M0 70 C25 52 50 52 75 66 S110 80 120 62 V100 H0Z" fill="', APP_PALETTE$sky, '"/>',
+    '<path d="M0 80 C30 66 55 70 80 82 S110 90 120 76 V100 H0Z" fill="', APP_PALETTE$blue, '"/>',
+    '<path d="M0 92 C35 80 70 86 120 90 V100 H0Z" fill="', APP_PALETTE$navy_deep, '"/></svg>'))
 }
