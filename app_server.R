@@ -291,7 +291,7 @@ server <- function(input, output, session) {
     # intersection must clear the threshold.
     areas[tolower(source) %in% f$source_codes
           & ea_area_type  %in% f$ea_types
-          & intersection_pct >= f$min_intersection]
+          & clears_threshold(intersection_pct, f$min_intersection)]
   })
   
   
@@ -315,7 +315,7 @@ server <- function(input, output, session) {
     
     shape <- shape[tolower(shape$source) %in% f$source_codes, ]
     shape <- shape[shape$ea_area_type  %in% f$ea_types,     ]
-    shape[shape$intersection_pct >= f$min_intersection, ]
+    shape[clears_threshold(shape$intersection_pct, f$min_intersection), ]
   })
   
   
@@ -333,7 +333,7 @@ server <- function(input, output, session) {
     req(f)
 
     areas <- fetch_constituencies_for_statement(f$statement_id, f$day_index)
-    areas <- areas[tolower(source) %in% f$source_codes & intersection_pct >= f$min_intersection]
+    areas <- areas[tolower(source) %in% f$source_codes & clears_threshold(intersection_pct, f$min_intersection)]
 
     if (nrow(f$selected_cells) == 0L) return(areas[0])
     areas[f$selected_cells, on = c("risk_x" = "x", "risk_y" = "y"), nomatch = NULL]
@@ -358,7 +358,7 @@ server <- function(input, output, session) {
     if (nrow(shape) == 0L) return(shape)
 
     shape <- shape[tolower(shape$source) %in% f$source_codes
-                   & shape$intersection_pct >= f$min_intersection, ]
+                   & clears_threshold(shape$intersection_pct, f$min_intersection), ]
     if (nrow(shape) == 0L) return(shape)
 
     if (nrow(f$selected_cells) == 0L) return(shape[0, ])
@@ -605,9 +605,9 @@ server <- function(input, output, session) {
           tags$strong(r$ea_area_name),
           tags$br(),
           tags$small(
-            sprintf("%s - %s - %d%%",
+            sprintf("%s - %s - %s",
                     r$ea_area_type, r$source,
-                    round(r$intersection_pct * 100)),
+                    intersection_label(r$intersection_pct)),
             class = "text-muted"
           )
         )
@@ -801,7 +801,7 @@ server <- function(input, output, session) {
       "<small>", shape$ea_area_type, " &middot; ", shape$source, "</small><br>",
       "Target Area ID: ", shape$ea_area_code, "<br>",
       "Risk: ", shape$risk_level, "<br>",
-      "Intersection: ", round(shape$intersection_pct * 100), "%"
+      "Intersection: ", intersection_label(shape$intersection_pct)
     )
     
     leaflet::addPolygons(
@@ -905,7 +905,7 @@ server <- function(input, output, session) {
       "<small>", matched$ea_area_type[1], " &middot; ", matched$source[1], "</small><br>",
       "Target Area ID: ", matched$ea_area_code[1], "<br>",
       "Risk: ", matched$risk_level[1], "<br>",
-      "Intersection: ", round(matched$intersection_pct[1] * 100), "%"
+      "Intersection: ", intersection_label(matched$intersection_pct[1])
     )
 
     proxy <- leaflet::leafletProxy("live_map")

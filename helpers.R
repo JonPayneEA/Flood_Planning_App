@@ -315,6 +315,11 @@ with_layer_guard <- function(label, busy, expr, notify = function(msg) invisible
 
 polygons_only <- function(shape) {
   if (is.null(shape) || nrow(shape) == 0L) return(shape)
+  # An empty geometry (including an empty collection) cannot be drawn, and one empty
+  # collection in the batch makes sf::st_collection_extract return nothing at all for
+  # the rest, so empties go first.
+  shape <- shape[!sf::st_is_empty(shape), ]
+  if (nrow(shape) == 0L) return(shape)
   type <- as.character(sf::st_geometry_type(shape))
   coll <- type == "GEOMETRYCOLLECTION"
   if (any(coll)) {
@@ -323,6 +328,26 @@ polygons_only <- function(shape) {
     type  <- as.character(sf::st_geometry_type(shape))
   }
   shape[type %in% c("POLYGON", "MULTIPOLYGON"), ]
+}
+
+
+# -----------------------------------------------------------------------------
+# clears_threshold() and intersection_label()
+#
+# intersection_pct is the share of an area covered by a forecast polygon. A coastal
+# forecast geometry is a line, which has no area, so the pipeline stores NULL for it
+# and keeps the row whatever the threshold (job 07). The threshold slider therefore
+# applies to areas only. Comparing NA with >= gives NA, which data.table silently
+# drops and which sf turns into an all-NA row (an empty geometry the map cannot draw),
+# so a coastal area either vanished or broke the layer. A missing share passes.
+# -----------------------------------------------------------------------------
+
+clears_threshold <- function(pct, minimum) {
+  is.na(pct) | pct >= minimum
+}
+
+intersection_label <- function(pct) {
+  ifelse(is.na(pct), "crossed by a coastal line", paste0(round(pct * 100), "%"))
 }
 
 
