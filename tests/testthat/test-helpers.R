@@ -361,3 +361,25 @@ test_that("headline counts are left out when the log or its columns are not ther
   lg2 <- cbind(lg, data.table(flagged_previous = NA_integer_, flagged_new = 2L, medium_plus_previous = 0L, medium_plus_new = 0L))
   expect_null(headline_counts_message(lg2, 0L))                     # a missing count, not a made-up zero
 })
+
+
+test_that("polygons_only keeps the polygon parts of a collection and drops the rest", {
+  poly  <- sf::st_polygon(list(rbind(c(0, 0), c(1, 0), c(1, 1), c(0, 1), c(0, 0))))
+  line  <- sf::st_linestring(rbind(c(5, 5), c(6, 6)))
+  coll  <- sf::st_geometrycollection(list(poly, line))
+  only_line <- sf::st_geometrycollection(list(line))
+  shape <- sf::st_sf(code = c("a", "b", "c", "d"),
+                     geometry = sf::st_sfc(poly, coll, only_line, line, crs = 4326))
+  out <- polygons_only(shape)
+  expect_equal(out$code, c("a", "b"))
+  expect_true(all(as.character(sf::st_geometry_type(out)) %in% c("POLYGON", "MULTIPOLYGON")))
+  # leaflet can now draw it, which is what the collection stopped
+  expect_no_error(leaflet::addPolygons(leaflet::leaflet(), data = out))
+})
+
+test_that("polygons_only passes empty and polygon-only input through", {
+  expect_equal(nrow(polygons_only(sf::st_sf(code = character(), geometry = sf::st_sfc(), crs = 4326))), 0L)
+  poly <- sf::st_polygon(list(rbind(c(0, 0), c(1, 0), c(1, 1), c(0, 0))))
+  one  <- sf::st_sf(code = "a", geometry = sf::st_sfc(poly, crs = 4326))
+  expect_equal(polygons_only(one), one)
+})
