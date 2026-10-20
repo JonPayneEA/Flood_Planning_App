@@ -2,9 +2,23 @@
 
 R Shiny version of the FGS dashboard. Reads from Databricks Delta tables via
 **brickster's DBI driver** against a SQL warehouse. Designed for deployment
-to Posit Connect. Tabs: the FGS Interrogator (map and filters), Constituency
-situation, and Exposure history. The remaining analytics tabs are placeholders
-that wait on data the pipeline does not hold yet.
+to Posit Connect. It only reads: nothing is written back to the warehouse.
+
+Tabs:
+
+- **Overview**: the latest statement at a glance (headline, counts at Medium or
+  above, escalations, the five-day outlook, constituencies to watch, what changed).
+- **FGS Interrogator**: the map and filters, with the flood warning and alert
+  areas under the forecast listed beneath ("Affected Target Areas").
+- **Constituency situation**: one row per constituency (forecast, areas under the
+  forecast, warnings in force, MP) with the MP briefing draft, and a statement
+  look-back (proof of concept).
+- **Exposure history**: how often each constituency has been at each risk level.
+- **MP audit log** (demo mode only) and **Guide** (how each figure is calculated).
+- A **Planned** menu for tabs that wait on data the pipeline does not hold yet.
+
+A header badge shows the pipeline's health, and a banner names any pipeline table
+that has not been built yet.
 
 ## Stack
 
@@ -55,7 +69,7 @@ or after a network failure), so that overhead is paid once, not per query.
 | `helpers.R` | Pure functions (colours, popups, staleness, statement choice). Unit tested. |
 | `app_ui.R` | Layout, sidebar, panels, custom CSS, risk matrix grid builder. Every section is a function of the request, which bookmarking needs. |
 | `app_server.R` | Reactive logic, filtering, output bindings, map updates. |
-| `data.R` | Queries via brickster's DBI driver, and the shared query cache. |
+| `data.R` | Queries via brickster's DBI driver (one shared connection, retried on network failure) and the shared query cache. |
 | `tests/` | Unit and view tests. No Databricks connection needed. |
 | `.env.example` | Template for connection credentials and optional settings. |
 | `.rscignore` | Keeps `.env`, tests and the README out of a Connect deploy. |
@@ -109,11 +123,56 @@ In RStudio, click *Publish*. Or:
 
 ```r
 rsconnect::deployApp(
-  appName = "fgs-dashboard",
+  appName = "flood_intelligence_tool",
   account = "<your_connect_account>",
   server  = "<your_connect_server>"
 )
 ```
+
+Publishing needs a current `rsconnect` (1.11 or later) and a current `openssl`: an old
+`openssl` fails with `'rsa_sign' is not an exported object`, and an old `rsconnect`
+can get a 404 from a newer Connect. Update both, then **restart R** before publishing,
+because a package already loaded in the session is not replaced.
+
+After the first publish, on the content's page in Connect:
+
+1. **Environment variables** (Settings, Advanced, Environment variables): add
+   `DATABRICKS_HOST`, `DATABRICKS_WAREHOUSE_ID`, `FGS_CATALOG`, `FGS_SCHEMA` and
+   `DATABRICKS_TOKEN`. `.env` is deliberately not deployed, so without these the app
+   stops at start with "Missing required environment variables". Do not put the
+   token in the code or in chat.
+2. **The token.** A personal access token works to start, but it carries your own
+   access, so the app stops for everyone when it expires or your access changes. For
+   a deployed app use a service principal with `SELECT` on the one schema and **Can
+   use** on the warehouse, and never any access to the restricted schema:
+
+   ```sql
+   GRANT USE CATALOG ON CATALOG prd_dash_lab TO `<application-id>`;
+   GRANT USE SCHEMA, SELECT ON SCHEMA prd_dash_lab.flood_forecasting_unrestricted TO `<application-id>`;
+   ```
+
+   Note the token's expiry date in a calendar, and replace the variable before it
+   lapses (the app then shows "Failed to connect to warehouse").
+3. **Access.** Set who may open it. "All users" with login required means anyone with
+   a Connect login. Check it does not say "Anyone", which needs no login. The app shows
+   MP names, emails and phone numbers, and the CSV export downloads them.
+4. **Runtime** (Advanced). Set **minimum processes to 1** and raise the idle timeout,
+   so the first visitor after a quiet spell is not waiting for R to start. Raise the
+   maximum processes if many people use it at once: one R process serves one request at
+   a time, and the map layers are the slow part.
+
+Share the **Connect content address** (`.../flood-intel-tool/`), not the address of
+your Workbench session. The Workbench address sits behind a different sign-in and gives
+other people a "does not exist in tenant" error.
+
+### If Connect shows an error
+
+| What you see | What it means |
+|---|---|
+| "An error has occurred. The application failed to start" | Open the content's Logs. "Missing required environment variables" means step 1 above. |
+| "Failed to connect to warehouse" in the app | The host, token or warehouse id is wrong, the token has expired, or the warehouse is stopped (it takes about a minute to wake). |
+| **502 Bad Gateway** from `Microsoft-Azure-Application-Gateway` | The gateway in front of Connect, not the app. If other Connect content fails too, it is the platform: tell its owners and wait. |
+| "Selected user account does not exist in tenant" | The person was sent the wrong link (see above), or their account is not set up on the platform. |
 
 Optional settings, all in `.env.example`:
 
@@ -126,9 +185,11 @@ Optional settings, all in `.env.example`:
 | `FGS_STALE_HOURS` | `3` | Hours without a pipeline health update before the stale-data banner shows. |
 | `FGS_CACHE_SECONDS` | `600` | How long query results are shared across sessions. `0` is off (a missing table is still remembered for five minutes). |
 | `FGS_CACHE_GEOMETRY_ENTRIES` | `30` | How many map-geometry results the shared cache keeps. One entry is one layer for one statement and day. The oldest is dropped first, so memory stays bounded. Other results are capped separately at 200. |
+| `FGS_CONTACT_MIN_PCT` | `0.01` | Share of a constituency a forecast polygon must cover, used only to rebuild past statements in the look-back. Match the pipeline's `FGS_CONTACT_MIN_PCT`. |
+| `FGS_POC_FEATURES` | `1` | `0` hides the proof-of-concept features (the look-back). |
 | `FGS_DEMO_MODE` | off | `1` runs on generated data with no warehouse. See Demo mode. |
 
-Set the environment variables under the deployed app's *Vars* tab.
+On Connect, set these under the content's Advanced tab, Environment variables.
 Do not deploy `.env`; `.rscignore` already excludes it.
 
 ## Demo mode
@@ -202,7 +263,11 @@ How the look-back works, and what it cannot do:
   statement (`aggregate_situation()` in `helpers.R`, tested against the demo's
   independent model).
 - **Warnings and alerts in force show n/a** for past statements: the pipeline
-  keeps no history of them.
+  keeps no history of them. The **warning and alert areas under the forecast** are
+  shown, because they are built from the intersections the pipeline keeps for every
+  statement.
+- The picker groups a day with several statements under one heading, for example
+  "Thu 02 Oct (3 statements)".
 - **MP details are today's**, matched to constituencies on a normalised name.
 - Briefing drafts come from `mp_briefing_drafts`, which keeps older statements'
   batches as history. Reviews can only be recorded against the live batch.
@@ -224,7 +289,12 @@ app does not fail. It says what is missing, on screen:
   n/a (unknown, not "none").
 - A missing table is remembered for five minutes so switching statement does
   not repeat the failing query. **Refresh statements** forgets it at once, so run
-  the notebook, press Refresh, and the view appears.
+  the notebook, press Refresh, and the view appears. If it does not, restart the
+  app process, which empties the cache.
+- `fgs_changes_log` (also written by notebook 18) is never reported as missing:
+  without it the changes panel still works, with less detail.
+- On a quiet day, `mp_briefing_drafts` is legitimately empty, because drafts are only
+  written at Medium or above. The app says so in words.
 
 Which notebook builds which table, and when they run:
 
@@ -277,9 +347,24 @@ Guide and keep a fixed meaning, and the brand green must never be read as the
   the pipeline views, drop the cache and show "New pipeline data loaded". A
   user on the newest statement follows to the new one; a user who chose an
   older statement stays on it.
-- **Changes panel.** Below the list it shows how many constituencies each statement flags over all five of its own days (any risk, and Medium or above), so "30 yesterday, none today" shows even when those days have rolled off and no day-by-day change is listed. This needs the newer notebook 18; without it the line is left out. It reads `fgs_changes_log` (written by notebook 18) to tell
-  "compared, nothing moved" from "not compared yet". Without that table, an empty
-  result is trusted as no change, as before. The table is never reported as missing.
+- **Changes panel.** It lists the rises and falls since the previous statement, one
+  line per constituency. When there are none it says what it compared with: "No change
+  since statement #4924 (issued Sun 18 Oct 09:30, Mon 19 to Thu 22)". It reads
+  `fgs_changes_log` (notebook 18) to tell "compared, nothing moved" from "not compared
+  yet" ("Notebook 18 has not run for this statement"). Under the list it also shows
+  how many constituencies each statement flags over all five of its own days, at any
+  risk and at Medium or above, so "30 in statement #4924, none in this one" shows even
+  though the day-by-day comparison leaves out days that have rolled off. Without the log
+  table, an empty result is trusted as no change; without the newer notebook 18, the
+  counts line is left out.
+- **Areas under the forecast.** Constituency situation has two columns, "Warning areas
+  under forecast" and "Alert areas under forecast": the flood warning areas and flood
+  alert areas that sit under a risk polygon of the statement, counted per constituency
+  (an area counts when at least `FGS_WARNING_CONTACT_MIN_PCT` of it lies inside, and
+  once however many days or polygons cover it). They are potential warnings, places where
+  one could be issued, and are separate from the "in force" columns. The minimum
+  forecast risk filter also sets which polygons count. They work for any statement,
+  including the look-back.
 - **Warehouse outages.** A network failure drops the shared connection and is
   retried. The console logs the first failure, at most one reminder a minute
   while it persists, and one line when the warehouse is reachable again.
@@ -291,7 +376,8 @@ Guide and keep a fixed meaning, and the brand green must never be read as the
   `FGS_CACHE_SECONDS`, shared by every session in the process, so switching
   statement, day or filter does not return to the warehouse each time. The
   cache is cleared on Refresh and whenever auto-refresh sees new data.
-  Memory only: a restart empties it.
+  Memory only: a restart empties it. Map geometry, the heavy part, rolls at
+  `FGS_CACHE_GEOMETRY_ENTRIES` entries (oldest first), so memory stays bounded.
 - **Shareable views.** The address bar follows the tab, statement, day and
   filters. The "Copy link" button copies it. Opening the link restores that
   view. Selections (a table row, a map click) are not part of the link.
@@ -308,10 +394,13 @@ Rscript tests/run_tests.R     # from the project root
 ```
 
 Needs `testthat` plus the app's own packages (`brickster` is not needed). The
-view tests need `leaflet` and skip themselves without it. They cover the geometry-source filter on every
-tagged query, SQL safety of browser-supplied ids, the cache, the staleness
-rules, the statement-selection rules, and each new view on fake data. They do
-not draw a real map and do not touch Databricks.
+view tests need `leaflet` and skip themselves without it. The run takes about two
+minutes. They cover the geometry-source filter on every tagged query, SQL safety of
+browser-supplied ids, the cache (including the geometry cap), the shared connection,
+retries and outage logging against fakes, the staleness rules, the statement-selection
+rules, the changes messages, the areas under the forecast, the Guide against the code
+and the pipeline's `config.py`, and each view on fake data. They do not draw a real map
+and do not touch Databricks.
 
 ## Decisions that are not the app's to make
 
@@ -319,9 +408,13 @@ not draw a real map and do not touch Databricks.
   here. The "MP audit log" tab needs the app to write status back to the
   warehouse, which needs an owner and a rule for who may do it. Until that is
   decided the tab stays a placeholder.
-- **Who may open the app.** It now shows MP names, emails, phone numbers and
-  draft briefing text. Make sure the Connect access list for this app matches
-  the people who should see that.
+- **Who may open the app.** It shows MP names, emails, phone numbers and draft
+  briefing text. Currently any user with a Connect login. Keep the app on the
+  unrestricted schema only: if it ever needs restricted data, deploy a second app
+  with its own service principal and a named access list, because data access follows
+  the app's identity, not the visitor.
+- **A service principal for the deployed app.** See Deployment. Until then the app
+  depends on one person's token.
 
 ## Data dependencies
 
@@ -333,6 +426,9 @@ Reads from these Delta tables in the configured catalog/schema:
 - `fgs_ea_area_intersections` -- assumed to carry through the risk matrix
   columns from the polygon table
 - `fgs_constituency_intersections`
+- `ea_area_constituency_lookup` (links flood warning and alert areas to
+  constituencies, for the areas under the forecast)
+- `mp_contact_details` and `parliamentary_constituencies` (the look-back)
 
 Both intersection tables carry `geometry_source`, and every query filters on
 it (see `FGS_GEOMETRY_SOURCE` above). If your intersection tables still use the
@@ -344,7 +440,8 @@ Pipeline products (FGS_Notebooks jobs 18 to 22), all plain tables:
 | Table | Used for |
 |---|---|
 | `pipeline_health` | Status badge in the header; click for each check. |
-| `fgs_constituency_changes` | "Since the previous statement" strip on the Interrogator. Follows the statement picker. |
+| `fgs_constituency_changes` | "Since the previous statement" strip on the Interrogator and the Overview. Follows the statement picker. |
+| `fgs_changes_log` | Says whether notebook 18 compared a statement, and the headline counts for both statements. Optional: the app works without it. |
 | `constituency_flood_situation` | Constituency situation tab: one row per constituency. Always the pipeline's latest complete statement. |
 | `mp_briefing_drafts` | Briefing draft shown when a constituency row is selected. Read only: nothing is sent. |
 | `fgs_constituency_exposure` | Exposure history tab: heat grid of constituencies by month, 12 months. |
@@ -355,15 +452,18 @@ view says so and the rest of the app carries on.
 The risk matrix labels follow the pipeline README: impact Minor to Extreme,
 likelihood Low to Very High.
 
-## Known gaps for v1
+## Known gaps
 
-- Observed gauge levels are not in the constituency view yet. The pipeline
-  has not turned the readings and thresholds tables into events.
+- Observed river and sea levels are not in the constituency view. The pipeline now
+  holds live readings for every site (`ea_rt_latest`, `ea_rt_readings_all`), but this
+  app does not read them. A separate hydrometric app is planned for that, with flood
+  thresholds from the restricted schema in its own restricted deployment.
 - Warning issue times, forecast verification and event playback are
   placeholders. Verification and playback depend on the Met Office licence
   decision.
 - Public OpenStreetMap basemap. If the EA proxy blocks tile servers,
   swap the `providers$OpenStreetMap` reference in `app_server.R` for an
   internal tile URL.
-- No query-level caching. For the analytics tabs, wrap reactives in
-  `bindCache()`.
+- Warnings in force have no history, so the look-back shows n/a for them.
+- The look-back, and anything else tagged `POC-ONLY`, is to be removed when the
+  app goes live.
