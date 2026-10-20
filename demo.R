@@ -635,15 +635,35 @@ fetch_changes_log <- function(statement_id) {
              medium_plus_previous = sum(prev_rk >= 3L, na.rm = TRUE), medium_plus_new = sum(now_rk >= 3L, na.rm = TRUE))
 }
 
-fetch_potential_areas <- function(statement_id, min_rank = 0L) {
+fetch_potential_areas <- function(statement_id, min_rank = 0L, sources = NULL) {
   scn <- demo_current()$scenario; sid <- as.integer(statement_id)
-  ea <- rbindlist(lapply(1:5, function(d) { x <- demo_ea_inter(scn, sid, d); x[match(risk_level, RANK_LABELS) - 1L >= min_rank, .(ea_area_code, ea_area_type)] }))
+  ea <- rbindlist(lapply(1:5, function(d) {
+    x <- demo_ea_inter(scn, sid, d)
+    if (length(sources) > 0L) x <- x[tolower(source) %in% tolower(sources)]
+    x[match(risk_level, RANK_LABELS) - 1L >= min_rank, .(ea_area_code, ea_area_type)]
+  }))
   g <- demo_geometry()
   lk <- fetch_ea_constituency_mp()[constituency_overlap_pct >= TARGET_AREA_MIN_PCT, .(ea_area_code, constituency_name)]
   m <- merge(unique(ea), lk, by = "ea_area_code")
   m[, constituency_id := g$table$constituency_id[match(constituency_name, g$table$constituency_name)]]
   m[, .(warning_areas = uniqueN(ea_area_code[ea_area_type == "flood_warning"]),
         alert_areas   = uniqueN(ea_area_code[ea_area_type == "flood_alert"])), by = constituency_id]
+}
+
+# Constituency overlaps for all five days of one statement, with the impact and likelihood, for
+# the source filter and the impact and likelihood columns. The 25% floor matches the demo's own
+# situation table, so the two agree.
+fetch_constituency_intersections <- function(statement_id) {
+  scn <- demo_current()$scenario; sid <- as.integer(statement_id)
+  if (is.null(demo_stmt_row(scn, sid))) return(NULL)
+  x <- rbindlist(lapply(1:5, function(d) {
+    y <- demo_const_inter(scn, sid, d)[intersection_pct >= 0.25]
+    if (nrow(y) == 0L) return(NULL)
+    y <- copy(y); y[, day_index := d]; y
+  }))
+  if (is.null(x) || nrow(x) == 0L) return(data.table())
+  x[, `:=`(impact_label = IMPACT_LABELS[risk_x], likelihood_label = LIKELIHOOD_LABELS[risk_y])]
+  x[]
 }
 
 fetch_situation <- function() copy(demo_situation(demo_current()$scenario))

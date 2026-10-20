@@ -1630,7 +1630,21 @@ server <- function(input, output, session) {
       sid <- as.integer(s$fgs_statement_id[1L])
     }
     mr <- suppressWarnings(as.integer(input$sit_min_rank)); if (length(mr) != 1L || is.na(mr)) mr <- 0L
-    safe_fetch(fetch_potential_areas, sid, mr)
+    srcs <- input$sit_sources
+    safe_fetch(fetch_potential_areas, sid, mr, srcs)
+  })
+
+  # The statement's constituency intersections, which give the source filter and the
+  # impact and likelihood columns. NULL when they cannot be read: the columns then show
+  # n/a and the source filter is ignored (the table says so), and nothing else breaks.
+  situation_inter <- reactive({
+    sid <- poc_past_id()
+    if (is.null(sid)) {
+      s <- situation_rv()
+      if (is.null(s) || nrow(s) == 0L) return(NULL)
+      sid <- as.integer(s$fgs_statement_id[1L])
+    }
+    safe_fetch(fetch_constituency_intersections, sid)
   })
 
   situation_clean <- reactive({
@@ -1645,12 +1659,20 @@ server <- function(input, output, session) {
       d[, `:=`(pot_warning_areas = data.table::fcoalesce(as.integer(p$warning_areas[m]), 0L),
                pot_alert_areas   = data.table::fcoalesce(as.integer(p$alert_areas[m]), 0L))]
     }
-    d[]
+    srcs  <- input$sit_sources
+    inter <- situation_inter()
+    detail <- if (is.null(inter)) NULL else situation_detail(inter, srcs, CONTACT_MIN_PCT)
+    apply_situation_detail(d, detail, narrow = length(srcs) > 0L && !is.null(detail))
   })
 
   situation_filtered <- reactive({
     d <- situation_clean()
     keep <- d$fgs_worst_rank >= as.integer(input$sit_min_rank)
+    # With "Any" risk every constituency is listed, quiet ones too. Choosing a flood source means
+    # "those with risk from it", so constituencies with nothing under those sources drop out.
+    if (length(input$sit_sources) > 0L && !is.null(situation_inter())) keep <- keep & d$fgs_worst_rank >= 1L
+    mi <- suppressWarnings(as.integer(input$sit_min_impact)); if (length(mi) != 1L || is.na(mi)) mi <- 0L
+    if (mi > 0L) keep <- keep & !is.na(d$fgs_worst_impact_x) & d$fgs_worst_impact_x >= mi
     if (isTRUE(input$sit_escalated)) keep <- keep & d$fgs_escalated
     if (isTRUE(input$sit_warning))   keep <- keep & d$has_active_warning
     q <- trimws(if (is.null(input$sit_search)) "" else input$sit_search)
@@ -1660,10 +1682,29 @@ server <- function(input, output, session) {
       keep <- keep & (grepl(q, tolower(d$constituency_name), fixed = TRUE) |
                       grepl(q, tolower(fifelse(is.na(d$mp_name), "", d$mp_name)), fixed = TRUE))
     }
-    d[keep][order(-fgs_worst_rank, -severe_warnings, -warnings, constituency_name)]
+    d[keep][order(-fgs_worst_rank, -fgs_worst_impact_x, -severe_warnings, -warnings, constituency_name)]
+  })
+
+  # One line saying what the source filter did, or that it could not be applied.
+  source_note <- reactive({
+    srcs <- input$sit_sources
+    if (length(srcs) == 0L) return(NULL)
+    names_ <- c(river = "River", coastal = "Coastal", surface = "Surface water", ground = "Groundwater")
+    if (is.null(situation_inter())) {
+      return(tags$div(class = "text-warning mb-2",
+        "The source filter could not be applied: fgs_constituency_intersections could not be read."))
+    }
+    tags$div(class = "text-muted mb-2",
+      sprintf("Showing %s only: the risks, days, impact and likelihood below, and the warning and alert areas under the forecast, are for those sources. ",
+              paste(names_[srcs], collapse = ", ")),
+      "Escalated, and warnings and alerts in force, are across all sources.")
   })
 
   output$situation_note <- renderUI({
+    tagList(situation_note_main(), source_note())
+  })
+
+  situation_note_main <- reactive({
     id <- poc_past_id()
     d  <- if (is.null(id)) situation_rv() else situation_view()
     if (is.null(d) || nrow(d) == 0L) {
@@ -1718,6 +1759,8 @@ server <- function(input, output, session) {
       Worst        = fgs_worst_rank,
       On           = format(as.Date(fgs_worst_date), "%a %d %b"),
       Sources      = fgs_worst_sources,
+      Impact       = fifelse(is.na(fgs_worst_impact),     "n/a", fgs_worst_impact),
+      Likelihood   = fifelse(is.na(fgs_worst_likelihood), "n/a", fgs_worst_likelihood),
       d1 = fgs_rank_day1, d2 = fgs_rank_day2, d3 = fgs_rank_day3,
       d4 = fgs_rank_day4, d5 = fgs_rank_day5,
       Escalated    = fifelse(is.na(fgs_escalated), "n/a", fifelse(as.logical(fgs_escalated), "Yes", "")),
@@ -1728,6 +1771,7 @@ server <- function(input, output, session) {
       AlertAreas   = fifelse(is.na(pot_alert_areas),   "n/a", as.character(pot_alert_areas))
     )]
     setnames(tbl, c("d1", "d2", "d3", "d4", "d5"), day_names)
+    setnames(tbl, c("Impact", "Likelihood"), c("Impact (worst day)", "Likelihood (worst day)"))
     setnames(tbl, c("Severe", "Warnings", "Alerts", "WarnAreas", "AlertAreas"),
              c("Severe in force", "Warnings in force", "Alerts in force", "Warning areas under forecast", "Alert areas under forecast"))
     if (!is.null(poc_past_id())) {                             # POC-ONLY: in force is not held for past statements
@@ -1747,6 +1791,7 @@ server <- function(input, output, session) {
                                      emptyTable = empty_situation_message(
                                        situation_clean()$fgs_worst_rank, as.integer(input$sit_min_rank),
                                        other_filters = isTRUE(input$sit_escalated) || isTRUE(input$sit_warning) ||
+                                                       length(input$sit_sources) > 0L || !identical(input$sit_min_impact, "0") ||
                                                        nzchar(trimws(if (is.null(input$sit_search)) "" else input$sit_search)))),
                      columnDefs = list(list(targets = targets, render = render_js)))
     ) |>
@@ -1755,15 +1800,36 @@ server <- function(input, output, session) {
                       color           = DT::styleEqual(0:4, c("#212529", "#ffffff", "#212529", "#212529", "#ffffff")))
   })
 
+  # The export has the same columns, in the same order and with the same names, as the table,
+  # with the risk as words instead of a coloured cell, and the MP's email and phone added.
   output$download_situation <- downloadHandler(
     filename = function() sprintf("constituency_situation_%s.csv", format(Sys.time(), "%Y%m%d_%H%M")),
     content  = function(file) {
       d <- situation_filtered()
-      out <- d[, .(constituency_name, mp_name, mp_party, mp_email, mp_phone,
-                   fgs_worst_level, fgs_worst_date, fgs_worst_sources,
-                   fgs_rank_day1, fgs_rank_day2, fgs_rank_day3, fgs_rank_day4, fgs_rank_day5,
-                   fgs_escalated, severe_warnings, warnings, alerts,
-                   potential_warning_areas = pot_warning_areas, potential_alert_areas = pot_alert_areas)]
+      base_date <- tryCatch(as.Date(substr(situation_clean()$fgs_issued_at[1L], 1L, 10L)), error = function(e) NA)
+      day_names <- if (is.na(base_date)) paste0("D", 1:5) else format(base_date + 0:4, "%a %d")
+      level <- function(r) RANK_LABELS[pmin(pmax(as.integer(r), 0L, na.rm = TRUE), 4L) + 1L]
+      out <- d[, .(
+        Constituency = constituency_name,
+        MP           = fifelse(is.na(mp_name), "(vacant or unmatched)", mp_name),
+        Party        = mp_party,
+        `MP email`   = mp_email,
+        `MP phone`   = mp_phone,
+        Worst        = level(fgs_worst_rank),
+        On           = format(as.Date(fgs_worst_date), "%a %d %b"),
+        Sources      = fgs_worst_sources,
+        `Impact (worst day)`     = fifelse(is.na(fgs_worst_impact),     "n/a", fgs_worst_impact),
+        `Likelihood (worst day)` = fifelse(is.na(fgs_worst_likelihood), "n/a", fgs_worst_likelihood),
+        d1 = level(fgs_rank_day1), d2 = level(fgs_rank_day2), d3 = level(fgs_rank_day3),
+        d4 = level(fgs_rank_day4), d5 = level(fgs_rank_day5),
+        Escalated    = fifelse(is.na(fgs_escalated), "n/a", fifelse(as.logical(fgs_escalated), "Yes", "")),
+        `Severe in force`   = severe_warnings,
+        `Warnings in force` = warnings,
+        `Alerts in force`   = alerts,
+        `Warning areas under forecast` = fifelse(is.na(pot_warning_areas), "n/a", as.character(pot_warning_areas)),
+        `Alert areas under forecast`   = fifelse(is.na(pot_alert_areas),   "n/a", as.character(pot_alert_areas))
+      )]
+      setnames(out, c("d1", "d2", "d3", "d4", "d5"), day_names)
       data.table::fwrite(out, file)
     }
   )

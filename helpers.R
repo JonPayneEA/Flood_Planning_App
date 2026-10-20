@@ -467,6 +467,105 @@ aggregate_situation <- function(inter, changes, mp, all_const, statement_id, iss
 
 
 # -----------------------------------------------------------------------------
+# situation_detail() and apply_situation_detail()
+#
+# The Constituency situation table can be narrowed to some flood sources, and shows the
+# impact and likelihood behind each constituency's worst risk. Neither is held in
+# constituency_flood_situation (job 19), which folds every source together, so both are
+# worked out here from the stored intersections, for any statement.
+#
+# situation_detail() gives, per constituency, over the chosen sources only:
+#   the worst rank on each of days 1 to 5, the worst rank over the five days, the first
+#   date it occurs, the sources at that rank on any day (as job 19 does), and the impact
+#   and likelihood on that first worst day. Where several polygons share the worst rank
+#   on that day, the one with the highest impact is shown, then the highest likelihood.
+#   Overlaps below min_pct of a constituency are ignored, as job 14 ignores them.
+#   Constituencies with nothing under the chosen sources are absent from the result.
+#
+#   inter    constituency_id, forecast_date, day_index, source, risk_level, risk_x, risk_y,
+#            impact_label, likelihood_label, intersection_pct (one statement)
+#   sources  character vector of flood sources, or NULL for all
+#
+# apply_situation_detail() adds the impact and likelihood columns to a situation table. When
+# `narrow` is TRUE (a source filter is on) it also replaces the risk columns with the
+# detail's, so a constituency with nothing under the chosen sources drops to none.
+# -----------------------------------------------------------------------------
+
+SITUATION_DETAIL_COLUMNS <- c("fgs_worst_rank", "fgs_worst_date", "fgs_worst_sources",
+                              "fgs_worst_impact", "fgs_worst_likelihood",
+                              "fgs_worst_impact_x", "fgs_worst_likelihood_y")
+
+situation_detail <- function(inter, sources = NULL, min_pct = 0.01) {
+  none <- data.table::data.table(
+    constituency_id = character(), fgs_worst_rank = integer(), fgs_worst_date = character(),
+    fgs_worst_sources = character(), fgs_worst_impact = character(), fgs_worst_likelihood = character(),
+    fgs_worst_impact_x = integer(), fgs_worst_likelihood_y = integer())
+  for (d in 1:5) none[, (paste0("fgs_rank_day", d)) := integer()]
+  if (is.null(inter) || nrow(inter) == 0L) return(none)
+
+  x <- data.table::copy(data.table::as.data.table(inter))
+  # Older or reduced callers may not carry the impact columns: they then show as n/a.
+  for (col in c("risk_x", "risk_y")) if (!(col %in% names(x))) x[, (col) := NA_integer_]
+  for (col in c("impact_label", "likelihood_label")) if (!(col %in% names(x))) x[, (col) := NA_character_]
+  x <- x[is.na(intersection_pct) | intersection_pct >= min_pct]
+  if (length(sources) > 0L) x <- x[tolower(source) %in% tolower(sources)]
+  x[, rk := match(risk_level, POC_RANK_LEVELS)]
+  x <- x[!is.na(rk)]
+  if (nrow(x) == 0L) return(none)
+  x[, `:=`(day = as.integer(day_index), fdate = as.Date(forecast_date),
+           ix = suppressWarnings(as.integer(risk_x)), ly = suppressWarnings(as.integer(risk_y)))]
+
+  out <- data.table::data.table(constituency_id = unique(x$constituency_id))
+  byday <- x[, list(rk = max(rk)), by = list(constituency_id, day)]
+  for (d in 1:5) {
+    out[, (paste0("fgs_rank_day", d)) := 0L]
+    v <- byday[day == d]
+    if (nrow(v) > 0L) out[v, (paste0("fgs_rank_day", d)) := i.rk, on = "constituency_id"]
+  }
+  worst <- x[, list(fgs_worst_rank = max(rk)), by = constituency_id]
+  out[worst, fgs_worst_rank := i.fgs_worst_rank, on = "constituency_id"]
+
+  top <- x[worst, on = "constituency_id"][rk == fgs_worst_rank]
+  first <- top[, list(first_date = min(fdate),
+                      fgs_worst_sources = paste(sort(unique(source)), collapse = ", ")), by = constituency_id]
+  out[first, `:=`(fgs_worst_date = as.character(i.first_date), fgs_worst_sources = i.fgs_worst_sources),
+      on = "constituency_id"]
+
+  on_day <- top[first, on = "constituency_id"][fdate == first_date]
+  data.table::setorder(on_day, constituency_id, -ix, -ly, na.last = TRUE)
+  pick <- on_day[, .SD[1L], by = constituency_id]
+  pick[, `:=`(imp = data.table::fifelse(is.na(impact_label) | impact_label == "", NA_character_, as.character(impact_label)),
+              lik = data.table::fifelse(is.na(likelihood_label) | likelihood_label == "", NA_character_, as.character(likelihood_label)))]
+  out[pick, `:=`(fgs_worst_impact = i.imp, fgs_worst_likelihood = i.lik,
+                 fgs_worst_impact_x = i.ix, fgs_worst_likelihood_y = i.ly), on = "constituency_id"]
+  out[]
+}
+
+apply_situation_detail <- function(d, detail, narrow = FALSE) {
+  d <- data.table::copy(d)
+  d[, `:=`(fgs_worst_impact = NA_character_, fgs_worst_likelihood = NA_character_,
+           fgs_worst_impact_x = NA_integer_, fgs_worst_likelihood_y = NA_integer_)]
+  if (is.null(detail)) return(d[])
+  m <- match(d$constituency_id, detail$constituency_id)
+  d[, `:=`(fgs_worst_impact       = detail$fgs_worst_impact[m],
+           fgs_worst_likelihood   = detail$fgs_worst_likelihood[m],
+           fgs_worst_impact_x     = detail$fgs_worst_impact_x[m],
+           fgs_worst_likelihood_y = detail$fgs_worst_likelihood_y[m])]
+  if (narrow) {
+    for (k in 1:5) {
+      col <- paste0("fgs_rank_day", k)
+      d[, (col) := data.table::fcoalesce(as.integer(detail[[col]][m]), 0L)]
+    }
+    d[, `:=`(fgs_worst_rank    = data.table::fcoalesce(as.integer(detail$fgs_worst_rank[m]), 0L),
+             fgs_worst_date    = detail$fgs_worst_date[m],
+             fgs_worst_sources = detail$fgs_worst_sources[m])]
+    d[, fgs_worst_level := data.table::fifelse(fgs_worst_rank == 0L, "None", POC_RANK_LEVELS[pmax(1L, fgs_worst_rank)])]
+  }
+  d[]
+}
+
+
+# -----------------------------------------------------------------------------
 # empty_situation_message()
 #
 # What the Constituency situation table says when no row survives the filters.

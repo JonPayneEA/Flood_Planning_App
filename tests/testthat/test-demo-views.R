@@ -230,7 +230,7 @@ test_that("every piece of look-back code is tagged so it can be found and remove
   # No look-back function is defined anywhere without a tag on or near it.
   for (f in c("data.R", "helpers.R")) {
     lines <- readLines(file.path(app_root, f), warn = FALSE, encoding = "UTF-8")
-    for (fn in c("fetch_all_constituencies", "fetch_mp_lookup", "fetch_constituency_intersections",
+    for (fn in c("fetch_all_constituencies", "fetch_mp_lookup",
                  "fetch_situation_for_statement", "aggregate_situation", "normalise_name")) {
       i <- grep(paste0("^", fn, " *<- *"), lines)
       for (k in i) expect_true(any(grepl("POC-ONLY", lines[max(1L, k - 12L):k], fixed = TRUE)) ||
@@ -273,5 +273,25 @@ test_that("the Overview links to the Guide, and the Guide is a valid place to na
     do.call(session$setInputs, demo_inputs)
     expect_match(txt(output$ov_foot), "How each figure is calculated")
     expect_no_error(session$setInputs(nav_to = "Guide"))
+  })
+})
+
+
+test_that("the situation tab narrows by flood source and impact, and says what the impact is", {
+  testServer(demo_srv$server, {
+    do.call(session$setInputs, demo_inputs)
+    session$setInputs(sit_statement = "latest", sit_min_rank = "0")
+    everyone <- nrow(situation_filtered())
+    session$setInputs(sit_sources = "coastal")
+    coastal <- situation_filtered()
+    expect_lt(nrow(coastal), everyone)
+    expect_true(all(coastal$fgs_worst_rank >= 1L))
+    expect_true(all(grepl("coastal", coastal$fgs_worst_sources)))     # only coastal is left behind the risk
+    expect_false(anyNA(coastal$fgs_worst_impact))
+    session$setInputs(sit_sources = character(0), sit_min_impact = "3")
+    impact <- situation_filtered()
+    expect_gt(nrow(impact), 0L)
+    expect_true(all(impact$fgs_worst_impact_x >= 3L))
+    expect_true(all(impact$fgs_worst_impact %in% c("Significant", "Extreme")))
   })
 })

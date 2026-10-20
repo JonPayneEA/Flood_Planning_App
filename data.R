@@ -626,10 +626,14 @@ fetch_changes_log <- function(statement_id) {
 # same rule the pipeline uses for warning contacts. An area spanning several
 # constituencies counts once in each; an area under several days or polygons
 # counts once. min_rank keeps only areas under polygons at that risk rank or
-# above (0 keeps all; 1 Very Low, 2 Low, 3 Medium, 4 High).
+# above (0 keeps all; 1 Very Low, 2 Low, 3 Medium, 4 High). sources keeps only
+# areas under polygons of those flood sources (NULL keeps all).
 # -----------------------------------------------------------------------------
 
-fetch_potential_areas <- function(statement_id, min_rank = 0L) {
+fetch_potential_areas <- function(statement_id, min_rank = 0L, sources = NULL) {
+  source_sql <- if (length(sources) > 0L) {
+    sprintf("AND LOWER(source) IN (%s)", paste0("'", gsub("[^a-z]", "", tolower(sources)), "'", collapse = ", "))
+  } else ""
   db_query(sprintf("
     SELECT
       l.constituency_id,
@@ -641,11 +645,12 @@ fetch_potential_areas <- function(statement_id, min_rank = 0L) {
       WHERE statement_id    = %d
         AND geometry_source = '%s'
         AND CASE risk_level WHEN 'Very Low' THEN 1 WHEN 'Low' THEN 2 WHEN 'Medium' THEN 3 WHEN 'High' THEN 4 ELSE 0 END >= %d
+        %s
     ) e
     JOIN %s l ON l.ea_area_code = e.ea_area_code
     WHERE l.intersection_pct >= %s
     GROUP BY l.constituency_id
-  ", TBL_EA_INTERSECT, as.integer(statement_id), GEOMETRY_SOURCE, as.integer(min_rank),
+  ", TBL_EA_INTERSECT, as.integer(statement_id), GEOMETRY_SOURCE, as.integer(min_rank), source_sql,
      TBL_EA_CONSTITUENCY_LOOKUP, format(TARGET_AREA_MIN_PCT, scientific = FALSE)))
 }
 
@@ -848,6 +853,27 @@ fetch_data_signature <- function() {
 
 
 # -----------------------------------------------------------------------------
+# fetch_constituency_intersections()
+#
+# One statement's constituency intersection rows, all five days. They give the
+# Constituency situation tab its flood source filter and its impact and likelihood
+# columns (see situation_detail() in helpers.R), for the latest statement and for
+# past ones. The look-back below also rebuilds past statements from them. This is a
+# live feature, not POC-only.
+# -----------------------------------------------------------------------------
+
+fetch_constituency_intersections <- function(statement_id) {
+  db_query(sprintf("
+    SELECT constituency_id, constituency_name, forecast_date, day_index, source, risk_level,
+           risk_x, risk_y, impact_label, likelihood_label, intersection_pct
+    FROM %s
+    WHERE statement_id    = %d
+      AND geometry_source = '%s'
+  ", TBL_CONST_INTERSECT, as.integer(statement_id), GEOMETRY_SOURCE))
+}
+
+
+# -----------------------------------------------------------------------------
 # POC-ONLY: statement look-back (remove when the app goes live)
 #
 # The live constituency_flood_situation table holds only the latest statement.
@@ -867,15 +893,6 @@ fetch_mp_lookup <- function() {  # POC-ONLY
     SELECT constituency_name, name AS mp_name, party AS mp_party, email AS mp_email, phone AS mp_phone
     FROM %s
   ", TBL_MP_CONTACTS))
-}
-
-fetch_constituency_intersections <- function(statement_id) {  # POC-ONLY
-  db_query(sprintf("
-    SELECT constituency_id, constituency_name, forecast_date, day_index, source, risk_level, intersection_pct
-    FROM %s
-    WHERE statement_id    = %d
-      AND geometry_source = '%s'
-  ", TBL_CONST_INTERSECT, as.integer(statement_id), GEOMETRY_SOURCE))
 }
 
 fetch_situation_for_statement <- function(statement_id, issued_at = NA) {  # POC-ONLY
@@ -977,6 +994,7 @@ fetch_risk_polygons                <- with_cache(fetch_risk_polygons,           
 fetch_ea_areas_for_statement       <- with_cache(fetch_ea_areas_for_statement,       "ea_areas")
 fetch_summary_counts               <- with_cache(fetch_summary_counts,               "summary_counts")
 fetch_ea_geometry                  <- with_cache(fetch_ea_geometry,                  "ea_geometry", group = "geometry")
+fetch_constituency_intersections   <- with_cache(fetch_constituency_intersections,   "const_intersections")
 fetch_constituency_geometry        <- with_cache(fetch_constituency_geometry,        "const_geometry", group = "geometry")
 fetch_constituencies_for_statement <- with_cache(fetch_constituencies_for_statement, "const_meta")
 fetch_changes                      <- with_cache(fetch_changes,                      "changes")
