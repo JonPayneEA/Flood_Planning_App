@@ -461,7 +461,7 @@ test_that("an empty result means none under any polygon, and a failed read shows
 
 test_that("the minimum forecast risk filter is passed to the potential-areas query", {
   seen <- NULL
-  env <- make_server_env(list(fetch_potential_areas = function(sid, min_rank = 0L) { seen <<- c(seen, min_rank); data.table(constituency_id = character(), warning_areas = integer(), alert_areas = integer()) }))
+  env <- make_server_env(list(fetch_potential_areas = function(sid, min_rank = 0L, sources = NULL) { seen <<- c(seen, min_rank); data.table(constituency_id = character(), warning_areas = integer(), alert_areas = integer()) }))
   testServer(env$server, {
     do.call(session$setInputs, base_inputs)          # base sit_min_rank is "3"
     situation_clean()

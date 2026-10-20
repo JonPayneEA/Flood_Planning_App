@@ -424,3 +424,70 @@ test_that("polygons_only keeps a collection's polygon when an empty collection i
   out <- polygons_only(shape)
   expect_equal(out$code, c("a", "b"))
 })
+
+
+detail_inter <- function() {
+  data.table::data.table(
+    constituency_id = c("A", "A", "A", "A", "B", "B", "C"),
+    forecast_date = c("2026-10-20", "2026-10-21", "2026-10-21", "2026-10-21", "2026-10-20", "2026-10-22", "2026-10-22"),
+    day_index = c(1, 2, 2, 2, 1, 3, 3),
+    source = c("river", "river", "coastal", "coastal", "surface", "surface", "ground"),
+    risk_level = c("Low", "Medium", "Medium", "Low", "Very Low", "Low", "High"),
+    risk_x = c(1, 2, 3, 1, 1, 2, 4), risk_y = c(1, 2, 1, 1, 1, 1, 2),
+    impact_label = c("Minor", "Moderate", "Significant", "Minor", "Minor", "Moderate", "Extreme"),
+    likelihood_label = c("Low", "Medium", "Low", "Low", "Low", "Low", "Medium"),
+    intersection_pct = c(1, 1, 1, 1, 1, 1, 0.001))
+}
+
+test_that("situation_detail folds ranks, worst day, sources, impact and likelihood", {
+  d <- situation_detail(detail_inter())[order(constituency_id)]
+  expect_equal(d$constituency_id, c("A", "B"))                    # C is below the overlap floor
+  expect_equal(d$fgs_worst_rank, c(3L, 2L))
+  expect_equal(d$fgs_worst_date, c("2026-10-21", "2026-10-22"))
+  expect_equal(d$fgs_worst_sources, c("coastal, river", "surface"))
+  expect_equal(c(d$fgs_rank_day1[1], d$fgs_rank_day2[1], d$fgs_rank_day3[1]), c(2L, 3L, 0L))
+})
+
+test_that("two polygons at the worst risk on the worst day show the higher impact", {
+  d <- situation_detail(detail_inter())[constituency_id == "A"]
+  expect_equal(d$fgs_worst_impact, "Significant")                 # over Moderate, both Medium
+  expect_equal(d$fgs_worst_likelihood, "Low")
+  expect_equal(d$fgs_worst_impact_x, 3L)
+})
+
+test_that("a source filter recomputes the worst risk for those sources only", {
+  d <- situation_detail(detail_inter(), "river")
+  expect_equal(d$constituency_id, "A")                            # B has no river risk
+  expect_equal(d$fgs_worst_rank, 3L)
+  expect_equal(d$fgs_worst_impact, "Moderate")
+  coastal <- situation_detail(detail_inter(), c("coastal"))
+  expect_equal(coastal$fgs_worst_sources, "coastal")
+  expect_equal(nrow(situation_detail(detail_inter(), "ground")), 0L)   # C is below the floor
+  expect_equal(nrow(situation_detail(NULL)), 0L)
+})
+
+test_that("apply_situation_detail adds the columns, and narrows the risk when a filter is on", {
+  base <- data.table::data.table(
+    constituency_id = c("A", "B", "Z"), fgs_worst_rank = c(3L, 2L, 0L), fgs_worst_level = c("Medium", "Low", "None"),
+    fgs_worst_date = c("x", "y", NA), fgs_worst_sources = c("s", "s", NA),
+    fgs_rank_day1 = c(2L, 1L, 0L), fgs_rank_day2 = c(3L, 0L, 0L), fgs_rank_day3 = 0L, fgs_rank_day4 = 0L, fgs_rank_day5 = 0L)
+  plain <- apply_situation_detail(base, situation_detail(detail_inter()), narrow = FALSE)
+  expect_equal(plain$fgs_worst_impact, c("Significant", "Moderate", NA))
+  expect_equal(plain$fgs_worst_rank, base$fgs_worst_rank)         # ranks untouched without a filter
+  narrowed <- apply_situation_detail(base, situation_detail(detail_inter(), "river"), narrow = TRUE)
+  expect_equal(narrowed$fgs_worst_rank, c(3L, 0L, 0L))            # B drops out with no river risk
+  expect_equal(narrowed$fgs_worst_level, c("Medium", "None", "None"))
+  expect_equal(narrowed$fgs_worst_sources, c("river", NA, NA))
+  expect_equal(narrowed$fgs_rank_day1, c(2L, 0L, 0L))
+  none <- apply_situation_detail(base, NULL, narrow = TRUE)       # intersections unreadable
+  expect_true(all(is.na(none$fgs_worst_impact)))
+  expect_equal(none$fgs_worst_rank, base$fgs_worst_rank)
+})
+
+
+test_that("situation_detail copes with intersections that carry no impact columns", {
+  slim <- detail_inter()[, .(constituency_id, forecast_date, day_index, source, risk_level, intersection_pct)]
+  d <- situation_detail(slim)
+  expect_equal(d[constituency_id == "A"]$fgs_worst_rank, 3L)
+  expect_true(all(is.na(d$fgs_worst_impact)))
+})

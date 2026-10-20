@@ -359,6 +359,17 @@ Guide and keep a fixed meaning. The frame is blue so that it is never read as th
   though the day-by-day comparison leaves out days that have rolled off. Without the log
   table, an empty result is trusted as no change; without the newer notebook 18, the
   counts line is left out.
+- **Source, impact and likelihood.** Constituency situation has a **Flood source** filter
+  (any of river, coastal, surface water and groundwater), a **Minimum impact** filter, and
+  **Impact** and **Likelihood** columns for the polygon behind the worst risk on the first
+  day it occurs (the highest impact, then the highest likelihood, where several share that
+  risk). They are worked out in the app from `fgs_constituency_intersections`, which keeps
+  every statement, so they work for the look-back too. Choosing a source recalculates the
+  risks, the five days, Sources, Impact, Likelihood and the areas under the forecast for
+  those sources alone; Escalated and the in force columns stay across all sources. If the
+  intersections cannot be read the new columns show n/a and the source filter says it was
+  not applied. **Export CSV** has the same columns, in the same order and with the same
+  names as the table, with the risk in words and the MP's email and phone added.
 - **Areas under the forecast.** Constituency situation has two columns, "Warning areas
   under forecast" and "Alert areas under forecast": the flood warning areas and flood
   alert areas that sit under a risk polygon of the statement, counted per constituency

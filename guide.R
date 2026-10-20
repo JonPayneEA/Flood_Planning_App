@@ -232,12 +232,14 @@ guide_products <- function(s) {
         sprintf("For each constituency the pipeline takes the worst risk on each day, across all flood sources. Polygons covering less than %s of the constituency are ignored.", guide_pct(th$contact_min_pct)),
         "Worst is the highest of those five. On is the first date it occurs. Sources are the flood sources at that worst risk, taken across all days.",
         "The five day columns show the worst risk on each day. Escalated is yes if the forecast rose against the previous statement on any day or source.",
+        "Impact and Likelihood are those of the forecast polygon behind the worst risk, on the first day it occurs. Where several polygons share that risk on that day, the one with the highest impact is shown, then the highest likelihood. They are read from the stored intersections, so they are available for any statement.",
         "The in force columns count the Severe Flood Warnings, Flood Warnings and Flood Alerts in force that overlap the constituency. An area that spans several constituencies is counted once in each.",
         sprintf("Warning areas and alert areas under the forecast are the potential ones: flood warning areas and flood alert areas that sit under a risk polygon of the statement, on any of the five days. An area counts when at least %s of it lies inside the constituency, and counts once however many days or polygons cover it. The minimum forecast risk filter also sets which polygons count: at Medium, only areas under Medium or High polygons are counted. These are places where a warning or alert could be issued. None of them need be in force.", guide_pct(th$warning_min_pct)),
         "The MP is matched to the constituency on a normalised name (lower case, accents folded, \"&\" as \"and\"). A seat with no match is shown as vacant or unmatched."
       ),
       read = c(
         "The filters narrow the table. Setting the minimum risk to Any includes constituencies with only a warning or alert in force.",
+        "Flood source keeps only constituencies with risk from the sources you pick, and recalculates the risk, the five days, Sources, Impact, Likelihood and the areas under the forecast for those sources alone. Escalated and the in force columns stay across all sources. Minimum impact keeps constituencies whose worst-day impact is at least the level chosen.",
         "Select a row to see its MP and briefing draft. Show on map jumps to the constituency."
       ),
       limits = c(
