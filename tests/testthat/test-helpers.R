@@ -395,3 +395,32 @@ test_that("line_rows picks out line geometries and nothing else", {
   expect_equal(line_rows(sf::st_sf(code = character(), geometry = sf::st_sfc(), crs = 4326)), logical())
   expect_equal(line_rows(NULL), logical())
 })
+
+
+test_that("a missing intersection share (a coastal line) passes the threshold", {
+  expect_equal(clears_threshold(c(0.5, 0.1, NA), 0.25), c(TRUE, FALSE, TRUE))
+  expect_equal(clears_threshold(numeric(), 0.25), logical())
+})
+
+test_that("a missing share is never an NA row in an sf subset, which is what broke the layer", {
+  poly <- sf::st_polygon(list(rbind(c(0, 0), c(1, 0), c(1, 1), c(0, 0))))
+  shape <- sf::st_sf(code = c("a", "b", "c"), pct = c(0.5, NA, 0.1), geometry = sf::st_sfc(poly, poly, poly, crs = 4326))
+  kept <- shape[clears_threshold(shape$pct, 0.25), ]
+  expect_equal(kept$code, c("a", "b"))
+  expect_false(anyNA(kept$code))
+})
+
+test_that("intersection_label says so when the share is missing", {
+  expect_equal(intersection_label(c(0.5, NA, 1)), c("50%", "crossed by a coastal line", "100%"))
+})
+
+
+test_that("polygons_only keeps a collection's polygon when an empty collection is in the same batch", {
+  poly  <- sf::st_polygon(list(rbind(c(0, 0), c(1, 0), c(1, 1), c(0, 0))))
+  line  <- sf::st_linestring(rbind(c(5, 5), c(6, 6)))
+  shape <- sf::st_sf(code = c("a", "b", "empty"),
+                     geometry = sf::st_sfc(poly, sf::st_geometrycollection(list(poly, line)),
+                                           sf::st_geometrycollection(), crs = 4326))
+  out <- polygons_only(shape)
+  expect_equal(out$code, c("a", "b"))
+})
