@@ -732,21 +732,39 @@ server <- function(input, output, session) {
       "Impact: ",     shape$impact_label
     )
     
-    leaflet::addPolygons(
-      proxy,
-      data        = shape,
-      group       = "polygons",
-      color       = fill_hex,
-      weight      = 3,
-      fillColor   = fill_hex,
-      fillOpacity = 0.60,
-      popup       = popup_html,
-      highlightOptions = leaflet::highlightOptions(
-        weight       = 3,
-        fillOpacity  = 0.65,
-        bringToFront = TRUE
+    # Coastal geometries are lines. addPolygons() would close each into a filled
+    # shape, so lines are drawn as lines, in the same colour, and areas as before.
+    is_line <- line_rows(shape)
+
+    if (any(!is_line)) {
+      leaflet::addPolygons(
+        proxy,
+        data        = shape[!is_line, ],
+        group       = "polygons",
+        color       = fill_hex[!is_line],
+        weight      = 3,
+        fillColor   = fill_hex[!is_line],
+        fillOpacity = 0.60,
+        popup       = popup_html[!is_line],
+        highlightOptions = leaflet::highlightOptions(
+          weight       = 3,
+          fillOpacity  = 0.65,
+          bringToFront = TRUE
+        )
       )
-    )
+    }
+    if (any(is_line)) {
+      leaflet::addPolylines(
+        proxy,
+        data    = shape[is_line, ],
+        group   = "polygons",
+        color   = fill_hex[is_line],
+        weight  = 6,
+        opacity = 0.9,
+        popup   = popup_html[is_line],
+        highlightOptions = leaflet::highlightOptions(weight = 8, bringToFront = TRUE)
+      )
+    }
 
     busy_polygons(FALSE)
   }))
