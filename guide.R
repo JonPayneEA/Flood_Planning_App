@@ -23,7 +23,7 @@
 # -----------------------------------------------------------------------------
 
 GUIDE_PIPELINE <- list(
-  briefing_min_rank  = 3L,      # BRIEFING_MIN_RISK_RANK
+  briefing_min_rank  = 1L,      # BRIEFING_MIN_RISK_RANK
   ea_min_pct         = 0.25,    # EA_INTERSECTION_MIN_PCT
   contact_min_pct    = 0.01,    # FGS_CONTACT_MIN_PCT
   warning_min_pct    = 0.01,    # WARNING_CONTACT_MIN_PCT
