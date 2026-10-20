@@ -31,6 +31,7 @@ GUIDE_PIPELINE <- list(
   health_chain       = c(3, 12),    # HEALTH_CONTACTS_*  (situation table age)
   health_warnings    = c(3, 12),    # HEALTH_WARNINGS_*  (warnings ingest age)
   health_mp          = c(10, 21),   # HEALTH_MP_WARN_DAYS, HEALTH_MP_FAIL_DAYS
+  health_live        = 1,           # HEALTH_LIVE_WARN_HOURS (live EA readings: warns, never fails)
   min_constituencies = 600L,    # MIN_CONSTITUENCIES
   min_mps            = 600L     # MIN_MPS
 )
@@ -315,6 +316,7 @@ guide_products <- function(s) {
         sprintf("The checks are: the age of the newest statement (warn after %s hours, fail after %s); the age of the situation table, which proves the polling chain ran (%s hours); the age of the warnings ingest (%s hours); MP details (warn after %s days, fail after %s); and whether the statements are all intersected, whether warnings match a constituency, and whether MPs match.",
                 th$health_fgs[1], th$health_fgs[2], paste(th$health_chain, collapse = " and "),
                 paste(th$health_warnings, collapse = " and "), th$health_mp[1], th$health_mp[2]),
+        sprintf("A further check watches the live river and sea readings the pipeline keeps for every site. It warns when the newest reading is over %s hour old, and it never fails, because a stale feed is usually a bad spell at the Environment Agency and must not fail the run that carries the forecast and warnings alerts.", th$health_live),
         sprintf("Two completeness checks fail if there are fewer than %s constituencies or fewer than %s MPs.", th$min_constituencies, th$min_mps),
         "The badge in the header shows the overall result. Click it for every check."
       ),

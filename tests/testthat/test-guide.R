@@ -71,6 +71,7 @@ test_that("the figures in the text match the pipeline's config.py when it is alo
   expect_equal(d$health_chain, c(val("HEALTH_CONTACTS_WARN_HOURS"), val("HEALTH_CONTACTS_FAIL_HOURS")))
   expect_equal(d$health_warnings, c(val("HEALTH_WARNINGS_WARN_HOURS"), val("HEALTH_WARNINGS_FAIL_HOURS")))
   expect_equal(d$health_mp, c(val("HEALTH_MP_WARN_DAYS"), val("HEALTH_MP_FAIL_DAYS")))
+  expect_equal(d$health_live, val("HEALTH_LIVE_WARN_HOURS"))
   expect_equal(d$min_constituencies, val("MIN_CONSTITUENCIES"))
   expect_equal(d$min_mps, val("MIN_MPS"))
 })
