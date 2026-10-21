@@ -59,6 +59,22 @@ library(DT)           # Sortable, searchable tables for the constituency views
 
 
 # -----------------------------------------------------------------------------
+# Query progress pop-ups.
+#
+# brickster reports every warehouse call with cli progress steps ("Submitting query",
+# "Fetching metadata" and the like). While a Shiny app is running, cli draws each step as a
+# Shiny progress pop-up, with its terminal colour codes showing, so every query put a stack
+# of boxes on screen. Setting cli.progress_handlers_only to nothing turns them all off. Set
+# FGS_SHOW_QUERY_PROGRESS=1 to see them again (for example when a query seems stuck).
+# -----------------------------------------------------------------------------
+
+if (is.null(getOption("cli.progress_handlers_only")) &&
+    !tolower(Sys.getenv("FGS_SHOW_QUERY_PROGRESS", unset = "")) %in% c("1", "true", "yes", "on")) {
+  options(cli.progress_handlers_only = character())
+}
+
+
+# -----------------------------------------------------------------------------
 # Local .env loading.
 #
 # Silent no-op when .env is missing, so the guard is belt-and-braces. On
