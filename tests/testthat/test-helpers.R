@@ -491,3 +491,14 @@ test_that("situation_detail copes with intersections that carry no impact column
   expect_equal(d[constituency_id == "A"]$fgs_worst_rank, 3L)
   expect_true(all(is.na(d$fgs_worst_impact)))
 })
+
+
+test_that("notification_id gives a repeat the same id and a different failure its own", {
+  a <- "The EA flood areas layer could not be drawn: Don't know how to get polygon data (1)"
+  b <- "The EA flood areas layer could not be drawn: Don't know how to get polygon data (2)"
+  c <- "The FGS risk polygons layer could not be drawn: something else"
+  expect_equal(notification_id(a, "layer_"), notification_id(a, "layer_"))
+  expect_equal(notification_id(a, "layer_"), notification_id(b, "layer_"))   # same layer, same words: one box
+  expect_false(identical(notification_id(a, "layer_"), notification_id(c, "layer_")))
+  expect_match(notification_id(a), "^note_[A-Za-z]+$")
+})
