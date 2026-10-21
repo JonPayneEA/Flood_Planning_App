@@ -584,9 +584,10 @@ test_that("the Hydrometrics tab loads the register on first open and fetches rea
                                measure_uri = c("m/1", "m/2"), parameter = c("level", "flow"), unit_name = c("mASD", "m3/s"),
                                river_name = "Aldwyn", ea_area_name = "North")
   asked <- new.env(); asked$n <- 0L; asked$uris <- NULL
-  rd <- function(uris, days) { asked$n <- asked$n + 1L; asked$uris <- uris
+  rd <- function(uris, days, sum_uris = character()) { asked$n <- asked$n + 1L; asked$uris <- uris; asked$days <- days
     data.table(measure_uri = uris, date_time = Sys.time() - 600, value = 1) }
-  env <- make_server_env(list(fetch_rt_register = reg, fetch_rt_readings = rd, fetch_rt_boundary = function() NULL))
+  env <- make_server_env(list(fetch_rt_register = reg, fetch_rt_readings = rd, fetch_rt_boundary = function() NULL,
+                                  fetch_rt_span = function(uris) Sys.time() - 400 * 86400 + 60))
   testServer(env$server, {
     do.call(session$setInputs, base_inputs)
     expect_null(rt_reg())                                                    # not loaded until the tab is opened
@@ -597,6 +598,8 @@ test_that("the Hydrometrics tab loads the register on first open and fetches rea
     session$setInputs(rt_measures = c("m/1", "m/2"), rt_days = 3L, rt_refresh = 0)
     expect_equal(asked$uris, c("m/1", "m/2"))
     expect_match(html_of(output$rt_summary), "2 readings")
+    session$setInputs(rt_days = "0")                                          # all available: sized from the earliest reading
+    expect_equal(asked$days, 400L)
     session$setInputs(rt_measures = sprintf("m/%d", 1:9))
     expect_match(html_of(output$rt_message), "Pick 8 or fewer")
   })

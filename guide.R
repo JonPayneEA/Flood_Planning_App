@@ -351,7 +351,8 @@ guide_products <- function(s) {
       tables = c("ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_readings_bronze"),
       steps = c(
         "The measure register lists every measure: a level, flow or rainfall series at a station. The four drop-downs (EA area, river, parameter, station) narrow each other, so a choice never leads to an empty list.",
-        "Choose up to eight measures and how many days back, 1 to 30. Readings are fetched only for those measures and that window, from one series that joins the daily archive to the live tail.",
+        "Choose up to eight measures and how far back to look, from 1 day to everything held. Readings are fetched only for those measures and that window, from one series that joins the daily archive to the live tail.",
+        "Up to about 15 days every reading is drawn. Beyond that the warehouse summarises each measure to about 1,500 points, so a long window stays quick: level and flow are the mean of the readings in each point, and rainfall is the total. A short window shows the detail.",
         "Each unit gets its own panel, because metres and cubic metres a second do not share an axis.",
         "The dashed line is midnight at the end of the last archived day. The shaded band to its right is the live tail, which the daily archive has not yet picked up."
       ),

@@ -823,7 +823,7 @@ make_hydrometrics_tab <- function() tags$div(
     class = "filter-row",
     selectizeInput("rt_measures", "Measures (up to 8)", choices = NULL, multiple = TRUE, width = "620px",
                    options = list(maxItems = RT_MAX_MEASURES, placeholder = "Pick a station to start")),
-    sliderInput("rt_days", "Days back", min = 1, max = RT_MAX_DAYS, value = 3, step = 1, width = "300px"),
+    selectInput("rt_days", "How far back", choices = RT_WINDOWS, selected = 3L, width = "180px"),
     actionButton("rt_refresh", "Refresh", icon = icon("rotate"), class = "btn-sm btn-outline-secondary")
   ),
   uiOutput("rt_message"),

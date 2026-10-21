@@ -744,20 +744,51 @@ fetch_warning_episodes <- function(constituency_id) {
 
 fetch_rt_register <- function() db_query(sprintf("SELECT * FROM %s", TBL_RT_REGISTER))
 
-fetch_rt_readings <- function(measure_uris, days) {
-  uris <- gsub("[^A-Za-z0-9:/._#-]", "", as.character(measure_uris))
-  uris <- uris[nzchar(uris)]
+fetch_rt_readings <- function(measure_uris, days, sum_uris = character()) {
+  clean <- function(x) { x <- gsub("[^A-Za-z0-9:/._#-]", "", as.character(x)); x[nzchar(x)] }
+  uris <- clean(measure_uris)
   if (length(uris) == 0L) return(data.table(measure_uri = character(), date_time = as.POSIXct(character(), tz = "UTC"), value = numeric()))
-  d <- db_query(sprintf("
-    SELECT measure_uri, date_time, value
-    FROM %s
-    WHERE measure_uri IN (%s)
-      AND date_time >= current_timestamp() - INTERVAL %d DAYS
-    ORDER BY measure_uri, date_time
-  ", TBL_RT_ALL, paste0("'", uris, "'", collapse = ", "), as.integer(days)))
+  quoted <- function(x) paste0("'", x, "'", collapse = ", ")
+  bucket <- rt_bucket_seconds(days)
+  if (bucket <= 900L) {
+    # A short window: every reading as it is.
+    d <- db_query(sprintf("
+      SELECT measure_uri, date_time, value
+      FROM %s
+      WHERE measure_uri IN (%s)
+        AND date_time >= current_timestamp() - INTERVAL %d DAYS
+      ORDER BY measure_uri, date_time
+    ", TBL_RT_ALL, quoted(uris), as.integer(days)))
+  } else {
+    # A long window: one point per bucket, so the chart stays quick. Level and flow are averaged;
+    # rainfall (depth per reading) is summed so a bucket holds the rain that fell in it.
+    sums <- clean(sum_uris)
+    value_sql <- if (length(sums)) sprintf("CASE WHEN measure_uri IN (%s) THEN SUM(value) ELSE AVG(value) END", quoted(sums)) else "AVG(value)"
+    d <- db_query(sprintf("
+      SELECT measure_uri,
+             timestamp_seconds(CAST(FLOOR(unix_timestamp(date_time) / %d) * %d AS BIGINT)) AS date_time,
+             %s AS value
+      FROM %s
+      WHERE measure_uri IN (%s)
+        AND date_time >= current_timestamp() - INTERVAL %d DAYS
+      GROUP BY measure_uri, CAST(FLOOR(unix_timestamp(date_time) / %d) * %d AS BIGINT)
+      ORDER BY measure_uri, date_time
+    ", bucket, bucket, value_sql, TBL_RT_ALL, quoted(uris), as.integer(days), bucket, bucket))
+  }
   d <- as.data.table(d)
   if (nrow(d)) d[, `:=`(date_time = as.POSIXct(date_time, tz = "UTC"), value = as.numeric(value))]
+  attr(d, "bucket_seconds") <- bucket
   d
+}
+
+# The earliest reading held for these measures, so "All available" can size its window.
+fetch_rt_span <- function(measure_uris) {
+  uris <- gsub("[^A-Za-z0-9:/._#-]", "", as.character(measure_uris))
+  uris <- uris[nzchar(uris)]
+  if (length(uris) == 0L) return(NULL)
+  d <- db_query(sprintf("SELECT MIN(date_time) AS t FROM %s WHERE measure_uri IN (%s)", TBL_RT_ALL,
+                        paste0("'", uris, "'", collapse = ", ")))
+  if (nrow(d) == 0L || is.na(d$t[1L])) NULL else as.POSIXct(d$t[1L], tz = "UTC")
 }
 
 fetch_rt_boundary <- function() {

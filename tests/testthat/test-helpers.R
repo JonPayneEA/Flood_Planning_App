@@ -611,3 +611,17 @@ test_that("concurrent counts rise and fall as alerts and warnings start and end"
   expect_equal(max(cc$alerts), 1L)                                                             # the stale open alert is left out
   expect_equal(nrow(concurrent_counts(NULL, now)), 0L)
 })
+
+
+test_that("long windows are bucketed to about 1,500 points, and short ones are not", {
+  expect_equal(rt_bucket_seconds(1), 900L); expect_equal(rt_bucket_seconds(3), 900L); expect_equal(rt_bucket_seconds(15), 900L)
+  expect_equal(rt_bucket_seconds(30) %% 900L, 0L)                                 # always whole readings
+  expect_equal(rt_bucket_seconds(30), 1800L)
+  for (d in c(30, 365, 1826, 4000)) expect_lte(d * 86400 / rt_bucket_seconds(d), 1500)
+  expect_gt(rt_bucket_seconds(1826), rt_bucket_seconds(365))
+  expect_equal(rt_bucket_label(900L), "")
+  expect_equal(rt_bucket_label(1800L), "30 minute")
+  expect_equal(rt_bucket_label(7200L), "2 hour")
+  expect_equal(rt_bucket_label(86400L), "1 day")
+  expect_equal(unname(RT_WINDOWS[["All available"]]), 0L)
+})

@@ -706,11 +706,15 @@ fetch_rt_register <- function() copy(demo_rt_register())
 # The archive ends at midnight last night; everything after it is the live tail.
 fetch_rt_boundary <- function() rt_boundary(Sys.Date() - 1L)
 
-fetch_rt_readings <- function(measure_uris, days) {
+# The demo holds three years of readings.
+fetch_rt_span <- function(measure_uris) as.POSIXct(Sys.time(), tz = "UTC") - 3 * 365 * 86400
+
+fetch_rt_readings <- function(measure_uris, days, sum_uris = character()) {
   reg <- demo_rt_register()[measure_uri %in% measure_uris]
   if (nrow(reg) == 0L) return(data.table(measure_uri = character(), date_time = as.POSIXct(character(), tz = "UTC"), value = numeric()))
   now <- as.POSIXct(trunc(Sys.time(), "mins"), tz = "UTC")
-  ts <- seq(now - as.integer(days) * 86400, now, by = 900)
+  bucket <- rt_bucket_seconds(days)
+  ts <- seq(now - as.integer(days) * 86400, now, by = bucket)
   rbindlist(lapply(seq_len(nrow(reg)), function(i) {
     h <- as.numeric(difftime(ts, now, units = "hours"))
     set.seed(sum(utf8ToInt(reg$measure_uri[i])))
