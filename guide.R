@@ -329,11 +329,14 @@ guide_products <- function(s) {
         "Notebook 25 turns the Environment Agency's message history, and then the live warnings log, into episodes. An episode runs from the message that switched an area on to the message that ended it, at any level. A warning that rises to severe and falls back is one episode.",
         "An issue is one episode. Alerts and warnings are counted separately. Severe is the number of warning episodes that reached severe at any point, so it is part of Warnings and not added to the total. The total is alerts plus warnings.",
         "An area belongs to a constituency when at least the same share of it lies inside as is used for the warning contacts. An area that spans several constituencies counts once in each.",
-        "Each issue is dated by the day it was switched on. The slider keeps the issues dated inside the chosen period. Select a row to see each area, how often it was issued and when last."
+        "Each issue is dated by the day it was switched on. The slider keeps the issues dated inside the chosen period. Select a row to see each area, how often it was issued and when last.",
+        "Tick Detailed to list every alert and warning for the selected constituency instead: the area, when it was issued, when it ended (or In force), how long it lasted, the highest level it reached and whether it went severe. The same period applies.",
+        "The graph under the table counts the alerts and warnings in force at the same time. Each issue steps the line up when it starts and down when it ends. It counts areas, not people or properties."
       ),
       read = c(
         "The total counts issues, not days in force and not people affected. Duration is held in the episodes table but is not shown here.",
         "Constituencies with no issue in the period are left out of the table.",
+        "In the graph and the Detailed table, an alert or warning with no end message for over 30 days is treated as one that never received it. The table marks it as still open; the graph leaves it out.",
         "The Nations filter at the top applies."
       ),
       limits = c(

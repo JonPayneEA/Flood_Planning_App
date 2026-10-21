@@ -1960,11 +1960,80 @@ server <- function(input, output, session) {
           Issued = issued, `of which severe` = severe, `Last issued` = format(last_issued, "%d %b %Y"))]
   }
 
+  # Every episode for the selected constituency (the Detailed table and the graph). Fetched on
+  # selection, not for every constituency.
+  wh_episodes <- reactive({
+    sel <- wh_selected()
+    req(sel)
+    safe_fetch(fetch_warning_episodes, sel$constituency_id)
+  })
+
+  wh_episode_table <- reactive({
+    r <- input$wh_range
+    ep <- wh_episodes()
+    if (is.null(r)) r <- c(as.Date("1900-01-01"), Sys.Date())
+    warning_episode_rows(ep, r[1L], r[2L])
+  })
+
+  # What the second table shows: the areas with their counts, or, when Detailed is ticked, one row per episode.
+  wh_second_table <- reactive({
+    if (isTRUE(input$wh_detailed)) wh_episode_table() else wh_area_display(wh_area_table())
+  })
+
   output$wh_areas <- DT::renderDataTable({
     req(wh_selected())
-    DT::datatable(wh_area_display(wh_area_table()), rownames = FALSE, selection = "none",
-                  options = list(pageLength = 15, scrollX = TRUE, dom = "tip", order = list(list(3L, "desc"))))
+    detailed <- isTRUE(input$wh_detailed)
+    tbl <- wh_second_table()
+    if (detailed && nrow(tbl) == 0L) {
+      return(DT::datatable(data.frame(Note = if (is.null(wh_episodes())) "The episodes could not be loaded." else "No alerts or warnings were issued in this period."),
+                           rownames = FALSE, selection = "none", options = list(dom = "t")))
+    }
+    DT::datatable(tbl, rownames = FALSE, selection = "none",
+                  options = list(pageLength = 15, scrollX = TRUE, dom = "tip",
+                                 order = if (detailed) list() else list(list(3L, "desc"))))
   })
+
+  output$wh_concurrent_note <- renderUI({
+    if (is.null(wh_selected())) return(NULL)
+    tags$div(
+      tags$h6("Alerts and warnings in force at the same time"),
+      tags$small(class = "text-muted d-block mb-2",
+        "Each step up is an alert or warning switched on in an area linked to this constituency; each step down is one ending. ",
+        "The line counts areas, so two warnings on different rivers at once read as two. Episodes open for over 30 days are left out, ",
+        "because they most likely never received an end message. The period slider sets the span shown."))
+  })
+
+  if (requireNamespace("plotly", quietly = TRUE)) {
+    output$wh_concurrent <- plotly::renderPlotly({
+      sel <- wh_selected()
+      req(sel)
+      ep <- wh_episodes()
+      req(ep, nrow(ep) > 0L)
+      now <- as.POSIXct(Sys.time(), tz = "UTC")
+      cc <- concurrent_counts(ep, now)
+      req(nrow(cc) > 0L)
+      r <- input$wh_range
+      from <- if (is.null(r)) min(cc$time) else as.POSIXct(paste(r[1L], "00:00:00"), tz = "UTC")
+      to   <- if (is.null(r)) now else min(now, as.POSIXct(paste(r[2L], "23:59:59"), tz = "UTC"))
+      # Carry the count in force at the start of the span, and close the line at its end.
+      before <- cc[time <= from]
+      start_row <- if (nrow(before)) before[.N, .(time = from, alerts, warnings)] else data.table(time = from, alerts = 0L, warnings = 0L)
+      inside <- cc[time > from & time <= to]
+      last <- if (nrow(inside)) inside[.N] else start_row
+      cc <- rbind(start_row, inside, data.table(time = to, alerts = last$alerts, warnings = last$warnings))
+      fig <- plotly::plot_ly(cc, x = ~time)
+      fig <- plotly::add_lines(fig, y = ~alerts, name = "Flood alerts", line = list(color = "#f47738", width = 1.8, shape = "hv"),
+                               hovertemplate = "%{y} in force<extra>Flood alerts</extra>")
+      fig <- plotly::add_lines(fig, y = ~warnings, name = "Flood warnings", line = list(color = "#d4351c", width = 1.8, shape = "hv"),
+                               hovertemplate = "%{y} in force<extra>Flood warnings</extra>")
+      plotly::layout(fig, height = 340,
+                     xaxis = list(type = "date", range = format(c(from, to), "%Y-%m-%d %H:%M:%S", tz = "UTC"), rangeslider = list(visible = TRUE)),
+                     yaxis = list(title = "Areas in force", rangemode = "tozero", dtick = NULL),
+                     legend = list(orientation = "h", y = -0.35), hovermode = "x unified",
+                     title = list(text = sel$constituency_name, x = 0.01, xanchor = "left", font = list(size = 13)),
+                     margin = list(t = 50))
+    })
+  }
 
   output$download_warning_history <- downloadHandler(
     filename = function() sprintf("warning_history_by_constituency_%s.csv", format(Sys.time(), "%Y%m%d_%H%M")),
@@ -1981,7 +2050,8 @@ server <- function(input, output, session) {
     filename = function() sprintf("warning_history_areas_%s.csv", format(Sys.time(), "%Y%m%d_%H%M")),
     content  = function(file) {
       sel <- wh_selected()
-      out <- if (is.null(sel)) data.table() else cbind(Constituency = sel$constituency_name, wh_area_display(wh_area_table()))
+      tbl <- if (is.null(sel)) data.table() else wh_second_table()
+      out <- if (nrow(tbl) == 0L) data.table() else cbind(Constituency = sel$constituency_name, tbl)
       data.table::fwrite(out, file)
     }
   )

@@ -724,6 +724,23 @@ fetch_rt_readings <- function(measure_uris, days) {
 }
 
 # Two years of invented warnings and alerts, heavier where the demo's storms fall.
+# Invented episodes for one constituency, so the Detailed table and the graph work in the demo.
+fetch_warning_episodes <- function(constituency_id) {
+  h <- { cid_ <- constituency_id; fetch_warning_history()[constituency_id == cid_] }
+  h <- h[, .(ea_area_code, ea_area_name, ea_area_type, issued_date, n_issued, n_severe)]
+  if (nrow(h) == 0L) return(data.table())
+  set.seed(sum(utf8ToInt(as.character(constituency_id))))
+  e <- h[rep(seq_len(.N), n_issued)]
+  e[, `:=`(episode_id = sprintf("%s_%d", ea_area_code, seq_len(.N)),
+           start_time = as.POSIXct(paste(issued_date, "00:00:00"), tz = "UTC") + sample.int(86000L, .N, replace = TRUE),
+           duration_minutes = round(rexp(.N, 1 / ifelse(ea_area_type == "flood_alert", 2400, 900))) + 30)]
+  e[, end_time := start_time + duration_minutes * 60]
+  e[, `:=`(had_severe = ea_area_type == "flood_warning" & runif(.N) < 0.12, stale_open = FALSE)]
+  e[, peak_level := fifelse(had_severe, "severe_flood_warning", ea_area_type)]
+  e[end_time > Sys.time(), `:=`(end_time = as.POSIXct(NA, tz = "UTC"), duration_minutes = NA_real_)]
+  e[, .(episode_id, ea_area_code, ea_area_name, ea_area_type, start_time, end_time, duration_minutes, peak_level, had_severe, stale_open)]
+}
+
 fetch_warning_history <- function() demo_memo("warning_history", demo_with_seed(515, {
   lk <- fetch_ea_constituency_mp()[constituency_overlap_pct >= TARGET_AREA_MIN_PCT]
   ea <- demo_ea_areas()$table

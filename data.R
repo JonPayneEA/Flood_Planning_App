@@ -692,6 +692,46 @@ fetch_warning_history <- function() {
 
 
 # -----------------------------------------------------------------------------
+# fetch_warning_episodes()
+#
+# Every alert and warning (one row per run in force) for the areas linked to ONE
+# constituency, by the same overlap rule as fetch_warning_history(). The id reaches
+# the SQL as letters and digits only. end_time is NULL while an episode is open.
+# -----------------------------------------------------------------------------
+
+fetch_warning_episodes <- function(constituency_id) {
+  cid <- gsub("[^A-Za-z0-9]", "", as.character(constituency_id))
+  db_query(sprintf("
+    SELECT
+      e.episode_id,
+      e.ea_area_code,
+      MAX(n.ea_area_name)  AS ea_area_name,
+      LOWER(e.area_type)   AS ea_area_type,
+      e.start_time,
+      e.end_time,
+      e.duration_minutes,
+      e.peak_level,
+      e.had_severe,
+      e.stale_open
+    FROM %s e
+    JOIN %s l ON l.ea_area_code = e.ea_area_code
+    LEFT JOIN (
+      SELECT ea_area_code, ea_area_name FROM %s
+      UNION ALL
+      SELECT ea_area_code, ea_area_name FROM %s
+    ) n ON n.ea_area_code = e.ea_area_code
+    WHERE l.constituency_id = '%s'
+      AND l.intersection_pct >= %s
+      AND LOWER(e.area_type) IN ('flood_alert', 'flood_warning')
+    GROUP BY e.episode_id, e.ea_area_code, LOWER(e.area_type), e.start_time, e.end_time,
+             e.duration_minutes, e.peak_level, e.had_severe, e.stale_open
+    ORDER BY e.start_time DESC
+  ", TBL_WARNING_EPISODES, TBL_EA_CONSTITUENCY_LOOKUP, TBL_EA_FWA, TBL_EA_FAA, cid,
+     format(TARGET_AREA_MIN_PCT, scientific = FALSE)))
+}
+
+
+# -----------------------------------------------------------------------------
 # Hydrometrics (Environment Agency real-time data)
 #
 # fetch_rt_register(): one row per measure (what is measured, where, on which river).
@@ -1083,6 +1123,7 @@ fetch_situation                    <- with_cache(fetch_situation,               
 fetch_briefing_drafts              <- with_cache(fetch_briefing_drafts,              "briefings", ttl = 0)
 fetch_exposure                     <- with_cache(fetch_exposure,                     "exposure",  ttl = 0)
 fetch_warning_history              <- with_cache(fetch_warning_history,              "warning_history", ttl = 0)
+fetch_warning_episodes             <- with_cache(fetch_warning_episodes,             "warning_episodes", ttl = min(CACHE_TTL_SECONDS, 300))
 fetch_rt_register                  <- with_cache(fetch_rt_register,                  "rt_register", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_rt_boundary                  <- with_cache(fetch_rt_boundary,                  "rt_boundary", ttl = min(CACHE_TTL_SECONDS, 300))
 fetch_data_signature               <- with_cache(fetch_data_signature,               "signature", ttl = 0)

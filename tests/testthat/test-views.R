@@ -49,7 +49,7 @@ make_server_env <- function(overrides = list(), auto_refresh = 30) {
     fetch_recent_statements = function(n) { env$calls$statements <- env$calls$statements + 1L; fake$statements(n) },
     fetch_pipeline_health = function() { env$calls$health <- env$calls$health + 1L; fake$health() },
     fetch_situation = fake$situation, fetch_briefing_drafts = fake$briefings,
-    fetch_exposure = fake$exposure, fetch_warning_history = function() data.table(), fetch_rt_register = function() data.table(), fetch_changes = fake$changes, fetch_changes_log = function(sid) NULL,
+    fetch_exposure = fake$exposure, fetch_warning_history = function() data.table(), fetch_rt_register = function() data.table(), fetch_warning_episodes = function(cid) data.table(), fetch_changes = fake$changes, fetch_changes_log = function(sid) NULL,
     fetch_ea_constituency_mp = function() data.table(ea_area_code = "a", constituency_name = "X", constituency_overlap_pct = 1,
                                                     mp_name = "m", mp_party = "p", mp_email = "e", mp_phone = "t"),
     fetch_summary_counts = function(...) list(polygon_count = 0L, ea_area_count = 0L, constituency_count = 0L),
@@ -599,5 +599,28 @@ test_that("the Hydrometrics tab loads the register on first open and fetches rea
     expect_match(html_of(output$rt_summary), "2 readings")
     session$setInputs(rt_measures = sprintf("m/%d", 1:9))
     expect_match(html_of(output$rt_message), "Pick 8 or fewer")
+  })
+})
+
+
+test_that("ticking Detailed lists each alert and warning with its date and time", {
+  lk <- function() data.table(ea_area_code = "a", constituency_id = "E14000001", constituency_name = "Alpha",
+                              constituency_overlap_pct = 1, mp_name = "A MP", mp_party = "p", mp_email = "e", mp_phone = "t")
+  eps <- function(cid) data.table(episode_id = c("e1", "e2"), ea_area_code = c("A", "B"), ea_area_name = c("Alder", "Beech"),
+    ea_area_type = c("flood_warning", "flood_alert"), start_time = as.POSIXct(c("2025-06-01 10:00", "2025-06-02 08:30"), tz = "UTC"),
+    end_time = as.POSIXct(c("2025-06-01 14:00", "2025-06-02 09:30"), tz = "UTC"), duration_minutes = c(240, 60),
+    peak_level = c("flood_warning", "flood_alert"), had_severe = FALSE, stale_open = FALSE)
+  env <- make_server_env(list(fetch_warning_history = hist_rows, fetch_ea_constituency_mp = lk, fetch_warning_episodes = eps))
+  testServer(env$server, {
+    do.call(session$setInputs, base_inputs)
+    session$setInputs(nations = "E14", wh_range = as.Date(c("2020-01-01", "2026-01-01")), wh_search = "", wh_table_rows_selected = 1L)
+    expect_equal(names(wh_second_table())[1:3], c("Area", "Code", "Type"))                 # the area counts by default
+    expect_true("Last issued" %in% names(wh_second_table()))
+    session$setInputs(wh_detailed = TRUE)
+    t <- wh_second_table()
+    expect_equal(t$Issued, c("02 Jun 2025 08:30", "01 Jun 2025 10:00"))
+    expect_equal(t$Ended[2L], "01 Jun 2025 14:00")
+    session$setInputs(wh_range = as.Date(c("2025-06-02", "2025-06-30")))                  # the slider narrows it
+    expect_equal(nrow(wh_second_table()), 1L)
   })
 })
