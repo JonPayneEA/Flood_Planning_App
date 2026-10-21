@@ -2022,16 +2022,20 @@ server <- function(input, output, session) {
       last <- if (nrow(inside)) inside[.N] else start_row
       cc <- rbind(start_row, inside, data.table(time = to, alerts = last$alerts, warnings = last$warnings))
       fig <- plotly::plot_ly(cc, x = ~time)
-      fig <- plotly::add_lines(fig, y = ~alerts, name = "Flood alerts", line = list(color = "#f47738", width = 1.8, shape = "hv"),
+      fig <- plotly::add_lines(fig, y = ~alerts, name = "Flood alerts", line = list(color = APP_ALERT_HEX, width = 1.5, shape = "hv"),
                                hovertemplate = "%{y} in force<extra>Flood alerts</extra>")
-      fig <- plotly::add_lines(fig, y = ~warnings, name = "Flood warnings", line = list(color = "#d4351c", width = 1.8, shape = "hv"),
+      fig <- plotly::add_lines(fig, y = ~warnings, name = "Flood warnings", line = list(color = APP_WARNING_HEX, width = 1.5, shape = "hv"),
                                hovertemplate = "%{y} in force<extra>Flood warnings</extra>")
-      plotly::layout(fig, height = 340,
-                     xaxis = list(type = "date", range = format(c(from, to), "%Y-%m-%d %H:%M:%S", tz = "UTC"), rangeslider = list(visible = TRUE)),
-                     yaxis = list(title = "Areas in force", rangemode = "tozero", dtick = NULL),
-                     legend = list(orientation = "h", y = -0.35), hovermode = "x unified",
-                     title = list(text = sel$constituency_name, x = 0.01, xanchor = "left", font = list(size = 13)),
-                     margin = list(t = 50))
+      top <- max(cc$alerts, cc$warnings, 1L)
+      app_plot_style(fig, height = 380, hovermode = "x unified",
+                     xaxis = app_plot_axis(range = format(c(from, to), "%Y-%m-%d %H:%M:%S", tz = "UTC"), type = "date",
+                                           rangeslider = list(visible = TRUE, thickness = 0.07, bgcolor = APP_PALETTE$tint,
+                                                              bordercolor = APP_PALETTE$line, borderwidth = 1)),
+                     yaxis = app_plot_axis("Areas in force", grid = TRUE, rangemode = "tozero", tickformat = "d",
+                                           dtick = nice_dtick(top), range = c(0, top * 1.08)),
+                     title = list(text = sel$constituency_name, x = 0.01, xanchor = "left",
+                                  font = list(size = 13, color = APP_PALETTE$navy)),
+                     margin = list(t = 50, l = 60, r = 20))
     })
   }
 
@@ -2130,7 +2134,7 @@ server <- function(input, output, session) {
     if (is.null(d$readings)) return(NULL)
     s <- rt_summary(d$readings, d$boundary, d$now)
     tags$p(class = "text-muted mb-0",
-           sprintf("%s readings: %s archived, %s live (right of the red line). Newest reading %s UTC, %s minutes ago.%s",
+           sprintf("%s readings: %s archived, %s live (right of the dashed line). Newest reading %s UTC, %s minutes ago.%s",
                    format(s$readings, big.mark = ","), format(s$archive, big.mark = ","), format(s$live, big.mark = ","),
                    format(s$newest, "%a %d %b %H:%M", tz = "UTC"), format(s$age_minutes),
                    if (is.null(d$boundary)) " Nothing is archived yet, so there is no archive | live line." else ""))
@@ -2142,7 +2146,7 @@ server <- function(input, output, session) {
       req(d$readings)
       panels <- rt_panels(d$readings, d$chosen)
       start <- d$now - d$days * 86400
-      cols <- c("#1d70b8", "#d4351c", "#00703c", "#f47738", "#6f72af", "#b58840", "#28a197", "#505a5f")
+      cols <- APP_SERIES
       uris <- unique(d$readings$measure_uri)
       plots <- lapply(panels$units, function(u) {
         p <- plotly::plot_ly()
@@ -2152,16 +2156,15 @@ server <- function(input, output, session) {
                                  line = list(color = cols[(match(uri, uris) - 1L) %% length(cols) + 1L], width = 1.6),
                                  hovertemplate = paste0("%{y} ", u, "<extra>", panels$label_of[[uri]], "</extra>"))
         }
-        plotly::layout(p, yaxis = list(title = u), showlegend = TRUE)
+        plotly::layout(p, yaxis = app_plot_axis(u, grid = TRUE, tickformat = ".3~g", nticks = 6), showlegend = TRUE)
       })
       fig <- plotly::subplot(plots, nrows = length(plots), shareX = TRUE, titleY = TRUE, margin = 0.04)
-      plotly::layout(fig, height = 280 * length(plots) + 80,
-                     xaxis = list(range = format(c(start, d$now), "%Y-%m-%d %H:%M:%S", tz = "UTC"), type = "date"),
+      app_plot_style(fig, height = 280 * length(plots) + 90, hovermode = "x unified",
+                     xaxis = app_plot_axis(range = format(c(start, d$now), "%Y-%m-%d %H:%M:%S", tz = "UTC"), type = "date", nticks = 8),
                      shapes = rt_live_shapes(d$boundary, start, d$now),
-                     legend = list(orientation = "h", y = -0.12), hovermode = "x unified",
                      title = list(text = sprintf("Last %d day%s, times in UTC", d$days, if (d$days == 1L) "" else "s"),
-                                  x = 0.01, xanchor = "left", font = list(size = 13)),
-                     margin = list(t = 50))
+                                  x = 0.01, xanchor = "left", font = list(size = 13, color = APP_PALETTE$navy)),
+                     margin = list(t = 50, l = 60, r = 20))
     })
   }
 

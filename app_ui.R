@@ -832,7 +832,7 @@ make_hydrometrics_tab <- function() tags$div(
   uiOutput("rt_summary"),
   tags$small(class = "text-muted d-block mt-2",
              "This uses Environment Agency flood and river level data from the real-time data API (Beta). ",
-             "Times are UTC. The dashed red line is where the archive ends and the live tail begins; ",
+             "Times are UTC. The dashed line is where the archive ends and the live tail begins; ",
              "the shaded band to its right is live and not yet archived.")
 )
 

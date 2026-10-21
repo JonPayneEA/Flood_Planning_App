@@ -109,3 +109,49 @@ app_logo <- function() {
     '<path d="M0 80 C30 66 55 70 80 82 S110 90 120 76 V100 H0Z" fill="', APP_PALETTE$blue, '"/>',
     '<path d="M0 92 C35 80 70 86 120 90 V100 H0Z" fill="', APP_PALETTE$navy_deep, '"/></svg>'))
 }
+
+
+# -----------------------------------------------------------------------------
+# Charts (plotly)
+#
+# One look for every chart: the app font and ink, a transparent surface, faint
+# horizontal gridlines only, no zero line, a quiet axis line, and a navy hover
+# label. Series colours come from the palette, each at least 3:1 against the
+# surface (checked in test-theme.R); alerts are blue and warnings magenta, the
+# same magenta as warning areas on the map.
+# -----------------------------------------------------------------------------
+
+APP_SERIES <- c("#053D7E", "#BE0553", "#038CF4", "#475A70", "#7A2E8E", "#0B7A75", "#5B7FA6", "#8A5A00")
+APP_ALERT_HEX   <- "#0161BD"
+APP_WARNING_HEX <- "#BE0553"
+
+# A whole-number tick step that gives about `target` ticks, so counts never crowd.
+nice_dtick <- function(max_value, target = 5L) {
+  m <- suppressWarnings(as.numeric(max_value))
+  if (length(m) == 0L || is.na(m) || m <= target) return(1)
+  raw <- m / target
+  mag <- 10^floor(log10(raw))
+  step <- c(1, 2, 5, 10)[which(c(1, 2, 5, 10) * mag >= raw)[1L]] * mag
+  max(1, step)
+}
+
+# Axis settings shared by every chart. grid = TRUE draws the faint horizontal lines.
+app_plot_axis <- function(title = NULL, grid = FALSE, ...) {
+  p <- APP_PALETTE
+  c(list(title = list(text = if (is.null(title)) "" else title, font = list(size = 12, color = p$ink_muted)),
+         showgrid = grid, gridcolor = p$line, gridwidth = 0.5, zeroline = FALSE,
+         showline = TRUE, linecolor = p$line_strong, linewidth = 1,
+         ticks = "outside", tickcolor = p$line_strong, ticklen = 4,
+         tickfont = list(size = 11, color = p$ink_muted), automargin = TRUE), list(...))
+}
+
+# Applies the common look to a plotly figure.
+app_plot_style <- function(fig, ...) {
+  p <- APP_PALETTE
+  plotly::layout(fig,
+    font = list(family = "Arial, 'Helvetica Neue', Helvetica, sans-serif", color = p$ink, size = 12),
+    paper_bgcolor = "rgba(0,0,0,0)", plot_bgcolor = "rgba(0,0,0,0)",
+    hoverlabel = list(bgcolor = p$navy, bordercolor = p$navy, font = list(color = "#FFFFFF", size = 12)),
+    legend = list(orientation = "h", x = 1, xanchor = "right", y = 1.04, yanchor = "bottom", font = list(size = 12, color = p$ink)),
+    ...)
+}

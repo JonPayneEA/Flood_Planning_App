@@ -88,3 +88,31 @@ test_that("only risk and status colours remain as literal hex in the stylesheet"
                "#6b1212", "#6b4300")                                                   # banner text
   expect_setequal(setdiff(lits, allowed), character())
 })
+
+
+test_that("chart series colours are visible on the surface and distinct from each other", {
+  for (h in c(APP_SERIES, APP_ALERT_HEX, APP_WARNING_HEX)) {
+    expect_gte(app_contrast(h, APP_PALETTE$surface), 3, label = h)              # graphics need 3:1
+  }
+  expect_equal(anyDuplicated(tolower(APP_SERIES)), 0L)
+  expect_false(identical(tolower(APP_ALERT_HEX), tolower(APP_WARNING_HEX)))
+  expect_identical(APP_WARNING_HEX, APP_PALETTE$magenta)                         # the same magenta as warning areas on the map
+})
+
+test_that("tick steps stay whole and give about five ticks, so counts never crowd", {
+  expect_equal(nice_dtick(3), 1); expect_equal(nice_dtick(5), 1); expect_equal(nice_dtick(NA), 1)
+  expect_equal(nice_dtick(21), 5)
+  expect_equal(nice_dtick(60), 20)
+  expect_equal(nice_dtick(480), 100)
+  for (m in c(6, 9, 21, 47, 130, 999)) {
+    n <- m / nice_dtick(m)
+    expect_true(n >= 2 && n <= 8, info = m)
+  }
+})
+
+test_that("the chart axis draws horizontal gridlines only when asked, and never the zero line", {
+  a <- app_plot_axis("Areas", grid = TRUE); b <- app_plot_axis()
+  expect_true(a$showgrid); expect_false(b$showgrid)
+  expect_false(a$zeroline)
+  expect_equal(app_plot_axis(range = c(0, 5))$range, c(0, 5))                   # extra settings pass through
+})
