@@ -802,6 +802,48 @@ make_warning_history_tab <- function() tags$div(
 
 
 # -----------------------------------------------------------------------------
+# Forecast vs warnings tab.
+#
+# For each constituency and date, the forecast made 1 to 5 days earlier against the
+# alerts and warnings in force (fgs_forecast_verification, job 26). Choose what counts
+# as forecast, what counts as having happened, and the period. The first table and
+# chart are by lead day; the second is by constituency for one lead day.
+# -----------------------------------------------------------------------------
+
+make_verification_tab <- function() tags$div(
+  class = "p-3",
+  uiOutput("ver_note"),
+  tags$div(
+    class = "filter-row",
+    selectInput("ver_min_rank", "Counts as forecast at or above",
+                choices = c("Very Low" = "1", "Low" = "2", "Medium" = "3", "High" = "4"), selected = "3", width = "210px"),
+    selectInput("ver_outcome", "Counts as happened", choices = VER_OUTCOMES, selected = "any", width = "210px"),
+    sliderInput("ver_range", "Forecast dates",
+                min = Sys.Date() - 400L, max = Sys.Date() - 1L, value = c(Sys.Date() - 400L, Sys.Date() - 1L),
+                timeFormat = "%d %b %Y", width = "420px")
+  ),
+  tags$h6("By lead day"),
+  DT::dataTableOutput("ver_lead_table"),
+  if (requireNamespace("plotly", quietly = TRUE)) plotly::plotlyOutput("ver_plot", height = "auto"),
+  tags$hr(),
+  tags$div(
+    class = "filter-row",
+    selectInput("ver_lead", "Constituencies at lead",
+                choices = c("1: the day itself" = "1", "2: one day ahead" = "2", "3: two days ahead" = "3",
+                            "4: three days ahead" = "4", "5: four days ahead" = "5"), selected = "1", width = "230px"),
+    downloadButton("download_verification", "Export CSV", class = "btn-sm btn-outline-secondary")
+  ),
+  DT::dataTableOutput("ver_const_table"),
+  tags$small(class = "text-muted d-block mt-2",
+             "A hit is a day forecast at or above the threshold on which the chosen alert or warning was in force in the constituency. ",
+             "A false alarm is a day forecast with none. A miss is a day with one that was not forecast at that level. ",
+             "Hit rate is hits over hits plus misses. Precision is hits over hits plus false alarms. ",
+             "Days that were quiet and forecast quiet are not held, so they are not counted. ",
+             "This compares the forecast with the Environment Agency's alerts and warnings, which are decisions. It is not a record of observed flooding.")
+)
+
+
+# -----------------------------------------------------------------------------
 # Hydrometrics tab.
 #
 # Environment Agency real-time river level, flow and rainfall readings, the daily
@@ -963,6 +1005,7 @@ ui <- function(request) {
     tabPanel("Constituency situation", make_situation_tab()),
     tabPanel("Exposure history",       make_exposure_tab()),
     tabPanel("Warning history",        make_warning_history_tab()),
+    tabPanel("Forecast vs warnings",   make_verification_tab()),
     tabPanel("Hydrometrics",           make_hydrometrics_tab()),
     if (DEMO_MODE) tabPanel("MP audit log", make_audit_tab()),
     tabPanel("Guide", make_guide_tab()),

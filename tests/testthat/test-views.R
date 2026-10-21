@@ -627,3 +627,47 @@ test_that("ticking Detailed lists each alert and warning with its date and time"
     expect_equal(nrow(wh_second_table()), 1L)
   })
 })
+
+
+test_that("Forecast vs warnings asks the warehouse for the chosen threshold, outcome, period and nations", {
+  seen <- new.env(); seen$lead <- NULL; seen$const <- NULL
+  span <- function() list(first = as.Date("2025-01-01"), last = as.Date("2026-10-20"))
+  by_lead <- function(min_rank, outcome, from, to, nations = NULL) {
+    seen$lead <- list(min_rank = min_rank, outcome = outcome, from = from, to = to, nations = nations)
+    data.table(lead_day = 1:2, hits = c(3L, 1L), false_alarms = c(1L, 1L), misses = c(1L, 3L))
+  }
+  by_const <- function(min_rank, outcome, from, to, nations = NULL, lead = 1L) {
+    seen$const <- list(lead = lead)
+    data.table(constituency_id = "E14000001", hits = 3L, false_alarms = 1L, misses = 1L)
+  }
+  lk <- function() data.table(ea_area_code = "a", constituency_id = "E14000001", constituency_name = "Alpha",
+                              constituency_overlap_pct = 1, mp_name = "A MP", mp_party = "p", mp_email = "e", mp_phone = "t")
+  env <- make_server_env(list(fetch_verification_span = span, fetch_verification_by_lead = by_lead,
+                              fetch_verification_by_constituency = by_const, fetch_ea_constituency_mp = lk))
+  testServer(env$server, {
+    do.call(session$setInputs, base_inputs)
+    session$setInputs(main_tabs = "Forecast vs warnings", nations = "E14", ver_min_rank = "3", ver_outcome = "warnings",
+                      ver_range = as.Date(c("2025-06-01", "2026-06-01")), ver_lead = "2")
+    x <- ver_lead_data()
+    expect_equal(x$hits, c(3L, 1L))
+    expect_equal(seen$lead$outcome, "warnings"); expect_equal(seen$lead$min_rank, 3L)
+    expect_equal(seen$lead$nations, "E14"); expect_equal(as.character(seen$lead$from), "2025-06-01")
+    tbl <- ver_const_table_data()
+    expect_equal(seen$const$lead, 2L)
+    expect_equal(tbl$Constituency, "Alpha"); expect_equal(tbl$`Hit rate`, 0.75); expect_equal(tbl$Precision, 0.75)
+  })
+})
+
+test_that("a missing verification table is named on screen", {
+  env <- make_server_env(list(
+    fetch_verification_span = function() NULL,
+    fetch_verification_by_lead = function(...) stop("[TABLE_OR_VIEW_NOT_FOUND] The table or view `cat`.`sch`.`fgs_forecast_verification` cannot be found")))
+  testServer(env$server, {
+    do.call(session$setInputs, base_inputs)
+    session$setInputs(main_tabs = "Forecast vs warnings", ver_min_rank = "3", ver_outcome = "any",
+                      ver_range = as.Date(c("2025-06-01", "2026-06-01")), ver_lead = "1")
+    ver_lead_data()
+    expect_match(html_of(output$ver_note), "fgs_forecast_verification")
+    expect_match(html_of(output$ver_note), "notebook 26")
+  })
+})

@@ -126,3 +126,25 @@ test_that("a long readings window is summarised in the warehouse, rainfall total
   q3 <- d$captured[length(d$captured)]
   expect_match(q3, "MIN\\(date_time\\)"); expect_false(grepl(";", q3, fixed = TRUE))
 })
+
+
+test_that("the verification query holds the threshold, the outcome, the period, the nations and the lead, and nothing else", {
+  d <- load_data_layer()
+  suppressWarnings(d$fetch_verification_by_constituency(3L, "warnings", as.Date("2025-01-01"), as.Date("2025-12-31"), "E14", 2L))
+  q <- gsub("\\s+", " ", d$captured[length(d$captured)])
+  expect_match(q, "cat\\.sch\\.fgs_forecast_verification")
+  expect_match(q, "forecast_rank >= 3 AND warnings > 0")
+  expect_match(q, "forecast_rank >= 3 AND NOT \\(warnings > 0\\)")
+  expect_match(q, "forecast_rank < 3 AND warnings > 0")
+  expect_match(q, "BETWEEN '2025-01-01' AND '2025-12-31'")
+  expect_match(q, "lead_day = 2"); expect_match(q, "GROUP BY constituency_id")
+  expect_match(q, "substr\\(constituency_id, 1, 3\\) IN \\('E14'\\)")
+  suppressWarnings(d$fetch_verification_by_lead(4L, "any", as.Date("2025-01-01"), as.Date("2025-12-31")))
+  q2 <- gsub("\\s+", " ", d$captured[length(d$captured)])
+  expect_match(q2, "\\(alerts \\+ warnings\\) > 0"); expect_match(q2, "GROUP BY lead_day")
+  expect_false(grepl("lead_day =", q2, fixed = TRUE))
+  expect_error(d$fetch_verification_by_lead(3L, "any'; DROP TABLE x; --", as.Date("2025-01-01"), as.Date("2025-12-31")))
+  suppressWarnings(d$fetch_verification_by_lead(3L, "any", as.Date("2025-01-01"), as.Date("2025-12-31"), "E14'); DROP TABLE x; --"))
+  q3 <- d$captured[length(d$captured)]
+  expect_false(grepl(";", q3, fixed = TRUE)); expect_false(grepl("--", q3, fixed = TRUE))
+})

@@ -48,12 +48,12 @@ GUIDE_TABLES <- data.frame(
             "ea_area_constituency_lookup", "mp_contact_details",
             "fgs_constituency_changes", "fgs_changes_log", "constituency_flood_situation", "mp_briefing_drafts",
             "fgs_constituency_exposure", "pipeline_health", "ea_warning_episodes",
-            "ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_readings_bronze"),
-  notebook = c("01", "01", "07", "07", "03", "03", "05", "06", "04", "18", "18", "19", "20", "21", "22", "25", "09", "23", "10"),
+            "ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_readings_bronze", "fgs_forecast_verification"),
+  notebook = c("01", "01", "07", "07", "03", "03", "05", "06", "04", "18", "18", "19", "20", "21", "22", "25", "09", "23", "10", "26"),
   refresh = c("Each FGS issue or amendment", "Each FGS issue or amendment", "Each FGS issue", "Each FGS issue",
               "Weekly", "Weekly", "Quarterly, or after an election", "Weekly and quarterly", "Weekly",
               "Every poll", "Every poll", "Every poll", "Every poll", "Daily", "Every poll", "Every poll",
-              "Weekly", "Every 15 minutes", "Daily"),
+              "Weekly", "Every 15 minutes", "Daily", "Daily"),
   holds = c("One row per statement: the headline and the forecast text.",
             "One row per risk polygon, flood source and day, with impact, likelihood and risk level.",
             "Each FGS shape that overlaps an EA flood warning or alert area.",
@@ -72,7 +72,8 @@ GUIDE_TABLES <- data.frame(
             "Each alert and warning from the time it was switched on to the time it ended, with its duration.",
             "One row per measure at an Environment Agency gauge: what it measures, the station, river and area.",
             "Real-time readings, the daily archive and the live tail joined as one series.",
-            "The daily archive of readings. Its last day marks where the live tail begins."),
+            "The daily archive of readings. Its last day marks where the live tail begins.",
+            "The forecast risk for each constituency, date and lead day against the alerts and warnings in force. Sparse."),
   stringsAsFactors = FALSE
 )
 
@@ -342,6 +343,28 @@ guide_products <- function(s) {
       limits = c(
         "History before the live log began comes from the message file, which can be incomplete. Notebook 25 reports where the two sources meet.",
         "A coastal warning area is a line, linked to constituencies on a 1000 m buffer, so a coastal area can count towards a constituency it only touches."
+      )
+    ),
+
+    list(
+      id = "verification", title = "Forecast vs warnings", where = "Forecast vs warnings",
+      answers = "When the forecast flagged a constituency, did an alert or warning follow, and how often did one come that was not forecast?",
+      tables = c("fgs_forecast_verification"),
+      steps = c(
+        "For each date, the pipeline takes the forecast made one to five days earlier (the lead day) from the last statement issued on each date, and the worst risk across flood sources for each constituency.",
+        "It counts the areas with an alert, a warning and a severe flood warning in force in each constituency on that date. Any point in the date counts, an area counts once however often it was issued, and an area under several constituencies counts in each.",
+        "You choose the risk that counts as a forecast (Medium or above to start), what counts as having happened (any alert or warning, or one kind), and the period. A hit is a forecast day on which it happened, a false alarm one on which it did not, and a miss a day it happened that was not forecast at that level.",
+        "Hit rate is hits over hits plus misses: of the days it happened, how many were forecast. Precision is hits over hits plus false alarms: of the days forecast, how many it happened on. The table and chart give both for each lead day, and the second table for each constituency at one lead day."
+      ),
+      read = c(
+        "Expect the hit rate and precision to fall as the lead day rises: a forecast made four days ahead has less to go on.",
+        "A low precision at Medium is not a fault by itself. The FGS forecasts the risk of flooding across a region, and a warning needs a specific river or coast to be affected.",
+        "The Nations filter applies. Dates up to yesterday are scored."
+      ),
+      limits = c(
+        "Alerts and warnings are the Environment Agency's decisions, not observed flooding. A warning can follow no forecast, and a forecast can pass with no warning because action elsewhere prevented one.",
+        "Quiet days that were forecast quiet are not held, so there is no measure of how often a quiet forecast was right.",
+        "An alert or warning with no end message for over 30 days counts only on its first date. A coastal area can count towards a constituency it only touches, as in Warning history."
       )
     ),
 

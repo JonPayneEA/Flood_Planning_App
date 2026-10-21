@@ -30,6 +30,11 @@ test_that("no demo fetcher reaches for the warehouse", {
     }
     expect_no_error(demo_env$fetch_exposure(12))
     expect_no_error(demo_env$fetch_warning_episodes(demo_env$fetch_warning_history()$constituency_id[1L]))
+    sp <- demo_env$fetch_verification_span()
+    by <- demo_env$fetch_verification_by_lead(3L, "any", sp$first, sp$last)
+    expect_true(nrow(by) == 5L && all(by$hits > 0L))
+    expect_gt(sum(by$hits[1]) / (by$hits[1] + by$misses[1]), sum(by$hits[5]) / (by$hits[5] + by$misses[5]))   # skill falls with lead
+    expect_no_error(demo_env$fetch_verification_by_constituency(3L, "warnings", sp$first, sp$last, "E14", 2L))
     wh <- demo_env$fetch_warning_history()
     expect_true(nrow(wh) > 0L && all(c("constituency_id", "ea_area_name", "issued_date", "n_issued", "n_severe") %in% names(wh)))
     expect_no_error(demo_env$fetch_changes(4812L))

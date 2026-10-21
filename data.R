@@ -692,6 +692,55 @@ fetch_warning_history <- function() {
 
 
 # -----------------------------------------------------------------------------
+# Forecast against warnings (fgs_forecast_verification, job 26)
+#
+# The counts are made in the warehouse for the chosen threshold, outcome, period, nations and
+# (for the constituency table) lead day, so only a few hundred small rows cross the wire. The
+# outcome and every other argument are checked or reduced to safe characters before the SQL is built.
+# fetch_verification_span(): the first and last forecast date held.
+# -----------------------------------------------------------------------------
+
+verification_sql <- function(group_col, min_rank, outcome, from, to, nations = NULL, lead = NULL) {
+  happened <- verification_happened_sql(outcome)
+  known <- c("E14", "W07", "S14", "N06")
+  codes <- gsub("[^A-Za-z0-9]", "", as.character(nations))
+  codes <- codes[nzchar(codes)]
+  nation_sql <- if (length(codes) == 0L) "1 = 1" else sprintf(
+    "(substr(constituency_id, 1, 3) IN (%s) OR substr(constituency_id, 1, 3) NOT IN (%s))",
+    paste0("'", codes, "'", collapse = ", "), paste0("'", known, "'", collapse = ", "))
+  lead_sql <- if (is.null(lead)) "1 = 1" else sprintf("lead_day = %d", as.integer(lead))
+  sprintf("
+    SELECT
+      %s,
+      SUM(CASE WHEN forecast_rank >= %d AND %s     THEN 1 ELSE 0 END) AS hits,
+      SUM(CASE WHEN forecast_rank >= %d AND NOT (%s) THEN 1 ELSE 0 END) AS false_alarms,
+      SUM(CASE WHEN forecast_rank <  %d AND %s     THEN 1 ELSE 0 END) AS misses
+    FROM %s
+    WHERE forecast_date BETWEEN '%s' AND '%s'
+      AND %s
+      AND %s
+    GROUP BY %s
+    ORDER BY %s
+  ", group_col, as.integer(min_rank), happened, as.integer(min_rank), happened, as.integer(min_rank), happened,
+     TBL_VERIFICATION, format(as.Date(from), "%Y-%m-%d"), format(as.Date(to), "%Y-%m-%d"), nation_sql, lead_sql,
+     group_col, group_col)
+}
+
+fetch_verification_by_lead <- function(min_rank, outcome, from, to, nations = NULL) {
+  as.data.table(db_query(verification_sql("lead_day", min_rank, outcome, from, to, nations)))
+}
+
+fetch_verification_by_constituency <- function(min_rank, outcome, from, to, nations = NULL, lead = 1L) {
+  as.data.table(db_query(verification_sql("constituency_id", min_rank, outcome, from, to, nations, lead)))
+}
+
+fetch_verification_span <- function() {
+  d <- db_query(sprintf("SELECT MIN(forecast_date) AS first_date, MAX(forecast_date) AS last_date FROM %s", TBL_VERIFICATION))
+  if (nrow(d) == 0L || is.na(d$first_date[1L])) NULL else list(first = as.Date(d$first_date[1L]), last = as.Date(d$last_date[1L]))
+}
+
+
+# -----------------------------------------------------------------------------
 # fetch_warning_episodes()
 #
 # Every alert and warning (one row per run in force) for the areas linked to ONE
@@ -1155,6 +1204,9 @@ fetch_briefing_drafts              <- with_cache(fetch_briefing_drafts,         
 fetch_exposure                     <- with_cache(fetch_exposure,                     "exposure",  ttl = 0)
 fetch_warning_history              <- with_cache(fetch_warning_history,              "warning_history", ttl = 0)
 fetch_warning_episodes             <- with_cache(fetch_warning_episodes,             "warning_episodes", ttl = min(CACHE_TTL_SECONDS, 300))
+fetch_verification_by_lead         <- with_cache(fetch_verification_by_lead,         "ver_lead", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
+fetch_verification_by_constituency <- with_cache(fetch_verification_by_constituency, "ver_const", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
+fetch_verification_span            <- with_cache(fetch_verification_span,            "ver_span", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_rt_register                  <- with_cache(fetch_rt_register,                  "rt_register", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_rt_boundary                  <- with_cache(fetch_rt_boundary,                  "rt_boundary", ttl = min(CACHE_TTL_SECONDS, 300))
 fetch_data_signature               <- with_cache(fetch_data_signature,               "signature", ttl = 0)

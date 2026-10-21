@@ -374,6 +374,65 @@ warning_area_counts <- function(h, constituency_id) {
 
 
 # -----------------------------------------------------------------------------
+# Forecast against warnings (fgs_forecast_verification, job 26)
+#
+# One row per constituency, forecast date and lead day (lead 1 is the statement issued on the
+# day, lead 5 the one issued four days before) where something was forecast or in force:
+# forecast_rank 0 to 4, and the areas with an alert, a warning and a severe warning in force.
+# Sparse: a date with nothing forecast and nothing in force has no row.
+#
+# For a chosen forecast threshold and a chosen outcome:
+#   hit          forecast at or above the threshold, and it happened
+#   false alarm  forecast at or above the threshold, and it did not
+#   miss         below the threshold (or not forecast), and it happened
+# Correct quiet forecasts are not rows, so they cannot be counted and are not claimed.
+# -----------------------------------------------------------------------------
+
+VER_OUTCOMES <- c("Alert or warning" = "any", "Flood alert" = "alerts", "Flood warning" = "warnings",
+                  "Severe flood warning" = "severe")
+
+# SQL for "it happened" under the chosen outcome. Only the four known outcomes can reach the query.
+verification_happened_sql <- function(outcome) {
+  switch(match.arg(outcome, unname(VER_OUTCOMES)),
+         any = "(alerts + warnings) > 0", alerts = "alerts > 0", warnings = "warnings > 0", severe = "severe > 0")
+}
+
+verification_happened <- function(v, outcome) {
+  switch(match.arg(outcome, unname(VER_OUTCOMES)),
+         any = (v$alerts + v$warnings) > 0, alerts = v$alerts > 0, warnings = v$warnings > 0, severe = v$severe > 0)
+}
+
+# The same counts the warehouse query gives, in R: used by the demo and by the tests, which hold the
+# query to the same answer. by is "lead_day" or "constituency_id"; lead limits to one lead day.
+verification_counts <- function(v, min_rank, outcome, from, to, nations = NULL, by = "lead_day", lead = NULL) {
+  x <- v[as.Date(forecast_date) >= as.Date(from) & as.Date(forecast_date) <= as.Date(to)]
+  if (length(nations)) x <- x[in_nations(constituency_id, nations)]
+  if (!is.null(lead)) x <- x[lead_day == as.integer(lead)]
+  empty <- data.table(grp = if (by == "lead_day") integer() else character(),
+                      hits = integer(), false_alarms = integer(), misses = integer())
+  setnames(empty, "grp", by)
+  if (nrow(x) == 0L) return(empty)
+  hit <- verification_happened(x, outcome)
+  fc  <- x$forecast_rank >= as.integer(min_rank)
+  x[, `:=`(h = fc & hit, f = fc & !hit, m = !fc & hit)]
+  out <- x[, .(hits = sum(h), false_alarms = sum(f), misses = sum(m)), by = c(by)]
+  out[, c("hits", "false_alarms", "misses") := lapply(.SD, as.integer), .SDcols = c("hits", "false_alarms", "misses")]
+  setorderv(out, by)
+  out[hits + false_alarms + misses > 0L]
+}
+
+# Adds the days forecast, the days it happened, the hit rate (of the days it happened, how many
+# were forecast) and the precision (of the days forecast, how many happened). NA where there is nothing to divide.
+verification_scores <- function(x) {
+  x <- copy(x)
+  x[, `:=`(forecast_days = hits + false_alarms, event_days = hits + misses)]
+  x[, `:=`(hit_rate  = ifelse(event_days > 0L, hits / event_days, NA_real_),
+           precision = ifelse(forecast_days > 0L, hits / forecast_days, NA_real_))]
+  x[]
+}
+
+
+# -----------------------------------------------------------------------------
 # Warning episodes for one constituency (the Detailed table and the concurrency graph)
 #
 # ep is the output of fetch_warning_episodes(): one row per alert or warning, from the
@@ -883,7 +942,7 @@ empty_situation_message <- function(ranks, floor, other_filters = FALSE) {
 
 PIPELINE_TABLE_JOBS <- c(
   fgs_constituency_changes = 18L, constituency_flood_situation = 19L, mp_briefing_drafts = 20L,
-  fgs_constituency_exposure = 21L, pipeline_health = 22L, ea_warning_episodes = 25L, ea_rt_measure_register = 9L, ea_rt_readings_all = 23L, ea_rt_readings_bronze = 10L, fgs_constituency_mp_contacts = 14L,
+  fgs_constituency_exposure = 21L, pipeline_health = 22L, ea_warning_episodes = 25L, fgs_forecast_verification = 26L, ea_rt_measure_register = 9L, ea_rt_readings_all = 23L, ea_rt_readings_bronze = 10L, fgs_constituency_mp_contacts = 14L,
   flood_warning_constituency_contacts = 13L, fgs_constituency_intersections = 7L,
   fgs_ea_area_intersections = 7L, ea_area_constituency_lookup = 6L)
 

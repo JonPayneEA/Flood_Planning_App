@@ -2061,6 +2061,110 @@ server <- function(input, output, session) {
   )
 
   # ---------------------------------------------------------------------------
+  # Forecast vs warnings tab (job 26).
+  #
+  # The counts are made in the warehouse for the chosen threshold, outcome, period, nations
+  # and lead day, so each change is a small query (cached). The period slider is sized
+  # from the dates held the first time the tab is opened.
+  # ---------------------------------------------------------------------------
+
+  ver_started <- reactiveVal(FALSE)
+
+  observeEvent(input$main_tabs, {
+    if (!identical(input$main_tabs, "Forecast vs warnings") || ver_started()) return()
+    ver_started(TRUE)
+    sp <- safe_fetch(fetch_verification_span)
+    if (is.null(sp)) return()
+    updateSliderInput(session, "ver_range", min = sp$first, max = sp$last, value = c(sp$first, sp$last))
+  })
+
+  ver_args <- reactive({
+    r <- input$ver_range
+    req(r, input$ver_min_rank, input$ver_outcome)
+    list(min_rank = as.integer(input$ver_min_rank), outcome = input$ver_outcome, from = r[1L], to = r[2L], nations = nation_codes())
+  })
+
+  ver_lead_data <- reactive({
+    req(ver_started())
+    a <- ver_args()
+    safe_fetch(fetch_verification_by_lead, a$min_rank, a$outcome, a$from, a$to, a$nations)
+  })
+
+  ver_const_data <- reactive({
+    req(ver_started())
+    a <- ver_args()
+    safe_fetch(fetch_verification_by_constituency, a$min_rank, a$outcome, a$from, a$to, a$nations, as.integer(input$ver_lead))
+  })
+
+  output$ver_note <- renderUI({
+    # Read the data first: a missing table is only recorded once the fetch has failed.
+    loaded <- if (ver_started()) ver_lead_data() else NULL
+    if ("fgs_forecast_verification" %in% names(data_gaps())) {
+      return(tags$p(class = "text-muted", gap_text("fgs_forecast_verification", "Forecast vs warnings")))
+    }
+    if (ver_started() && is.null(loaded)) return(tags$p(class = "text-muted", "Forecast against warnings could not be loaded."))
+    NULL
+  })
+
+  ver_pct_cols <- c("Hit rate", "Precision")
+
+  output$ver_lead_table <- DT::renderDataTable({
+    x <- ver_lead_data()
+    req(x)
+    s <- verification_scores(x)
+    tbl <- s[, .(`Lead day` = lead_day, `Days forecast` = forecast_days, Hits = hits, `False alarms` = false_alarms,
+                 Misses = misses, `Hit rate` = hit_rate, Precision = precision)]
+    DT::datatable(tbl, rownames = FALSE, selection = "none",
+                  options = list(dom = "t", ordering = FALSE, pageLength = 5,
+                                 language = list(emptyTable = "Nothing forecast or in force in this period."))) |>
+      DT::formatPercentage(ver_pct_cols, digits = 0)
+  })
+
+  ver_const_table_data <- reactive({
+    x <- ver_const_data()
+    req(x)
+    s <- verification_scores(x)
+    nm <- wh_names()
+    out <- merge(s, nm, by = "constituency_id", all.x = TRUE, sort = FALSE)
+    out[is.na(constituency_name), constituency_name := constituency_id]
+    out[order(-forecast_days, constituency_name),
+        .(Constituency = constituency_name, MP = fifelse(is.na(mp_name), "(vacant or unmatched)", mp_name),
+          `Days forecast` = forecast_days, Hits = hits, `False alarms` = false_alarms, Misses = misses,
+          `Hit rate` = hit_rate, Precision = precision)]
+  })
+
+  output$ver_const_table <- DT::renderDataTable({
+    tbl <- ver_const_table_data()
+    DT::datatable(tbl, rownames = FALSE, selection = "none",
+                  options = list(pageLength = 25, scrollX = TRUE, dom = "ftip",
+                                 language = list(info = "Showing _START_ to _END_ of _TOTAL_ constituencies",
+                                                 emptyTable = "Nothing forecast or in force at this lead in this period."))) |>
+      DT::formatPercentage(ver_pct_cols, digits = 0)
+  })
+
+  output$download_verification <- downloadHandler(
+    filename = function() sprintf("forecast_vs_warnings_lead%s_%s.csv", input$ver_lead, format(Sys.time(), "%Y%m%d_%H%M")),
+    content  = function(file) data.table::fwrite(ver_const_table_data(), file)
+  )
+
+  if (requireNamespace("plotly", quietly = TRUE)) {
+    output$ver_plot <- plotly::renderPlotly({
+      x <- ver_lead_data()
+      req(x, nrow(x) > 0L)
+      s <- verification_scores(x)
+      fig <- plotly::plot_ly(s, x = ~paste("Lead", lead_day))
+      fig <- plotly::add_bars(fig, y = ~hit_rate, name = "Hit rate", marker = list(color = APP_ALERT_HEX),
+                              hovertemplate = "%{y:.0%} of days it happened were forecast<extra>Hit rate</extra>")
+      fig <- plotly::add_bars(fig, y = ~precision, name = "Precision", marker = list(color = APP_WARNING_HEX),
+                              hovertemplate = "%{y:.0%} of days forecast had it happen<extra>Precision</extra>")
+      app_plot_style(fig, height = 300, barmode = "group", hovermode = "x unified",
+                     xaxis = app_plot_axis(),
+                     yaxis = app_plot_axis("Share of days", grid = TRUE, range = c(0, 1.02), tickformat = ".0%", dtick = 0.25),
+                     margin = list(t = 40, l = 60, r = 20))
+    })
+  }
+
+  # ---------------------------------------------------------------------------
   # Hydrometrics tab (port of explore/Explore_live_readings).
   #
   # The measure register loads the first time the tab is opened, not at start-up.
