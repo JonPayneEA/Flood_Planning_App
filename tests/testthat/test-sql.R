@@ -110,3 +110,19 @@ test_that("the episodes query is for one constituency, takes letters and digits 
   expect_match(q, "l.intersection_pct >= ")
   expect_false(grepl(";", q, fixed = TRUE))
 })
+
+
+test_that("a long readings window is summarised in the warehouse, rainfall totalled and the rest averaged", {
+  d <- load_data_layer()
+  suppressWarnings(d$fetch_rt_readings(c("http://x/m/1", "http://x/m/2"), 365, sum_uris = "http://x/m/2"))
+  q <- gsub("\\s+", " ", d$captured[length(d$captured)])
+  expect_match(q, "GROUP BY measure_uri")
+  expect_match(q, "CASE WHEN measure_uri IN \\('http://x/m/2'\\) THEN SUM\\(value\\) ELSE AVG\\(value\\) END")
+  expect_match(q, "INTERVAL 365 DAYS")
+  suppressWarnings(d$fetch_rt_readings("http://x/m/1", 3))
+  q2 <- gsub("\\s+", " ", d$captured[length(d$captured)])
+  expect_false(grepl("GROUP BY", q2, fixed = TRUE))                              # a short window is every reading
+  suppressWarnings(d$fetch_rt_span(c("http://x/m/1", "a'); DROP TABLE t; --")))
+  q3 <- d$captured[length(d$captured)]
+  expect_match(q3, "MIN\\(date_time\\)"); expect_false(grepl(";", q3, fixed = TRUE))
+})

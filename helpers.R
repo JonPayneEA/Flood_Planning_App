@@ -453,7 +453,24 @@ concurrent_counts <- function(ep, now) {
 
 RT_ALL <- "All"
 RT_MAX_MEASURES <- 8L
-RT_MAX_DAYS <- 30L
+# How far back the chart can look. 0 means everything held for the chosen measures.
+RT_WINDOWS <- c("1 day" = 1L, "3 days" = 3L, "7 days" = 7L, "14 days" = 14L, "30 days" = 30L, "90 days" = 90L,
+                "6 months" = 183L, "1 year" = 365L, "2 years" = 730L, "5 years" = 1826L, "All available" = 0L)
+RT_POINT_TARGET <- 1500L     # points drawn per measure; longer windows are summarised in the warehouse
+
+# The seconds each plotted point covers. Readings are every 900 s (15 min), so a window of up to
+# about 15 days is drawn as it is and anything longer is bucketed to keep the chart quick.
+rt_bucket_seconds <- function(days, target = RT_POINT_TARGET, step = 900L) {
+  raw <- as.numeric(days) * 86400 / target
+  if (is.na(raw) || raw <= step) return(as.integer(step))
+  as.integer(ceiling(raw / step) * step)
+}
+
+rt_bucket_label <- function(seconds) {
+  if (seconds <= 900L) return("")
+  m <- seconds / 60
+  if (m < 120) sprintf("%d minute", as.integer(m)) else if (m < 1440) sprintf("%g hour", m / 60) else sprintf("%g day", round(m / 1440, 1))
+}
 
 rt_text <- function(x) {
   x <- as.character(x)

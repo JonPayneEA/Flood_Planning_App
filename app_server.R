@@ -2113,14 +2113,20 @@ server <- function(input, output, session) {
     if (length(uris) == 0L) return(list(message = "Choose one or more measures. Pick a station to start, or narrow by river or area."))
     if (length(uris) > RT_MAX_MEASURES) return(list(message = sprintf("%d measures chosen. Pick %d or fewer so the chart stays readable.", length(uris), RT_MAX_MEASURES)))
     days <- as.integer(input$rt_days)
-    readings <- safe_fetch(fetch_rt_readings, uris, days)
+    if (is.na(days)) days <- 3L
+    now <- as.POSIXct(Sys.time(), tz = "UTC")
+    if (days == 0L) {                                           # all available: from the earliest reading held
+      first <- safe_fetch(fetch_rt_span, uris)
+      days <- if (is.null(first)) 30L else max(1L, as.integer(ceiling(as.numeric(difftime(now, first, units = "days")))))
+    }
+    sum_uris <- reg[measure_uri %in% uris & parameter %in% "rainfall"]$measure_uri
+    readings <- safe_fetch(fetch_rt_readings, uris, days, sum_uris)
     if (is.null(readings)) {
       return(list(message = if (has_gap("ea_rt_readings_all")) gap_text("ea_rt_readings_all", "Readings")
                             else "Could not read the readings. Has notebook 23 run? It creates ea_rt_readings_all once the archive exists."))
     }
     if (nrow(readings) == 0L) return(list(message = "No readings for these measures in that window."))
     boundary <- safe_fetch(fetch_rt_boundary)
-    now <- as.POSIXct(Sys.time(), tz = "UTC")
     list(readings = readings, chosen = reg[measure_uri %in% uris], days = days, boundary = boundary, now = now)
   }, ignoreNULL = FALSE)
 
@@ -2133,10 +2139,13 @@ server <- function(input, output, session) {
     d <- rt_data()
     if (is.null(d$readings)) return(NULL)
     s <- rt_summary(d$readings, d$boundary, d$now)
+    bl <- rt_bucket_label(rt_bucket_seconds(d$days))
     tags$p(class = "text-muted mb-0",
-           sprintf("%s readings: %s archived, %s live (right of the dashed line). Newest reading %s UTC, %s minutes ago.%s",
-                   format(s$readings, big.mark = ","), format(s$archive, big.mark = ","), format(s$live, big.mark = ","),
+           sprintf("%s %s: %s archived, %s live (right of the dashed line). Newest %s UTC, %s minutes ago.%s%s",
+                   format(s$readings, big.mark = ","), if (nzchar(bl)) "points" else "readings",
+                   format(s$archive, big.mark = ","), format(s$live, big.mark = ","),
                    format(s$newest, "%a %d %b %H:%M", tz = "UTC"), format(s$age_minutes),
+                   if (nzchar(bl)) sprintf(" Over this span each point is the %s mean of the readings in it (the total for rainfall).", bl) else "",
                    if (is.null(d$boundary)) " Nothing is archived yet, so there is no archive | live line." else ""))
   })
 

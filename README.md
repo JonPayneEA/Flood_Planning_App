@@ -15,7 +15,9 @@ Tabs:
   look-back (proof of concept).
 - **Exposure history**: how often each constituency has been at each risk level.
 - **Hydrometrics**: interactive (plotly) river level, flow and rainfall readings
-  from the Environment Agency real-time data, archive and live tail together.
+  from the Environment Agency real-time data, archive and live tail together,
+  from one day back to everything held (long windows are summarised to about
+  1,500 points per measure).
   Needs the `plotly` R package.
 - **Warning history**: for each constituency, how many flood alerts and flood
   warnings have been issued for areas inside it, with a period slider and a
