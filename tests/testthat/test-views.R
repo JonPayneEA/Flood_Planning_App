@@ -479,3 +479,43 @@ test_that("the Overview shows 30 to none beside a no-change result, and nothing 
   expect_match(t[["strip"]], "30 in statement #6, none in this one")
   expect_false(grepl("forecast risk: ", changes_text(log_row(0L))[["ov"]]))       # an older log: no counts line
 })
+
+
+# ---- the Nations filter ---------------------------------------------------------
+
+nation_situation <- function() {
+  d <- fake$situation()
+  d[, constituency_id := c("E14000001", "W07000001", "S14000001")]
+  d
+}
+
+test_that("the Nations filter limits every constituency view, and clearing it shows all four", {
+  env <- make_server_env(list(fetch_situation = nation_situation))
+  testServer(env$server, {
+    do.call(session$setInputs, base_inputs)
+    session$setInputs(sit_min_rank = "0", nations = "E14")
+    expect_equal(situation_filtered()$constituency_id, "E14000001")
+    expect_equal(situation_latest_clean()$constituency_id, "E14000001")          # the Overview follows it too
+    session$setInputs(nations = c("E14", "W07"))
+    expect_equal(sort(situation_filtered()$constituency_id), c("E14000001", "W07000001"))
+    session$setInputs(nations = NULL)                                           # cleared: every nation
+    expect_equal(nrow(situation_filtered()), 3L)
+  })
+})
+
+test_that("the Nations filter limits the changes, the briefing drafts and the exposure history", {
+  chg <- function(sid) { x <- fake$changes(sid); x[, constituency_id := c("E14000001", "W07000001", "E14000001")]; x }
+  brf <- function() { x <- fake$briefings(); x[, constituency_id := "W07000001"]; x }
+  exp_ <- function(n) { x <- fake$exposure(n); x[, constituency_id := c("E14000001", "E14000001", "S14000001")]; x }
+  env <- make_server_env(list(fetch_situation = nation_situation, fetch_changes = chg, fetch_briefing_drafts = brf, fetch_exposure = exp_))
+  testServer(env$server, {
+    do.call(session$setInputs, base_inputs)
+    session$setInputs(nations = "E14")
+    expect_equal(sort(unique(changes()$constituency_id)), "E14000001")
+    expect_equal(nrow(briefing_effective()), 0L)                                 # the only draft is a Welsh one
+    expect_equal(unique(exposure_scoped()$constituency_id), "E14000001")
+    session$setInputs(nations = "W07")
+    expect_equal(unique(changes()$constituency_id), "W07000001")
+    expect_equal(nrow(briefing_effective()), 1L)
+  })
+})

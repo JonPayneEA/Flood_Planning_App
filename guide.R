@@ -124,6 +124,7 @@ guide_foundations <- function(s) {
         sprintf("Coastal risk is drawn as a line along the coast, which has no area, and a constituency stops at the coast. A line on or just off that edge often crosses neither a constituency nor a coastal flood area it should reach. So each coastal line is widened by %s metres on each side before it is matched, for both flood areas and constituencies. A line has no area, so the coverage rules above do not apply to it and no share is stored. Polygons are never widened.",
                 format(GUIDE_PIPELINE$coastal_buffer_m, scientific = FALSE)),
         "Each flood warning area also names its parent flood alert area. For coastal risk, when an alert area is linked to a risk shape, the coastal warning areas inside it are linked too, even where the widened line does not reach them. The pipeline marks those links as raised through the parent alert, and they have no share either.",
+        "The data holds constituencies in every nation, because a flood area can run up to a border. The Nations filter under the header chooses which are shown, on every tab: the counts, lists, map layers, changes, MP briefing drafts, exposure history and the CSV exports all follow it. England is the starting choice, because the Environment Agency works in England. Add Wales, Scotland or Northern Ireland to see the constituencies a forecast reaches there. Clearing the box shows all four. A constituency's nation comes from the first three characters of its ONS code: E14 England, W07 Wales, S14 Scotland, N06 Northern Ireland.",
         "The intersection threshold slider on the map filters further, using the overlaps already stored. It changes what the map shows. It does not change the pipeline's data."
       ),
       limits = c(
@@ -499,6 +500,7 @@ guide_settings_ui <- function(s) {
     c("Mode", if (s$demo) "Demonstration, on generated data" else "Live, reading the warehouse"),
     if (!s$demo) c("Tables read from", paste0(s$catalog, ".", s$schema)),
     c("Geometry source", s$geometry_source),
+    c("Nations shown at the start", paste(names(s$nations)[match(s$default_nations, s$nations)], collapse = ", ")),
     c("Constituency overlap floor (this app, look-back only)", guide_pct(s$contact_min_pct)),
     c("Automatic refresh", if (s$auto_refresh > 0) sprintf("Every %s seconds", s$auto_refresh) else "Off"),
     c("Stale-data banner after", sprintf("%s hours without a health update", s$stale_hours)),
@@ -589,6 +591,7 @@ make_guide_tab <- function() {
 guide_settings <- function() {
   list(
     geometry_source = GEOMETRY_SOURCE, contact_min_pct = CONTACT_MIN_PCT,
+    default_nations = DEFAULT_NATIONS, nations = NATIONS,
     auto_refresh = AUTO_REFRESH_SECONDS, stale_hours = STALE_HOURS, cache = CACHE_TTL_SECONDS,
     poc = POC_FEATURES, demo = DEMO_MODE, catalog = CAT, schema = SCH)
 }

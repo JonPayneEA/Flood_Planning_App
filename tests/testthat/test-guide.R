@@ -8,6 +8,7 @@ guide_env <- local({
   e
 })
 settings <- function(...) modifyList(list(geometry_source = "risk_areas", contact_min_pct = 0.01, auto_refresh = 120,
+                                          default_nations = "E14", nations = c(England = "E14", Wales = "W07", Scotland = "S14", "Northern Ireland" = "N06"),
                                           stale_hours = 3, cache = 600, poc = TRUE, demo = FALSE,
                                           catalog = "prd_dash_lab", schema = "flood_forecasting_unrestricted"), list(...))
 html <- function(x) gsub("\\s+", " ", as.character(x))
@@ -224,4 +225,13 @@ test_that("no sentence in the Guide is left unfinished or contains a placeholder
   expect_equal(grep("NA\\b|NULL|TODO|\\{|\\}|%s|%d", txt, value = TRUE), character())
   prose <- txt[nchar(txt) > 60 & !grepl("^[A-Z0-9_a-z]+$", txt)]
   expect_true(all(grepl("[.?:)\"]$", prose)), info = paste(head(prose[!grepl("[.?:)\"]$", prose)], 2), collapse = " | "))
+})
+
+
+test_that("the Guide explains the Nations filter, and the settings table names the starting nations", {
+  body <- html(guide_env$guide_body_ui(settings(), gaps = list(), sit = NULL))
+  expect_match(body, "The Nations filter under the header chooses which are shown")
+  expect_match(body, "England is the starting choice")
+  expect_match(html(guide_env$guide_settings_ui(settings())), "Nations shown at the start.{0,40}England")
+  expect_match(html(guide_env$guide_settings_ui(settings(default_nations = c("E14", "W07")))), "England, Wales")
 })

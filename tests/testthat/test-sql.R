@@ -63,3 +63,19 @@ test_that("the potential-areas query counts distinct areas, with the share floor
   expect_match(q, "l.intersection_pct >= 0.01")
   expect_match(q, "GROUP BY l.constituency_id")
 })
+
+
+test_that("the nations are known and England is the default", {
+  consts <- load_app_constants()
+  expect_equal(unname(consts$NATIONS), c("E14", "W07", "S14", "N06"))
+  expect_equal(names(consts$NATIONS), c("England", "Wales", "Scotland", "Northern Ireland"))
+  expect_equal(consts$DEFAULT_NATIONS, "E14")
+  expect_equal(get("DEFAULT_NATIONS", load_app_constants(list(FGS_DEFAULT_NATIONS = "E14, W07"))), c("E14", "W07"))
+  expect_error(load_app_constants(list(FGS_DEFAULT_NATIONS = "X99")), "FGS_DEFAULT_NATIONS")
+})
+
+test_that("the EA area lookup carries the constituency id, so it can follow the Nations filter", {
+  d <- load_data_layer()
+  suppressWarnings(d$fetch_ea_constituency_mp())
+  expect_match(d$captured[1L], "l\\.constituency_id")
+})

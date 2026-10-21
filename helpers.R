@@ -316,6 +316,24 @@ notification_id <- function(msg, prefix = "note_") {
 
 
 # -----------------------------------------------------------------------------
+# in_nations()
+#
+# Which constituencies are in the chosen nations. A constituency's ID is its ONS code, and its
+# first three characters give the nation (E14 England, W07 Wales, S14 Scotland, N06 Northern
+# Ireland). An ID that starts with none of the known nation codes (the demonstration's, or
+# anything unexpected) is always kept, so such data is never hidden by the filter. No chosen
+# nation means all of them.
+# -----------------------------------------------------------------------------
+
+in_nations <- function(ids, codes, known = c("E14", "W07", "S14", "N06")) {
+  ids <- as.character(ids)
+  if (length(codes) == 0L) return(rep(TRUE, length(ids)))
+  prefix <- substr(ids, 1L, 3L)
+  !(prefix %in% known) | prefix %in% codes
+}
+
+
+# -----------------------------------------------------------------------------
 # polygons_only()
 #
 # The polygon layers (EA flood areas, constituencies) are drawn with
