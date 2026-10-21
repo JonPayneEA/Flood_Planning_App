@@ -557,10 +557,10 @@ rt_live_shapes <- function(boundary, start, now) {
   if (is.null(boundary) || boundary >= now) return(list())
   fmt <- function(x) format(x, "%Y-%m-%d %H:%M:%S", tz = "UTC")
   shapes <- list(list(type = "rect", xref = "x", yref = "paper", x0 = fmt(max(boundary, start)), x1 = fmt(now),
-                      y0 = 0, y1 = 1, fillcolor = "#fff1cc", opacity = 0.8, line = list(width = 0), layer = "below"))
+                      y0 = 0, y1 = 1, fillcolor = "#9ED8F8", opacity = 0.3, line = list(width = 0), layer = "below"))
   if (start < boundary) {
     shapes[[2L]] <- list(type = "line", xref = "x", yref = "paper", x0 = fmt(boundary), x1 = fmt(boundary),
-                         y0 = 0, y1 = 1, line = list(color = "#c0392b", dash = "dash", width = 1.8))
+                         y0 = 0, y1 = 1, line = list(color = "#053D7E", dash = "dash", width = 1.5))
   }
   shapes
 }

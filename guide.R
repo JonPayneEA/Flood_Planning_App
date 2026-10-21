@@ -353,7 +353,7 @@ guide_products <- function(s) {
         "The measure register lists every measure: a level, flow or rainfall series at a station. The four drop-downs (EA area, river, parameter, station) narrow each other, so a choice never leads to an empty list.",
         "Choose up to eight measures and how many days back, 1 to 30. Readings are fetched only for those measures and that window, from one series that joins the daily archive to the live tail.",
         "Each unit gets its own panel, because metres and cubic metres a second do not share an axis.",
-        "The dashed red line is midnight at the end of the last archived day. The shaded band to its right is the live tail, which the daily archive has not yet picked up."
+        "The dashed line is midnight at the end of the last archived day. The shaded band to its right is the live tail, which the daily archive has not yet picked up."
       ),
       read = c(
         "Times are UTC. Hover for the value of every line at that time.",
