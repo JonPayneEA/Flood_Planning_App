@@ -125,3 +125,25 @@ test_that("the retry setting is validated", {
   expect_equal(get("DB_RETRIES", load_app_constants(list(FGS_QUERY_RETRIES = "0"))), 0L)
   expect_equal(get("DB_RETRIES", load_app_constants()), 2L)
 })
+
+
+test_that("brickster's query progress is switched off, so queries do not raise pop-ups", {
+  skip_if_not_installed("cli")
+  old <- options(cli.progress_handlers_only = NULL); on.exit(options(old), add = TRUE)
+  load_app_constants()
+  expect_identical(getOption("cli.progress_handlers_only"), character())
+  # With that option cli picks no handler at all, and a Shiny pop-up is a handler.
+  expect_length(asNamespace("cli")$cli_progress_select_handlers(list(), environment()), 0L)
+})
+
+test_that("FGS_SHOW_QUERY_PROGRESS=1 leaves cli's progress alone", {
+  old <- options(cli.progress_handlers_only = NULL); on.exit(options(old), add = TRUE)
+  load_app_constants(extra_env = list(FGS_SHOW_QUERY_PROGRESS = "1"))
+  expect_null(getOption("cli.progress_handlers_only"))
+})
+
+test_that("a setting the user already made is not overridden", {
+  old <- options(cli.progress_handlers_only = "cli"); on.exit(options(old), add = TRUE)
+  load_app_constants()
+  expect_identical(getOption("cli.progress_handlers_only"), "cli")
+})

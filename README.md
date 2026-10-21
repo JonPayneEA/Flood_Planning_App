@@ -187,6 +187,7 @@ Optional settings, all in `.env.example`:
 | `FGS_CACHE_GEOMETRY_ENTRIES` | `30` | How many map-geometry results the shared cache keeps. One entry is one layer for one statement and day. The oldest is dropped first, so memory stays bounded. Other results are capped separately at 200. |
 | `FGS_CONTACT_MIN_PCT` | `0.01` | Share of a constituency a forecast polygon must cover, used only to rebuild past statements in the look-back. Match the pipeline's `FGS_CONTACT_MIN_PCT`. |
 | `FGS_POC_FEATURES` | `1` | `0` hides the proof-of-concept features (the look-back). |
+| `FGS_SHOW_QUERY_PROGRESS` | off | `1` shows the driver's "Submitting query" progress pop-ups again. Off by default: they appeared for every query, with terminal colour codes in the text. |
 | `FGS_DEMO_MODE` | off | `1` runs on generated data with no warehouse. See Demo mode. |
 
 On Connect, set these under the content's Advanced tab, Environment variables.
