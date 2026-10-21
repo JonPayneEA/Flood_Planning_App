@@ -100,3 +100,13 @@ test_that("the readings query takes only URL characters from a measure id, and b
   expect_false(grepl(";", q, fixed = TRUE)); expect_false(grepl("'a'", q, fixed = TRUE))
   expect_equal(lengths(regmatches(q, gregexpr("'", q))), 4L)                           # two ids, each in its own pair of quotes
 })
+
+
+test_that("the episodes query is for one constituency, takes letters and digits only, and uses the overlap floor", {
+  d <- load_data_layer()
+  suppressWarnings(d$fetch_warning_episodes("E14000001'; DROP TABLE x; --"))
+  q <- gsub("\\s+", " ", d$captured[length(d$captured)])
+  expect_match(q, "l.constituency_id = 'E14000001DROPTABLEx'")
+  expect_match(q, "l.intersection_pct >= ")
+  expect_false(grepl(";", q, fixed = TRUE))
+})

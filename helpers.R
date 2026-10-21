@@ -374,6 +374,76 @@ warning_area_counts <- function(h, constituency_id) {
 
 
 # -----------------------------------------------------------------------------
+# Warning episodes for one constituency (the Detailed table and the concurrency graph)
+#
+# ep is the output of fetch_warning_episodes(): one row per alert or warning, from the
+# time it was switched on to the time it ended, with end_time NA while still in force.
+# Times are as the message history gives them, read as UTC.
+# -----------------------------------------------------------------------------
+
+duration_label <- function(minutes) {
+  m <- suppressWarnings(as.numeric(minutes))
+  vapply(m, function(x) {
+    if (is.na(x)) return("")
+    x <- round(x)
+    d <- x %/% 1440; h <- (x %% 1440) %/% 60; mi <- x %% 60
+    if (d > 0) sprintf("%d d %d h", d, h) else if (h > 0) sprintf("%d h %d min", h, mi) else sprintf("%d min", mi)
+  }, character(1))
+}
+
+level_label <- function(level) {
+  labels <- c(flood_alert = "Flood alert", flood_warning = "Flood warning", severe_flood_warning = "Severe flood warning")
+  out <- unname(labels[as.character(level)])
+  ifelse(is.na(out), as.character(level), out)
+}
+
+# One row per episode, newest first, for the Detailed table. Episodes that began in
+# [from, to] are kept. An episode open for over 30 days is marked, because it most
+# likely never received its "no longer in force" message.
+warning_episode_rows <- function(ep, from, to) {
+  if (is.null(ep) || nrow(ep) == 0L) return(data.table())
+  x <- copy(ep)
+  x[, start_time := as.POSIXct(start_time, tz = "UTC")]
+  x <- x[as.Date(start_time) >= as.Date(from) & as.Date(start_time) <= as.Date(to)]
+  if (nrow(x) == 0L) return(data.table())
+  x[, end_time := as.POSIXct(end_time, tz = "UTC")]
+  open <- is.na(x$end_time)
+  stale <- open & !is.na(x$stale_open) & as.logical(x$stale_open)
+  x[order(-as.numeric(start_time)), .(
+    Area = ea_area_name, Code = ea_area_code,
+    Type = ifelse(ea_area_type == "flood_alert", "Flood alert", "Flood warning"),
+    Issued = format(start_time, "%d %b %Y %H:%M", tz = "UTC"),
+    Ended = ifelse(is.na(end_time), ifelse(stale, "Still open (over 30 days)", "In force"), format(end_time, "%d %b %Y %H:%M", tz = "UTC")),
+    Duration = ifelse(is.na(end_time), "", duration_label(duration_minutes)),
+    `Highest level` = level_label(peak_level),
+    Severe = ifelse(as.logical(had_severe), "Yes", ""))]
+}
+
+# Alerts and warnings in force at the same time: a step series of how many were on at
+# each moment. Open episodes run to `now`, except those open over 30 days, which are
+# left out because they most likely never received an end message.
+concurrent_counts <- function(ep, now) {
+  empty <- data.table(time = as.POSIXct(character(), tz = "UTC"), alerts = integer(), warnings = integer())
+  if (is.null(ep) || nrow(ep) == 0L) return(empty)
+  x <- copy(ep)
+  x[, start_time := as.POSIXct(start_time, tz = "UTC")]
+  x[, end_time := as.POSIXct(end_time, tz = "UTC")]
+  stale <- is.na(x$end_time) & !is.na(x$stale_open) & as.logical(x$stale_open)
+  x <- x[!stale]
+  if (nrow(x) == 0L) return(empty)
+  x[is.na(end_time), end_time := as.POSIXct(now, tz = "UTC")]
+  ev <- rbind(data.table(time = x$start_time, type = x$ea_area_type, d = 1L),
+              data.table(time = x$end_time,   type = x$ea_area_type, d = -1L))
+  ev <- ev[, .(d = sum(d)), by = .(time, type)]
+  w <- dcast(ev, time ~ type, value.var = "d", fill = 0L)
+  for (col in c("flood_alert", "flood_warning")) if (!(col %in% names(w))) w[, (col) := 0L]
+  setorder(w, time)
+  w[, `:=`(alerts = cumsum(flood_alert), warnings = cumsum(flood_warning))]
+  w[, .(time, alerts = as.integer(alerts), warnings = as.integer(warnings))]
+}
+
+
+# -----------------------------------------------------------------------------
 # Hydrometrics: the measure register and the readings chart
 #
 # Port of explore/Explore_live_readings in FGS_Notebooks. The register has one row

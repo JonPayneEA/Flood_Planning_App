@@ -567,3 +567,47 @@ test_that("the chart summary counts archived and live readings, and the shapes m
   pan <- rt_panels(rd, rt_prepare_register(rt_fake_register()))
   expect_equal(pan$units, "mASD")
 })
+
+
+# ---- Warning episodes: the Detailed table and the concurrency graph --------------
+
+ep_fake <- function() data.table(
+  episode_id = c("e1", "e2", "e3", "e4"),
+  ea_area_code = c("A", "B", "C", "D"),
+  ea_area_name = c("Alder", "Beech", "Coast", "Dale"),
+  ea_area_type = c("flood_warning", "flood_warning", "flood_alert", "flood_alert"),
+  start_time = as.POSIXct(c("2025-01-01 10:00", "2025-01-01 12:00", "2025-01-01 11:00", "2024-01-01 09:00"), tz = "UTC"),
+  end_time = as.POSIXct(c("2025-01-01 14:00", NA, "2025-01-01 13:00", NA), tz = "UTC"),
+  duration_minutes = c(240, NA, 120, NA),
+  peak_level = c("severe_flood_warning", "flood_warning", "flood_alert", "flood_alert"),
+  had_severe = c(TRUE, FALSE, FALSE, FALSE),
+  stale_open = c(FALSE, FALSE, FALSE, TRUE))
+
+test_that("durations and levels read as words", {
+  expect_equal(duration_label(c(45, 195, 1500, NA)), c("45 min", "3 h 15 min", "1 d 1 h", ""))
+  expect_equal(level_label(c("flood_alert", "severe_flood_warning", "odd")), c("Flood alert", "Severe flood warning", "odd"))
+})
+
+test_that("the Detailed table lists every episode with its dates, newest first, inside the period", {
+  t <- warning_episode_rows(ep_fake(), "2025-01-01", "2025-01-31")
+  expect_equal(t$Code, c("B", "C", "A"))                                      # the 2024 episode is outside the period
+  expect_equal(t$Issued[3L], "01 Jan 2025 10:00")
+  expect_equal(t$Ended[3L], "01 Jan 2025 14:00"); expect_equal(t$Duration[3L], "4 h 0 min")
+  expect_equal(t$Ended[1L], "In force")
+  expect_equal(t$`Highest level`[3L], "Severe flood warning"); expect_equal(t$Severe, c("", "", "Yes"))
+  all <- warning_episode_rows(ep_fake(), "2000-01-01", "2030-01-01")
+  expect_equal(all$Ended[all$Code == "D"], "Still open (over 30 days)")
+  expect_equal(nrow(warning_episode_rows(NULL, "2025-01-01", "2025-01-31")), 0L)
+})
+
+test_that("concurrent counts rise and fall as alerts and warnings start and end", {
+  now <- as.POSIXct("2025-01-02 00:00", tz = "UTC")
+  cc <- concurrent_counts(ep_fake(), now)
+  at <- function(t) cc[time <= as.POSIXct(t, tz = "UTC")][.N]
+  expect_equal(c(at("2025-01-01 10:30")$alerts, at("2025-01-01 10:30")$warnings), c(0L, 1L))
+  expect_equal(c(at("2025-01-01 12:30")$alerts, at("2025-01-01 12:30")$warnings), c(1L, 2L))   # all three on at once
+  expect_equal(c(at("2025-01-01 13:30")$alerts, at("2025-01-01 13:30")$warnings), c(0L, 2L))   # the alert ended; the open warning stays
+  expect_equal(at("2025-01-01 14:30")$warnings, 1L)
+  expect_equal(max(cc$alerts), 1L)                                                             # the stale open alert is left out
+  expect_equal(nrow(concurrent_counts(NULL, now)), 0L)
+})

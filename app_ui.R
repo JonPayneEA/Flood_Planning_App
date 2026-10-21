@@ -791,9 +791,13 @@ make_warning_history_tab <- function() tags$div(
   DT::dataTableOutput("wh_table"),
   tags$hr(),
   uiOutput("wh_detail_title"),
+  checkboxInput("wh_detailed", "Detailed: show the date and time of every alert and warning issued", FALSE),
   DT::dataTableOutput("wh_areas"),
-  tags$div(class = "mt-2", downloadButton("download_wh_areas", "Export this constituency's areas",
-                                          class = "btn-sm btn-outline-secondary"))
+  tags$div(class = "mt-2", downloadButton("download_wh_areas", "Export this table",
+                                          class = "btn-sm btn-outline-secondary")),
+  tags$hr(),
+  uiOutput("wh_concurrent_note"),
+  if (requireNamespace("plotly", quietly = TRUE)) plotly::plotlyOutput("wh_concurrent", height = "auto")
 )
 
 
