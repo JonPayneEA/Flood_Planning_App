@@ -14,6 +14,9 @@ Tabs:
   forecast, warnings in force, MP) with the MP briefing draft, and a statement
   look-back (proof of concept).
 - **Exposure history**: how often each constituency has been at each risk level.
+- **Hydrometrics**: interactive (plotly) river level, flow and rainfall readings
+  from the Environment Agency real-time data, archive and live tail together.
+  Needs the `plotly` R package.
 - **Warning history**: for each constituency, how many flood alerts and flood
   warnings have been issued for areas inside it, with a period slider and a
   breakdown by area.
@@ -477,6 +480,7 @@ Pipeline products (FGS_Notebooks jobs 18 to 22), all plain tables:
 | `mp_briefing_drafts` | Briefing draft shown when a constituency row is selected. Read only: nothing is sent. |
 | `fgs_constituency_exposure` | Exposure history tab: heat grid of constituencies by month, 12 months. |
 | `ea_warning_episodes` | Warning history tab: alerts and warnings issued per constituency, from notebook 25. |
+| `ea_rt_measure_register`, `ea_rt_readings_all`, `ea_rt_readings_bronze` | Hydrometrics tab: the gauges, their readings (archive and live tail), and where the archive ends. |
 
 Each product is fetched defensively. If a table is missing or unreadable the
 view says so and the rest of the app carries on.

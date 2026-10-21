@@ -49,7 +49,7 @@ make_server_env <- function(overrides = list(), auto_refresh = 30) {
     fetch_recent_statements = function(n) { env$calls$statements <- env$calls$statements + 1L; fake$statements(n) },
     fetch_pipeline_health = function() { env$calls$health <- env$calls$health + 1L; fake$health() },
     fetch_situation = fake$situation, fetch_briefing_drafts = fake$briefings,
-    fetch_exposure = fake$exposure, fetch_warning_history = function() data.table(), fetch_changes = fake$changes, fetch_changes_log = function(sid) NULL,
+    fetch_exposure = fake$exposure, fetch_warning_history = function() data.table(), fetch_rt_register = function() data.table(), fetch_changes = fake$changes, fetch_changes_log = function(sid) NULL,
     fetch_ea_constituency_mp = function() data.table(ea_area_code = "a", constituency_name = "X", constituency_overlap_pct = 1,
                                                     mp_name = "m", mp_party = "p", mp_email = "e", mp_phone = "t"),
     fetch_summary_counts = function(...) list(polygon_count = 0L, ea_area_count = 0L, constituency_count = 0L),
@@ -573,5 +573,31 @@ test_that("a missing episodes table is named on screen", {
     do.call(session$setInputs, base_inputs)
     expect_match(html_of(output$wh_note), "ea_warning_episodes")
     expect_match(html_of(output$wh_note), "notebook 25")
+  })
+})
+
+
+# ---- Hydrometrics tab --------------------------------------------------------------
+
+test_that("the Hydrometrics tab loads the register on first open and fetches readings for the chosen measures", {
+  reg <- function() data.table(station_label = c("Aldwyn", "Aldwyn"), station_reference = "S1", station_uri = "u/S1",
+                               measure_uri = c("m/1", "m/2"), parameter = c("level", "flow"), unit_name = c("mASD", "m3/s"),
+                               river_name = "Aldwyn", ea_area_name = "North")
+  asked <- new.env(); asked$n <- 0L; asked$uris <- NULL
+  rd <- function(uris, days) { asked$n <- asked$n + 1L; asked$uris <- uris
+    data.table(measure_uri = uris, date_time = Sys.time() - 600, value = 1) }
+  env <- make_server_env(list(fetch_rt_register = reg, fetch_rt_readings = rd, fetch_rt_boundary = function() NULL))
+  testServer(env$server, {
+    do.call(session$setInputs, base_inputs)
+    expect_null(rt_reg())                                                    # not loaded until the tab is opened
+    session$setInputs(main_tabs = "Hydrometrics")
+    expect_equal(nrow(rt_reg()), 2L)
+    expect_match(html_of(output$rt_message), "Choose one or more measures")
+    expect_equal(asked$n, 0L)                                                # nothing fetched until measures are chosen
+    session$setInputs(rt_measures = c("m/1", "m/2"), rt_days = 3L, rt_refresh = 0)
+    expect_equal(asked$uris, c("m/1", "m/2"))
+    expect_match(html_of(output$rt_summary), "2 readings")
+    session$setInputs(rt_measures = sprintf("m/%d", 1:9))
+    expect_match(html_of(output$rt_message), "Pick 8 or fewer")
   })
 })

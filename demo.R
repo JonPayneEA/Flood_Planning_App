@@ -683,6 +683,46 @@ fetch_situation_for_statement <- function(statement_id, issued_at = NA) {
 
 fetch_exposure <- function(n_months = 12L) copy(demo_exposure(demo_current()$scenario))
 
+# A small invented gauge network: 4 rivers in 3 areas, with level, flow and rainfall measures.
+demo_rt_register <- function() demo_memo("rt_register", {
+  st <- data.table(
+    station_label = c("Aldwyn Bridge", "Brenn Weir", "Cardell Mill", "Dunmere Ford", "Rainfall station", "Rainfall station"),
+    station_reference = c("DM1001", "DM1002", "DM2001", "DM3001", "DM4001", "DM4002"),
+    river_name = c("River Aldwyn", "River Brenn", "River Cardell", "River Dunmere", NA, NA),
+    ea_area_name = c("Demo North", "Demo North", "Demo Central", "Demo South", "Demo North", "Demo South"),
+    town = c("Aldwyn", "Brenn", "Cardell", "Dunmere", "Hexton", "Ashby"))
+  m <- rbindlist(lapply(seq_len(nrow(st)), function(i) {
+    if (is.na(st$river_name[i])) data.table(st[i], parameter = "rainfall", qualifier = "Tipping Bucket Raingauge", unit_name = "mm", period = 900L)
+    else rbind(data.table(st[i], parameter = "level", qualifier = "Stage", unit_name = "mASD", period = 900L),
+               if (i %% 2L == 1L) data.table(st[i], parameter = "flow", qualifier = "Flow", unit_name = "m3/s", period = 900L))
+  }))
+  m[, `:=`(station_uri = paste0("http://demo.invalid/id/stations/", station_reference),
+           measure_uri = paste0("http://demo.invalid/id/measures/", station_reference, "-", parameter, "-", period))]
+  m[]
+})
+
+fetch_rt_register <- function() copy(demo_rt_register())
+
+# The archive ends at midnight last night; everything after it is the live tail.
+fetch_rt_boundary <- function() rt_boundary(Sys.Date() - 1L)
+
+fetch_rt_readings <- function(measure_uris, days) {
+  reg <- demo_rt_register()[measure_uri %in% measure_uris]
+  if (nrow(reg) == 0L) return(data.table(measure_uri = character(), date_time = as.POSIXct(character(), tz = "UTC"), value = numeric()))
+  now <- as.POSIXct(trunc(Sys.time(), "mins"), tz = "UTC")
+  ts <- seq(now - as.integer(days) * 86400, now, by = 900)
+  rbindlist(lapply(seq_len(nrow(reg)), function(i) {
+    h <- as.numeric(difftime(ts, now, units = "hours"))
+    set.seed(sum(utf8ToInt(reg$measure_uri[i])))
+    storm <- exp(-((h + 6) / 9)^2)
+    v <- switch(reg$parameter[i],
+      level    = 0.6 + 0.25 * sin(h / 11) + 1.4 * storm + rnorm(length(h), 0, 0.01),
+      flow     = 3 + 1.5 * sin(h / 13) + 22 * storm + rnorm(length(h), 0, 0.15),
+      rainfall = pmax(0, 2.5 * exp(-((h + 9) / 3)^2) + rnorm(length(h), 0, 0.03)))
+    data.table(measure_uri = reg$measure_uri[i], date_time = ts, value = round(v, 3))
+  }))
+}
+
 # Two years of invented warnings and alerts, heavier where the demo's storms fall.
 fetch_warning_history <- function() demo_memo("warning_history", demo_with_seed(515, {
   lk <- fetch_ea_constituency_mp()[constituency_overlap_pct >= TARGET_AREA_MIN_PCT]

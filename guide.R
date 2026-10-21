@@ -47,11 +47,13 @@ GUIDE_TABLES <- data.frame(
             "ea_flood_warning_areas", "ea_flood_alert_areas", "parliamentary_constituencies",
             "ea_area_constituency_lookup", "mp_contact_details",
             "fgs_constituency_changes", "fgs_changes_log", "constituency_flood_situation", "mp_briefing_drafts",
-            "fgs_constituency_exposure", "pipeline_health", "ea_warning_episodes"),
-  notebook = c("01", "01", "07", "07", "03", "03", "05", "06", "04", "18", "18", "19", "20", "21", "22", "25"),
+            "fgs_constituency_exposure", "pipeline_health", "ea_warning_episodes",
+            "ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_readings_bronze"),
+  notebook = c("01", "01", "07", "07", "03", "03", "05", "06", "04", "18", "18", "19", "20", "21", "22", "25", "09", "23", "10"),
   refresh = c("Each FGS issue or amendment", "Each FGS issue or amendment", "Each FGS issue", "Each FGS issue",
               "Weekly", "Weekly", "Quarterly, or after an election", "Weekly and quarterly", "Weekly",
-              "Every poll", "Every poll", "Every poll", "Every poll", "Daily", "Every poll", "Every poll"),
+              "Every poll", "Every poll", "Every poll", "Every poll", "Daily", "Every poll", "Every poll",
+              "Weekly", "Every 15 minutes", "Daily"),
   holds = c("One row per statement: the headline and the forecast text.",
             "One row per risk polygon, flood source and day, with impact, likelihood and risk level.",
             "Each FGS shape that overlaps an EA flood warning or alert area.",
@@ -67,7 +69,10 @@ GUIDE_TABLES <- data.frame(
             "Draft briefings for MPs. Nothing is sent. Older statements' drafts are kept.",
             "Days each constituency sat at each risk level, by month. Sparse.",
             "One row per health check of the pipeline's own outputs.",
-            "Each alert and warning from the time it was switched on to the time it ended, with its duration."),
+            "Each alert and warning from the time it was switched on to the time it ended, with its duration.",
+            "One row per measure at an Environment Agency gauge: what it measures, the station, river and area.",
+            "Real-time readings, the daily archive and the live tail joined as one series.",
+            "The daily archive of readings. Its last day marks where the live tail begins."),
   stringsAsFactors = FALSE
 )
 
@@ -334,6 +339,28 @@ guide_products <- function(s) {
       limits = c(
         "History before the live log began comes from the message file, which can be incomplete. Notebook 25 reports where the two sources meet.",
         "A coastal warning area is a line, linked to constituencies on a 1000 m buffer, so a coastal area can count towards a constituency it only touches."
+      )
+    ),
+
+    list(
+      id = "hydrometrics", title = "Hydrometrics", where = "Hydrometrics",
+      answers = "What have river levels, flows and rainfall been doing at the Environment Agency's gauges?",
+      tables = c("ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_readings_bronze"),
+      steps = c(
+        "The measure register lists every measure: a level, flow or rainfall series at a station. The four drop-downs (EA area, river, parameter, station) narrow each other, so a choice never leads to an empty list.",
+        "Choose up to eight measures and how many days back, 1 to 30. Readings are fetched only for those measures and that window, from one series that joins the daily archive to the live tail.",
+        "Each unit gets its own panel, because metres and cubic metres a second do not share an axis.",
+        "The dashed red line is midnight at the end of the last archived day. The shaded band to its right is the live tail, which the daily archive has not yet picked up."
+      ),
+      read = c(
+        "Times are UTC. Hover for the value of every line at that time.",
+        "The text under the chart gives the number of readings, how many are archived and live, and how old the newest is.",
+        "Not tied to the forecast: nothing here depends on the statement or day pickers. The Nations filter does not apply."
+      ),
+      limits = c(
+        "These are readings as the real-time API supplies them, unchecked. They are not quality-controlled and are not a record of flooding.",
+        "Only the first 500 measures matching the filters are offered. Narrow by river or station to find the rest.",
+        "Uses Environment Agency flood and river level data from the real-time data API (Beta), under the Open Government Licence."
       )
     ),
 
