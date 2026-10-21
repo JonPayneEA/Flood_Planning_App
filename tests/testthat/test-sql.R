@@ -51,6 +51,16 @@ test_that("queries read the configured catalog and schema, and no table by bare 
   for (q in d$captured) expect_match(q, "cat\\.sch\\.")
 })
 
+test_that("the warning history query links areas by the overlap floor and counts by day of issue", {
+  d <- load_data_layer()
+  suppressWarnings(d$fetch_warning_history())
+  q <- gsub("\\s+", " ", d$captured[length(d$captured)])
+  expect_match(q, "cat\\.sch\\.ea_warning_episodes")
+  expect_match(q, "l.intersection_pct >= ")
+  expect_match(q, "CAST\\(e.start_time AS DATE\\)")
+  expect_match(q, "SUM\\(CASE WHEN e.had_severe")
+})
+
 test_that("the potential-areas query counts distinct areas, with the share floor and the lookup join", {
   d <- load_data_layer("risk_areas")
   suppressWarnings(d$fetch_potential_areas(7, 3L))

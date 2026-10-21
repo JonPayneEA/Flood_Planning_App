@@ -49,7 +49,7 @@ make_server_env <- function(overrides = list(), auto_refresh = 30) {
     fetch_recent_statements = function(n) { env$calls$statements <- env$calls$statements + 1L; fake$statements(n) },
     fetch_pipeline_health = function() { env$calls$health <- env$calls$health + 1L; fake$health() },
     fetch_situation = fake$situation, fetch_briefing_drafts = fake$briefings,
-    fetch_exposure = fake$exposure, fetch_changes = fake$changes, fetch_changes_log = function(sid) NULL,
+    fetch_exposure = fake$exposure, fetch_warning_history = function() data.table(), fetch_changes = fake$changes, fetch_changes_log = function(sid) NULL,
     fetch_ea_constituency_mp = function() data.table(ea_area_code = "a", constituency_name = "X", constituency_overlap_pct = 1,
                                                     mp_name = "m", mp_party = "p", mp_email = "e", mp_phone = "t"),
     fetch_summary_counts = function(...) list(polygon_count = 0L, ea_area_count = 0L, constituency_count = 0L),
@@ -517,5 +517,61 @@ test_that("the Nations filter limits the changes, the briefing drafts and the ex
     session$setInputs(nations = "W07")
     expect_equal(unique(changes()$constituency_id), "W07000001")
     expect_equal(nrow(briefing_effective()), 1L)
+  })
+})
+
+
+# ---- Warning history tab -------------------------------------------------------
+
+hist_rows <- function() data.table(
+  constituency_id = c("E14000001", "E14000001", "E14000001", "W07000001"),
+  ea_area_code    = c("011FWFA", "011FWFA", "011WAFB", "011FWFA"),
+  ea_area_name    = c("River A", "River A", "Coast B", "River A"),
+  ea_area_type    = c("flood_warning", "flood_warning", "flood_alert", "flood_warning"),
+  issued_date     = as.Date(c("2024-01-10", "2025-06-01", "2025-06-02", "2025-06-01")),
+  n_issued        = c(2L, 1L, 4L, 3L),
+  n_severe        = c(1L, 0L, 0L, 0L))
+
+test_that("warning history counts alerts, warnings, severe and the total per constituency", {
+  s <- warning_constituency_counts(hist_rows())
+  e <- s[constituency_id == "E14000001"]
+  expect_equal(c(e$alerts, e$warnings, e$severe, e$total), c(4L, 3L, 1L, 7L))
+  expect_equal(s$constituency_id[1L], "E14000001")                               # highest total first
+  w <- warning_constituency_counts(warning_history_window(hist_rows(), "2025-01-01", "2025-12-31"))
+  expect_equal(w[constituency_id == "E14000001"]$total, 5L)                      # the 2024 issues fall outside
+  expect_equal(nrow(warning_constituency_counts(NULL)), 0L)
+  a <- warning_area_counts(hist_rows(), "E14000001")
+  expect_equal(a$ea_area_code, c("011WAFB", "011FWFA"))                          # most issued first
+  expect_equal(a$issued, c(4L, 3L))
+  expect_equal(as.character(a$last_issued[2L]), "2025-06-01")
+})
+
+test_that("the Warning history tab follows the Nations filter and the period", {
+  lk <- function() data.table(ea_area_code = "a", constituency_id = c("E14000001", "W07000001"),
+                              constituency_name = c("Alpha", "Wylam"), constituency_overlap_pct = 1,
+                              mp_name = c("A MP", "W MP"), mp_party = "p", mp_email = "e", mp_phone = "t")
+  env <- make_server_env(list(fetch_warning_history = hist_rows, fetch_ea_constituency_mp = lk))
+  testServer(env$server, {
+    do.call(session$setInputs, base_inputs)
+    session$setInputs(nations = "E14", wh_range = as.Date(c("2020-01-01", "2026-01-01")), wh_search = "")
+    expect_equal(wh_summary()$constituency_name, "Alpha")
+    expect_equal(wh_summary()$total, 7L)
+    session$setInputs(nations = NULL)
+    expect_equal(wh_summary()$constituency_name, c("Alpha", "Wylam"))
+    session$setInputs(wh_range = as.Date(c("2025-01-01", "2026-01-01")))
+    expect_equal(wh_summary()$total, c(5L, 3L))
+    session$setInputs(wh_search = "w mp")
+    expect_equal(wh_summary()$constituency_name, "Wylam")
+    session$setInputs(wh_search = "", wh_table_rows_selected = 1L)
+    expect_equal(wh_area_table()$ea_area_code, c("011WAFB", "011FWFA"))
+  })
+})
+
+test_that("a missing episodes table is named on screen", {
+  env <- make_server_env(list(fetch_warning_history = function() stop("[TABLE_OR_VIEW_NOT_FOUND] The table or view `cat`.`sch`.`ea_warning_episodes` cannot be found")))
+  testServer(env$server, {
+    do.call(session$setInputs, base_inputs)
+    expect_match(html_of(output$wh_note), "ea_warning_episodes")
+    expect_match(html_of(output$wh_note), "notebook 25")
   })
 })

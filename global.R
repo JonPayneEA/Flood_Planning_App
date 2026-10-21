@@ -154,6 +154,7 @@ TBL_SITUATION <- paste(CAT, SCH, "constituency_flood_situation", sep = ".")  # 1
 TBL_BRIEFINGS <- paste(CAT, SCH, "mp_briefing_drafts",          sep = ".")  # 20
 TBL_EXPOSURE  <- paste(CAT, SCH, "fgs_constituency_exposure",   sep = ".")  # 21
 TBL_HEALTH    <- paste(CAT, SCH, "pipeline_health",             sep = ".")  # 22
+TBL_WARNING_EPISODES <- paste(CAT, SCH, "ea_warning_episodes",      sep = ".")  # 25 (each alert or warning from issue to withdrawal)
 
 
 # -----------------------------------------------------------------------------

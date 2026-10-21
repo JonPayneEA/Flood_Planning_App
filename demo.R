@@ -683,6 +683,19 @@ fetch_situation_for_statement <- function(statement_id, issued_at = NA) {
 
 fetch_exposure <- function(n_months = 12L) copy(demo_exposure(demo_current()$scenario))
 
+# Two years of invented warnings and alerts, heavier where the demo's storms fall.
+fetch_warning_history <- function() demo_memo("warning_history", demo_with_seed(515, {
+  lk <- fetch_ea_constituency_mp()[constituency_overlap_pct >= TARGET_AREA_MIN_PCT]
+  ea <- demo_ea_areas()$table
+  lk <- merge(lk[, .(ea_area_code, constituency_id)], ea, by = "ea_area_code")
+  rate <- ifelse(lk$ea_area_type == "flood_warning", 3, 7)
+  lk[, n_days := pmin(60L, rpois(.N, rate * runif(.N, 0.3, 2)))]
+  d <- lk[n_days > 0L, .(issued_date = as.Date(Sys.Date() - sample.int(730L, n_days, replace = TRUE))), by = .(constituency_id, ea_area_code, ea_area_name, ea_area_type)]
+  d <- d[, .(n_issued = .N), by = .(constituency_id, ea_area_code, ea_area_name, ea_area_type, issued_date)]
+  d[, n_severe := fifelse(ea_area_type == "flood_warning", as.integer(rbinom(.N, n_issued, 0.12)), 0L)]
+  d[]
+}))
+
 fetch_constituency_shape <- function(constituency_id) {
   g <- demo_geometry(); i <- match(constituency_id, g$table$constituency_id)
   if (is.na(i)) return(NULL)

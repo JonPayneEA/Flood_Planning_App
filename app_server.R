@@ -1010,6 +1010,7 @@ server <- function(input, output, session) {
   situation_rv <- reactiveVal(NULL)
   briefing_rv  <- reactiveVal(NULL)
   exposure_rv  <- reactiveVal(NULL)
+  history_rv   <- reactiveVal(NULL)
   exposure_scoped <- reactive({
     e <- exposure_rv()
     if (is.null(e)) NULL else e[in_nations(constituency_id, nation_codes())]
@@ -1020,6 +1021,7 @@ server <- function(input, output, session) {
     situation_rv(safe_fetch(fetch_situation))
     briefing_rv(safe_fetch(fetch_briefing_drafts))
     exposure_rv(safe_fetch(fetch_exposure, 12L))
+    history_rv(safe_fetch(fetch_warning_history))
   }
 
   load_products()
@@ -1855,6 +1857,131 @@ server <- function(input, output, session) {
         `Alert areas under forecast`   = fifelse(is.na(pot_alert_areas),   "n/a", as.character(pot_alert_areas))
       )]
       setnames(out, c("d1", "d2", "d3", "d4", "d5"), day_names)
+      data.table::fwrite(out, file)
+    }
+  )
+
+  # ---------------------------------------------------------------------------
+  # Warning history tab (job 25).
+  #
+  # Filtering is in R: the history arrives once per load as counts by day of
+  # issue, so the slider and the Nations filter cost no further queries.
+  # ---------------------------------------------------------------------------
+
+  history_scoped <- reactive({
+    h <- history_rv()
+    if (is.null(h)) NULL else h[in_nations(constituency_id, nation_codes())]
+  })
+
+  observeEvent(history_rv(), {
+    h <- history_rv()
+    if (is.null(h) || nrow(h) == 0L) return()
+    days <- as.Date(h$issued_date)
+    updateSliderInput(session, "wh_range", min = min(days), max = max(days), value = c(min(days), max(days)))
+  }, ignoreNULL = TRUE)
+
+  history_window <- reactive({
+    h <- history_scoped()
+    req(h)
+    r <- input$wh_range
+    if (is.null(r)) h else warning_history_window(h, r[1L], r[2L])
+  })
+
+  wh_names <- reactive({
+    lk <- scoped_lookup()
+    if (!("constituency_id" %in% names(lk))) return(data.table(constituency_id = character(), constituency_name = character(), mp_name = character()))
+    unique(lk[, .(constituency_id, constituency_name, mp_name)], by = "constituency_id")
+  })
+
+  wh_summary <- reactive({
+    counts <- warning_constituency_counts(history_window())
+    nm <- wh_names()
+    out <- merge(counts, nm, by = "constituency_id", all.x = TRUE, sort = FALSE)
+    out[is.na(constituency_name), constituency_name := constituency_id]
+    q <- trimws(if (is.null(input$wh_search)) "" else input$wh_search)
+    if (nzchar(q)) {
+      q <- tolower(q)
+      out <- out[grepl(q, tolower(constituency_name), fixed = TRUE) |
+                 grepl(q, tolower(fifelse(is.na(mp_name), "", mp_name)), fixed = TRUE)]
+    }
+    out[order(-total, constituency_name)]
+  })
+
+  output$wh_note <- renderUI({
+    if (has_gap("ea_warning_episodes")) {
+      return(tags$p(class = "text-muted", gap_text("ea_warning_episodes", "Warning history")))
+    }
+    if (is.null(history_rv())) return(tags$p(class = "text-muted", "Warning history could not be loaded."))
+    tags$small(class = "text-muted d-block mb-2",
+      "An issue is one alert or warning, from the time it was switched on to the time it ended. A warning that rises ",
+      "to severe and falls back is one issue. Warnings includes severe ones, so the total is alerts plus warnings. ",
+      "Areas are linked to a constituency when at least ", sprintf("%g%%", 100 * TARGET_AREA_MIN_PCT),
+      " of the area lies inside it. Constituencies with no issue in the period are not listed. Select a row for its areas.")
+  })
+
+  output$wh_table <- DT::renderDataTable({
+    req(history_scoped())
+    s <- wh_summary()
+    tbl <- s[, .(Constituency = constituency_name,
+                 MP = fifelse(is.na(mp_name), "(vacant or unmatched)", mp_name),
+                 Alerts = alerts, Warnings = warnings, `of which severe` = severe, `Total issues` = total)]
+    DT::datatable(tbl, rownames = FALSE, selection = "single",
+                  options = list(pageLength = 25, scrollX = TRUE, dom = "tip",
+                                 order = list(list(5L, "desc")),
+                                 language = list(info = "Showing _START_ to _END_ of _TOTAL_ constituencies",
+                                                 emptyTable = "No alerts or warnings issued in this period.")))
+  })
+
+  wh_selected <- reactive({
+    row <- input$wh_table_rows_selected
+    if (is.null(row)) return(NULL)
+    s <- wh_summary()
+    if (row > nrow(s)) NULL else s[row]
+  })
+
+  wh_area_table <- reactive({
+    sel <- wh_selected()
+    req(sel)
+    warning_area_counts(history_window(), sel$constituency_id)
+  })
+
+  output$wh_detail_title <- renderUI({
+    sel <- wh_selected()
+    if (is.null(sel)) return(tags$p(class = "text-muted", "Select a constituency to see its alert and warning areas."))
+    tags$h6(sprintf("%s: %d issue%s (%d alert%s, %d warning%s)", sel$constituency_name,
+                    sel$total, if (sel$total == 1L) "" else "s",
+                    sel$alerts, if (sel$alerts == 1L) "" else "s",
+                    sel$warnings, if (sel$warnings == 1L) "" else "s"))
+  })
+
+  wh_area_display <- function(a) {
+    a[, .(Area = ea_area_name, Code = ea_area_code,
+          Type = fifelse(ea_area_type == "flood_alert", "Flood alert", "Flood warning"),
+          Issued = issued, `of which severe` = severe, `Last issued` = format(last_issued, "%d %b %Y"))]
+  }
+
+  output$wh_areas <- DT::renderDataTable({
+    req(wh_selected())
+    DT::datatable(wh_area_display(wh_area_table()), rownames = FALSE, selection = "none",
+                  options = list(pageLength = 15, scrollX = TRUE, dom = "tip", order = list(list(3L, "desc"))))
+  })
+
+  output$download_warning_history <- downloadHandler(
+    filename = function() sprintf("warning_history_by_constituency_%s.csv", format(Sys.time(), "%Y%m%d_%H%M")),
+    content  = function(file) {
+      s <- wh_summary()
+      data.table::fwrite(s[, .(Constituency = constituency_name,
+                               MP = fifelse(is.na(mp_name), "(vacant or unmatched)", mp_name),
+                               Alerts = alerts, Warnings = warnings, `of which severe` = severe,
+                               `Total issues` = total)], file)
+    }
+  )
+
+  output$download_wh_areas <- downloadHandler(
+    filename = function() sprintf("warning_history_areas_%s.csv", format(Sys.time(), "%Y%m%d_%H%M")),
+    content  = function(file) {
+      sel <- wh_selected()
+      out <- if (is.null(sel)) data.table() else cbind(Constituency = sel$constituency_name, wh_area_display(wh_area_table()))
       data.table::fwrite(out, file)
     }
   )
