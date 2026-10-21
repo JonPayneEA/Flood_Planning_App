@@ -302,6 +302,20 @@ with_layer_guard <- function(label, busy, expr, notify = function(msg) invisible
 
 
 # -----------------------------------------------------------------------------
+# notification_id()
+#
+# A pop-up with an id REPLACES an earlier pop-up with the same id, where one without an id
+# stacks. A layer that fails on every filter change used to pile up a new red box each time.
+# The id comes from the message's opening words, so the same failure shows once and a
+# different failure still gets its own box.
+# -----------------------------------------------------------------------------
+
+notification_id <- function(msg, prefix = "note_") {
+  paste0(prefix, substr(gsub("[^A-Za-z]", "", as.character(msg)[1L]), 1L, 30L))
+}
+
+
+# -----------------------------------------------------------------------------
 # polygons_only()
 #
 # The polygon layers (EA flood areas, constituencies) are drawn with

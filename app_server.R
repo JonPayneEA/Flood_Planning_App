@@ -207,7 +207,8 @@ server <- function(input, output, session) {
 
   # Every map layer runs inside with_layer_guard() (helpers.R), so its flag is
   # cleared however it ends and a real error is shown, not just logged.
-  layer_notify <- function(msg) showNotification(msg, type = "error", duration = 15)
+  # One box per distinct failure: a repeat replaces the earlier box instead of stacking.
+  layer_notify <- function(msg) showNotification(msg, type = "error", duration = 15, id = notification_id(msg, "layer_"))
 
   busy_polygons <- reactiveVal(FALSE)
   busy_ea       <- reactiveVal(FALSE)
@@ -1258,7 +1259,7 @@ server <- function(input, output, session) {
         load_statements(keep_selected = TRUE)
         load_products()
         data_version(isolate(data_version()) + 1L)
-        showNotification("New pipeline data loaded.", type = "message", duration = 6)
+        showNotification("New pipeline data loaded.", type = "message", duration = 6, id = "new_data")
       }
     })
   }
@@ -1510,11 +1511,11 @@ server <- function(input, output, session) {
 
     shape <- safe_fetch(fetch_constituency_risk_geometry)
     if (is.null(shape)) {
-      showNotification("Constituency risk could not be loaded.", type = "warning")
+      showNotification("Constituency risk could not be loaded.", type = "warning", id = "const_risk_failed")
       return()
     }
     if (nrow(shape) == 0L) {
-      showNotification("No constituency has a forecast risk in the latest statement.", type = "message")
+      showNotification("No constituency has a forecast risk in the latest statement.", type = "message", id = "const_risk_none")
       return()
     }
 
@@ -1550,7 +1551,7 @@ server <- function(input, output, session) {
     removeModal()
     shape <- safe_fetch(fetch_constituency_shape, input$goto_constituency)
     if (is.null(shape) || nrow(shape) == 0L) {
-      showNotification("That constituency's boundary could not be loaded.", type = "warning")
+      showNotification("That constituency's boundary could not be loaded.", type = "warning", id = "goto_failed")
       return()
     }
     updateTabsetPanel(session, "main_tabs", selected = "FGS Interrogator")
