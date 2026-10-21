@@ -66,6 +66,9 @@ test_that("the figures in the text match the pipeline's config.py when it is alo
   expect_equal(d$briefing_min_rank, val("BRIEFING_MIN_RISK_RANK"))
   expect_equal(d$ea_min_pct, val("EA_INTERSECTION_MIN_PCT"))
   expect_equal(d$contact_min_pct, val("FGS_CONTACT_MIN_PCT"))
+  expect_equal(d$coastal_buffer_m, val("COASTAL_LINE_BUFFER_M"))
+  expect_true(any(grepl("^COASTAL_LINK_WARNINGS_TO_ALERTS\\s*=\\s*True", txt)),       # the Guide says warnings are linked through the parent alert
+              info = "COASTAL_LINK_WARNINGS_TO_ALERTS is no longer True in config.py: update the Guide's linking section")
   expect_equal(d$warning_min_pct, val("WARNING_CONTACT_MIN_PCT"))
   expect_equal(d$health_fgs, c(val("HEALTH_FGS_WARN_HOURS"), val("HEALTH_FGS_FAIL_HOURS")))
   expect_equal(d$health_chain, c(val("HEALTH_CONTACTS_WARN_HOURS"), val("HEALTH_CONTACTS_FAIL_HOURS")))

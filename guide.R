@@ -26,6 +26,7 @@ GUIDE_PIPELINE <- list(
   briefing_min_rank  = 1L,      # BRIEFING_MIN_RISK_RANK
   ea_min_pct         = 0.25,    # EA_INTERSECTION_MIN_PCT
   contact_min_pct    = 0.01,    # FGS_CONTACT_MIN_PCT
+  coastal_buffer_m   = 1000,    # COASTAL_LINE_BUFFER_M
   warning_min_pct    = 0.01,    # WARNING_CONTACT_MIN_PCT
   health_fgs         = c(30, 54),   # HEALTH_FGS_WARN_HOURS, HEALTH_FGS_FAIL_HOURS
   health_chain       = c(3, 12),    # HEALTH_CONTACTS_*  (situation table age)
@@ -105,7 +106,7 @@ guide_foundations <- function(s) {
       paragraphs = c(
         "A forecast says what may happen over the next five days. A warning says what the Environment Agency expects, and has issued. They measure different things, so this app keeps them apart and never combines them into one score.",
         "Warnings come in three levels in force: Severe Flood Warning, Flood Warning and Flood Alert. A fourth state, a warning that has ended, is kept in the data so that a closing warning stays visible. It is not counted as in force.",
-        "The map's list titled \"Affected Target Areas\" is not a list of warnings in force. It lists the flood warning areas and flood alert areas that the forecast overlaps: places where a warning or alert could be issued. The warnings actually in force are counted on the Overview and on Constituency situation."
+        "The map's list titled \"Affected Target Areas\" is not a list of warnings in force. It lists the flood warning areas and flood alert areas that the forecast overlaps or is linked to: places where a warning or alert could be issued. The warnings actually in force are counted on the Overview and on Constituency situation."
       ),
       limits = c(
         "Observed river and sea levels from the gauges are not part of any figure yet. The pipeline has not turned the readings and thresholds tables into events."
@@ -116,10 +117,13 @@ guide_foundations <- function(s) {
       answers = "What does it mean for a forecast to \"touch\" a flood area or a constituency?",
       paragraphs = c(
         "The pipeline overlays each FGS shape on two sets of boundaries: the EA's flood areas and the parliamentary constituencies. The overlaps are stored, and every view in this app reads them.",
-        sprintf("A risk polygon counts against an EA flood area when it covers at least %s of that area. Coastal risk is drawn as a line, which has no area, so coastal lines are always kept.",
+        sprintf("A risk polygon counts against an EA flood area when it covers at least %s of that area.",
                 guide_pct(GUIDE_PIPELINE$ea_min_pct)),
-        sprintf("A risk polygon counts against a constituency on any real overlap, but links covering less than %s of the constituency are dropped, so a sliver at an edge does not flag a seat. Coastal lines are kept.",
+        sprintf("A risk polygon counts against a constituency on any real overlap, but links covering less than %s of the constituency are dropped, so a sliver at an edge does not flag a seat.",
                 guide_pct(GUIDE_PIPELINE$contact_min_pct)),
+        sprintf("Coastal risk is drawn as a line along the coast, which has no area, and a constituency stops at the coast. A line on or just off that edge often crosses neither a constituency nor a coastal flood area it should reach. So each coastal line is widened by %s metres on each side before it is matched, for both flood areas and constituencies. A line has no area, so the coverage rules above do not apply to it and no share is stored. Polygons are never widened.",
+                format(GUIDE_PIPELINE$coastal_buffer_m, scientific = FALSE)),
+        "Each flood warning area also names its parent flood alert area. For coastal risk, when an alert area is linked to a risk shape, the coastal warning areas inside it are linked too, even where the widened line does not reach them. The pipeline marks those links as raised through the parent alert, and they have no share either.",
         "The intersection threshold slider on the map filters further, using the overlaps already stored. It changes what the map shows. It does not change the pipeline's data."
       ),
       limits = c(
@@ -194,7 +198,8 @@ guide_products <- function(s) {
       ),
       limits = c(
         "Counts move with the filters. Compare like with like.",
-        "The polygons drawn are always the risk area polygons, whichever geometry source the overlaps were built from."
+        "The polygons drawn are always the risk area polygons, whichever geometry source the overlaps were built from.",
+        "For coastal risk a flood area can be listed without the drawn line touching it. It is within the widened line, or it is a warning area whose parent alert area is linked. Its overlap shows as crossed by a coastal line, because a line has no area to measure. The intersection threshold slider never removes these."
       )
     ),
 
@@ -229,7 +234,7 @@ guide_products <- function(s) {
                  "fgs_ea_area_intersections", "ea_area_constituency_lookup"),
       steps = c(
         "Every constituency has a row, so a constituency with nothing flagged is shown as None.",
-        sprintf("For each constituency the pipeline takes the worst risk on each day, across all flood sources. Polygons covering less than %s of the constituency are ignored.", guide_pct(th$contact_min_pct)),
+        sprintf("For each constituency the pipeline takes the worst risk on each day, across all flood sources. Polygons covering less than %s of the constituency are ignored. A coastal line has no area, so it is matched through the line widened by %s metres and is never dropped by that floor.", guide_pct(th$contact_min_pct), format(GUIDE_PIPELINE$coastal_buffer_m, scientific = FALSE)),
         "Worst is the highest of those five. On is the first date it occurs. Sources are the flood sources at that worst risk, taken across all days.",
         "The five day columns show the worst risk on each day. Escalated is yes if the forecast rose against the previous statement on any day or source.",
         "Impact and Likelihood are those of the forecast polygon behind the worst risk, on the first day it occurs. Where several polygons share that risk on that day, the one with the highest impact is shown, then the highest likelihood. They are read from the stored intersections, so they are available for any statement.",
@@ -396,7 +401,7 @@ guide_glossary <- function() {
     c("Likelihood", "How likely the impact is: Low (10 to 25 per cent), Medium (25 to 50), High (50 to 75) or Very High (over 75)."),
     c("Rank", "The risk level as a number: 1 Very Low, 2 Low, 3 Medium, 4 High. Zero means nothing is flagged."),
     c("Poll", "One run of the pipeline's polling job, every 30 or 60 minutes."),
-    c("Intersection", "The overlap of an FGS shape with a flood area or a constituency, and its size.")
+    c("Intersection", "The link between an FGS shape and a flood area or a constituency, and its size. It is usually an overlap. Coastal lines are widened first, and coastal warning areas can be linked through their parent alert area, so a link is not always a plain overlap, and then it has no size.")
   )
 }
 
