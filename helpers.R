@@ -374,6 +374,129 @@ warning_area_counts <- function(h, constituency_id) {
 
 
 # -----------------------------------------------------------------------------
+# Hydrometrics: the measure register and the readings chart
+#
+# Port of explore/Explore_live_readings in FGS_Notebooks. The register has one row
+# per measure (level, flow or rainfall at a gauge). All of this is plain data.table
+# so it is tested without a warehouse; only the drawing needs plotly.
+# -----------------------------------------------------------------------------
+
+RT_ALL <- "All"
+RT_MAX_MEASURES <- 8L
+RT_MAX_DAYS <- 30L
+
+rt_text <- function(x) {
+  x <- as.character(x)
+  x[is.na(x)] <- ""
+  trimws(x)
+}
+
+rt_clashes <- function(names, key) {
+  d <- data.table(n = names, k = key)
+  d[, clash := uniqueN(k) > 1L, by = n]
+  d$clash
+}
+
+# Makes names unique per key. Where one name belongs to several keys (every rain gauge
+# called "Rainfall station"), appends the first detail that helps, then the key's tail.
+rt_disambiguate <- function(names, key, extras) {
+  clash <- rt_clashes(names, key)
+  for (extra in extras) {
+    if (!any(clash)) return(names)
+    add <- rt_text(extra)
+    trial <- ifelse(clash & nzchar(add), paste0(names, " (", add, ")"), names)
+    now <- rt_clashes(trial, key)
+    if (sum(now) < sum(clash)) { names <- trial; clash <- now }
+  }
+  if (any(clash)) names[clash] <- paste0(names[clash], " [", sub("^.*/", "", sub("/+$", "", key[clash])), "]")
+  names
+}
+
+rt_prepare_register <- function(register) {
+  r <- as.data.table(copy(register))
+  for (col in c("station_label", "label", "station_reference", "station_uri", "measure_uri", "parameter", "qualifier",
+                "unit_name", "river_name", "ea_area_name", "period", "town", "catchment_name")) {
+    if (!(col %in% names(r))) r[, (col) := NA_character_]
+    r[, (col) := as.character(get(col))]
+  }
+  if (nrow(r) == 0L) return(r[, `:=`(station = character(), measure_name = character(), measure_label = character())])
+  st <- rt_text(r$station_label)
+  st <- ifelse(nzchar(st), st, rt_text(r$label))
+  st <- ifelse(nzchar(st), st, rt_text(r$station_reference))
+  st <- ifelse(nzchar(st), st, "(unnamed station)")
+  skey <- ifelse(nzchar(rt_text(r$station_uri)), rt_text(r$station_uri),
+                 ifelse(nzchar(rt_text(r$station_reference)), rt_text(r$station_reference), as.character(seq_len(nrow(r)))))
+  r[, station := rt_disambiguate(st, skey, list(r$station_reference, r$town, r$river_name, r$catchment_name))]
+  param <- ifelse(nzchar(rt_text(r$parameter)), rt_text(r$parameter), "measure")
+  qual  <- ifelse(nzchar(rt_text(r$qualifier)), paste0(", ", rt_text(r$qualifier)), "")
+  unit  <- ifelse(nzchar(rt_text(r$unit_name)), paste0(" (", rt_text(r$unit_name), ")"), "")
+  r[, measure_name := paste0(param, qual, unit)]
+  mkey <- ifelse(nzchar(rt_text(r$measure_uri)), rt_text(r$measure_uri), as.character(seq_len(nrow(r))))
+  r[, measure_label := rt_disambiguate(paste0(station, ": ", measure_name), mkey, list(r$period))]
+  r[]
+}
+
+rt_filter_register <- function(r, area = RT_ALL, river = RT_ALL, param = RT_ALL, stn = RT_ALL) {
+  if (!identical(area, RT_ALL))  r <- r[r$ea_area_name %in% area]
+  if (!identical(river, RT_ALL)) r <- r[r$river_name %in% river]
+  if (!identical(param, RT_ALL)) r <- r[r$parameter %in% param]
+  if (!identical(stn, RT_ALL))   r <- r[r$station %in% stn]
+  r
+}
+
+rt_values <- function(r, column) c(RT_ALL, sort(unique(as.character(stats::na.omit(r[[column]])))))
+
+# The choices for each drop-down, each narrowed by the other choices, so a selection
+# can never lead to an empty list. Stations are narrowed by all three.
+rt_options <- function(r, area = RT_ALL, river = RT_ALL, param = RT_ALL) {
+  list(
+    areas      = rt_values(rt_filter_register(r, river = river, param = param), "ea_area_name"),
+    rivers     = rt_values(rt_filter_register(r, area = area, param = param),    "river_name"),
+    parameters = rt_values(rt_filter_register(r, area = area, river = river),    "parameter"),
+    stations   = rt_values(rt_filter_register(r, area = area, river = river, param = param), "station"))
+}
+
+# Midnight UTC at the end of the last day held in the archive, or NULL when nothing is archived.
+rt_boundary <- function(max_archive_date) {
+  if (is.null(max_archive_date) || length(max_archive_date) == 0L || is.na(max_archive_date[1L])) return(NULL)
+  d <- as.Date(max_archive_date[1L])
+  as.POSIXct(paste(format(d + 1L, "%Y-%m-%d"), "00:00:00"), tz = "UTC")
+}
+
+# Facts for under the chart: readings in the archive and in the live tail, and the newest.
+rt_summary <- function(readings, boundary, now) {
+  if (is.null(readings) || nrow(readings) == 0L) return(list(readings = 0L, archive = 0L, live = 0L, newest = NULL, age_minutes = NA_real_))
+  t <- readings$date_time
+  live <- if (is.null(boundary)) 0L else sum(t >= boundary)
+  newest <- max(t)
+  list(readings = nrow(readings), archive = nrow(readings) - live, live = live, newest = newest,
+       age_minutes = round(as.numeric(difftime(now, newest, units = "mins")), 1))
+}
+
+# One panel per unit (metres and cubic metres a second do not share an axis).
+rt_panels <- function(readings, chosen) {
+  m <- chosen[!duplicated(chosen$measure_uri)]
+  unit <- ifelse(nzchar(rt_text(m$unit_name)), rt_text(m$unit_name), "(no unit)")
+  names(unit) <- m$measure_uri
+  list(units = sort(unique(unit[unique(readings$measure_uri)])), unit_of = unit,
+       label_of = stats::setNames(m$measure_label, m$measure_uri))
+}
+
+# The shaded live band and the dashed archive | live line, as plotly layout shapes.
+rt_live_shapes <- function(boundary, start, now) {
+  if (is.null(boundary) || boundary >= now) return(list())
+  fmt <- function(x) format(x, "%Y-%m-%d %H:%M:%S", tz = "UTC")
+  shapes <- list(list(type = "rect", xref = "x", yref = "paper", x0 = fmt(max(boundary, start)), x1 = fmt(now),
+                      y0 = 0, y1 = 1, fillcolor = "#fff1cc", opacity = 0.8, line = list(width = 0), layer = "below"))
+  if (start < boundary) {
+    shapes[[2L]] <- list(type = "line", xref = "x", yref = "paper", x0 = fmt(boundary), x1 = fmt(boundary),
+                         y0 = 0, y1 = 1, line = list(color = "#c0392b", dash = "dash", width = 1.8))
+  }
+  shapes
+}
+
+
+# -----------------------------------------------------------------------------
 # polygons_only()
 #
 # The polygon layers (EA flood areas, constituencies) are drawn with
@@ -673,7 +796,7 @@ empty_situation_message <- function(ranks, floor, other_filters = FALSE) {
 
 PIPELINE_TABLE_JOBS <- c(
   fgs_constituency_changes = 18L, constituency_flood_situation = 19L, mp_briefing_drafts = 20L,
-  fgs_constituency_exposure = 21L, pipeline_health = 22L, ea_warning_episodes = 25L, fgs_constituency_mp_contacts = 14L,
+  fgs_constituency_exposure = 21L, pipeline_health = 22L, ea_warning_episodes = 25L, ea_rt_measure_register = 9L, ea_rt_readings_all = 23L, ea_rt_readings_bronze = 10L, fgs_constituency_mp_contacts = 14L,
   flood_warning_constituency_contacts = 13L, fgs_constituency_intersections = 7L,
   fgs_ea_area_intersections = 7L, ea_area_constituency_lookup = 6L)
 

@@ -1986,6 +1986,115 @@ server <- function(input, output, session) {
     }
   )
 
+  # ---------------------------------------------------------------------------
+  # Hydrometrics tab (port of explore/Explore_live_readings).
+  #
+  # The measure register loads the first time the tab is opened, not at start-up.
+  # The four drop-downs narrow each other; readings are fetched only for the
+  # chosen measures and days, and only when those change or Refresh is pressed.
+  # ---------------------------------------------------------------------------
+
+  rt_reg <- reactiveVal(NULL)
+  rt_started <- reactiveVal(FALSE)
+  rt_or_all <- function(x) if (is.null(x) || length(x) == 0L || !nzchar(x[1L])) RT_ALL else x[1L]
+
+  rt_sync <- function(reg, area, river, param, stn) {
+    o <- rt_options(reg, area, river, param)
+    keep <- function(v, choices) if (v %in% choices) v else RT_ALL
+    area  <- keep(area, o$areas);  river <- keep(river, o$rivers)
+    param <- keep(param, o$parameters); stn <- keep(stn, o$stations)
+    updateSelectInput(session, "rt_area",    choices = o$areas,      selected = area)
+    updateSelectInput(session, "rt_river",   choices = o$rivers,     selected = river)
+    updateSelectInput(session, "rt_param",   choices = o$parameters, selected = param)
+    updateSelectInput(session, "rt_station", choices = o$stations,   selected = stn)
+    rows <- rt_filter_register(reg, area, river, param, stn)
+    rows <- rows[order(tolower(measure_label))][seq_len(min(.N, 500L))]
+    # A single station: preselect up to four of its measures so the chart appears at once.
+    pick <- if (!identical(stn, RT_ALL)) head(rows$measure_uri, 4L) else character()
+    updateSelectizeInput(session, "rt_measures", choices = stats::setNames(rows$measure_uri, rows$measure_label),
+                         selected = pick, server = TRUE)
+  }
+
+  observeEvent(input$main_tabs, {
+    if (!identical(input$main_tabs, "Hydrometrics") || rt_started()) return()
+    rt_started(TRUE)
+    r <- safe_fetch(fetch_rt_register)
+    if (is.null(r)) return()
+    reg <- rt_prepare_register(r)
+    rt_reg(reg)
+    rt_sync(reg, RT_ALL, RT_ALL, RT_ALL, RT_ALL)
+  })
+
+  observeEvent(list(input$rt_area, input$rt_river, input$rt_param, input$rt_station), {
+    reg <- rt_reg()
+    req(reg)
+    rt_sync(reg, rt_or_all(input$rt_area), rt_or_all(input$rt_river), rt_or_all(input$rt_param), rt_or_all(input$rt_station))
+  }, ignoreInit = TRUE)
+
+  rt_data <- eventReactive(list(input$rt_measures, input$rt_days, input$rt_refresh, rt_reg()), {
+    reg <- rt_reg()
+    if (is.null(reg)) return(list(message = if (has_gap("ea_rt_measure_register")) gap_text("ea_rt_measure_register", "Hydrometrics")
+                                            else if (rt_started()) "The measure register could not be loaded." else "Loading the measure register."))
+    uris <- input$rt_measures
+    if (length(uris) == 0L) return(list(message = "Choose one or more measures. Pick a station to start, or narrow by river or area."))
+    if (length(uris) > RT_MAX_MEASURES) return(list(message = sprintf("%d measures chosen. Pick %d or fewer so the chart stays readable.", length(uris), RT_MAX_MEASURES)))
+    days <- as.integer(input$rt_days)
+    readings <- safe_fetch(fetch_rt_readings, uris, days)
+    if (is.null(readings)) {
+      return(list(message = if (has_gap("ea_rt_readings_all")) gap_text("ea_rt_readings_all", "Readings")
+                            else "Could not read the readings. Has notebook 23 run? It creates ea_rt_readings_all once the archive exists."))
+    }
+    if (nrow(readings) == 0L) return(list(message = "No readings for these measures in that window."))
+    boundary <- safe_fetch(fetch_rt_boundary)
+    now <- as.POSIXct(Sys.time(), tz = "UTC")
+    list(readings = readings, chosen = reg[measure_uri %in% uris], days = days, boundary = boundary, now = now)
+  }, ignoreNULL = FALSE)
+
+  output$rt_message <- renderUI({
+    m <- rt_data()$message
+    if (is.null(m)) NULL else tags$p(class = "text-muted", m)
+  })
+
+  output$rt_summary <- renderUI({
+    d <- rt_data()
+    if (is.null(d$readings)) return(NULL)
+    s <- rt_summary(d$readings, d$boundary, d$now)
+    tags$p(class = "text-muted mb-0",
+           sprintf("%s readings: %s archived, %s live (right of the red line). Newest reading %s UTC, %s minutes ago.%s",
+                   format(s$readings, big.mark = ","), format(s$archive, big.mark = ","), format(s$live, big.mark = ","),
+                   format(s$newest, "%a %d %b %H:%M", tz = "UTC"), format(s$age_minutes),
+                   if (is.null(d$boundary)) " Nothing is archived yet, so there is no archive | live line." else ""))
+  })
+
+  if (requireNamespace("plotly", quietly = TRUE)) {
+    output$rt_plot <- plotly::renderPlotly({
+      d <- rt_data()
+      req(d$readings)
+      panels <- rt_panels(d$readings, d$chosen)
+      start <- d$now - d$days * 86400
+      cols <- c("#1d70b8", "#d4351c", "#00703c", "#f47738", "#6f72af", "#b58840", "#28a197", "#505a5f")
+      uris <- unique(d$readings$measure_uri)
+      plots <- lapply(panels$units, function(u) {
+        p <- plotly::plot_ly()
+        for (uri in uris[panels$unit_of[uris] == u]) {
+          g <- d$readings[measure_uri == uri]
+          p <- plotly::add_lines(p, x = g$date_time, y = g$value, name = panels$label_of[[uri]],
+                                 line = list(color = cols[(match(uri, uris) - 1L) %% length(cols) + 1L], width = 1.6),
+                                 hovertemplate = paste0("%{y} ", u, "<extra>", panels$label_of[[uri]], "</extra>"))
+        }
+        plotly::layout(p, yaxis = list(title = u), showlegend = TRUE)
+      })
+      fig <- plotly::subplot(plots, nrows = length(plots), shareX = TRUE, titleY = TRUE, margin = 0.04)
+      plotly::layout(fig, height = 280 * length(plots) + 80,
+                     xaxis = list(range = format(c(start, d$now), "%Y-%m-%d %H:%M:%S", tz = "UTC"), type = "date"),
+                     shapes = rt_live_shapes(d$boundary, start, d$now),
+                     legend = list(orientation = "h", y = -0.12), hovermode = "x unified",
+                     title = list(text = sprintf("Last %d day%s, times in UTC", d$days, if (d$days == 1L) "" else "s"),
+                                  x = 0.01, xanchor = "left", font = list(size = 13)),
+                     margin = list(t = 50))
+    })
+  }
+
   # Briefing draft for the selected row. Text only: the pipeline writes the
   # draft and a person sends it by their own route. Nothing here sends mail.
   output$briefing_panel <- renderUI({

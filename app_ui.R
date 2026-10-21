@@ -798,6 +798,42 @@ make_warning_history_tab <- function() tags$div(
 
 
 # -----------------------------------------------------------------------------
+# Hydrometrics tab.
+#
+# Environment Agency real-time river level, flow and rainfall readings, the daily
+# archive and the live tail as one series. Narrow by area, river, parameter and
+# station, pick up to eight measures, set how many days back. One panel per unit;
+# the shaded band is the live tail that is not yet archived.
+# -----------------------------------------------------------------------------
+
+make_hydrometrics_tab <- function() tags$div(
+  class = "p-3",
+  tags$div(
+    class = "filter-row",
+    selectInput("rt_area",    "EA area",   choices = RT_ALL, width = "230px"),
+    selectInput("rt_river",   "River",     choices = RT_ALL, width = "230px"),
+    selectInput("rt_param",   "Parameter", choices = RT_ALL, width = "170px"),
+    selectInput("rt_station", "Station",   choices = RT_ALL, width = "260px")
+  ),
+  tags$div(
+    class = "filter-row",
+    selectizeInput("rt_measures", "Measures (up to 8)", choices = NULL, multiple = TRUE, width = "620px",
+                   options = list(maxItems = RT_MAX_MEASURES, placeholder = "Pick a station to start")),
+    sliderInput("rt_days", "Days back", min = 1, max = RT_MAX_DAYS, value = 3, step = 1, width = "300px"),
+    actionButton("rt_refresh", "Refresh", icon = icon("rotate"), class = "btn-sm btn-outline-secondary")
+  ),
+  uiOutput("rt_message"),
+  if (requireNamespace("plotly", quietly = TRUE)) plotly::plotlyOutput("rt_plot", height = "auto")
+  else tags$p(class = "text-muted", "The plotly package is not installed on this server, so the chart cannot be drawn."),
+  uiOutput("rt_summary"),
+  tags$small(class = "text-muted d-block mt-2",
+             "This uses Environment Agency flood and river level data from the real-time data API (Beta). ",
+             "Times are UTC. The dashed red line is where the archive ends and the live tail begins; ",
+             "the shaded band to its right is live and not yet archived.")
+)
+
+
+# -----------------------------------------------------------------------------
 # Exposure history tab.
 #
 # Heat grid from fgs_constituency_exposure (job 21): the constituencies with
@@ -923,6 +959,7 @@ ui <- function(request) {
     tabPanel("Constituency situation", make_situation_tab()),
     tabPanel("Exposure history",       make_exposure_tab()),
     tabPanel("Warning history",        make_warning_history_tab()),
+    tabPanel("Hydrometrics",           make_hydrometrics_tab()),
     if (DEMO_MODE) tabPanel("MP audit log", make_audit_tab()),
     tabPanel("Guide", make_guide_tab()),
 

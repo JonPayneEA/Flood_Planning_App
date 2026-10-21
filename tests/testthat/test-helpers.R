@@ -513,3 +513,57 @@ test_that("in_nations keeps the chosen nations, keeps unknown ids, and no choice
   expect_equal(in_nations(ids, character(0)),        rep(TRUE, 6))
   expect_equal(in_nations(character(0), "E14"),      logical(0))
 })
+
+
+# ---- Hydrometrics helpers ---------------------------------------------------------
+
+rt_fake_register <- function() data.table(
+  station_label = c("Aldwyn", "Aldwyn", "Rainfall station", "Rainfall station", NA),
+  station_reference = c("S1", "S1", "R1", "R2", "S9"),
+  station_uri = c("u/S1", "u/S1", "u/R1", "u/R2", "u/S9"),
+  measure_uri = c("m/1", "m/2", "m/3", "m/4", "m/5"),
+  parameter = c("level", "flow", "rainfall", "rainfall", "level"),
+  qualifier = c("Stage", "Flow", "Gauge", "Gauge", NA),
+  unit_name = c("mASD", "m3/s", "mm", "mm", NA),
+  river_name = c("Aldwyn", "Aldwyn", NA, NA, "Brenn"),
+  ea_area_name = c("North", "North", "North", "South", "South"),
+  town = c(NA, NA, "Hexton", "Ashby", NA))
+
+test_that("the register gets readable, unique station and measure names", {
+  r <- rt_prepare_register(rt_fake_register())
+  expect_equal(r$measure_name[1:2], c("level, Stage (mASD)", "flow, Flow (m3/s)"))
+  expect_equal(r$station[3:4], c("Rainfall station (R1)", "Rainfall station (R2)"))   # same name, told apart
+  expect_equal(r$station[5], "S9")                                                     # no label: the reference
+  expect_equal(r$measure_name[5], "level")
+  expect_equal(anyDuplicated(r$measure_label), 0L)
+})
+
+test_that("the drop-downs narrow each other and never offer an empty choice", {
+  r <- rt_prepare_register(rt_fake_register())
+  o <- rt_options(r)
+  expect_equal(o$areas, c("All", "North", "South"))
+  expect_equal(rt_options(r, river = "Brenn")$areas, c("All", "South"))
+  expect_equal(rt_options(r, area = "North", param = "rainfall")$stations, c("All", "Rainfall station (R1)"))
+  expect_equal(nrow(rt_filter_register(r, area = "South", param = "level")), 1L)
+})
+
+test_that("the archive boundary is midnight at the end of the last archived day", {
+  expect_equal(format(rt_boundary(as.Date("2026-10-20")), "%Y-%m-%d %H:%M", tz = "UTC"), "2026-10-21 00:00")
+  expect_null(rt_boundary(NULL)); expect_null(rt_boundary(NA))
+})
+
+test_that("the chart summary counts archived and live readings, and the shapes mark the live tail", {
+  b <- as.POSIXct("2026-10-21 00:00:00", tz = "UTC"); now <- as.POSIXct("2026-10-21 12:00:00", tz = "UTC")
+  rd <- data.table(measure_uri = "m/1", date_time = as.POSIXct(c("2026-10-20 23:45", "2026-10-21 00:00", "2026-10-21 11:45"), tz = "UTC"), value = 1:3)
+  s <- rt_summary(rd, b, now)
+  expect_equal(c(s$readings, s$archive, s$live, s$age_minutes), c(3, 1, 2, 15))
+  expect_equal(rt_summary(rd, NULL, now)$live, 0L)
+  expect_equal(rt_summary(rd[0], b, now)$readings, 0L)
+  start <- now - 86400
+  sh <- rt_live_shapes(b, start, now)
+  expect_equal(vapply(sh, `[[`, "", "type"), c("rect", "line"))
+  expect_equal(length(rt_live_shapes(b, now - 3600, now)), 1L)                         # window starts after the boundary: band only
+  expect_equal(length(rt_live_shapes(NULL, start, now)), 0L)
+  pan <- rt_panels(rd, rt_prepare_register(rt_fake_register()))
+  expect_equal(pan$units, "mASD")
+})

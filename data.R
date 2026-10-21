@@ -692,6 +692,41 @@ fetch_warning_history <- function() {
 
 
 # -----------------------------------------------------------------------------
+# Hydrometrics (Environment Agency real-time data)
+#
+# fetch_rt_register(): one row per measure (what is measured, where, on which river).
+# fetch_rt_readings(): readings for chosen measures, the archive and the live tail as
+#   one series (job 23's ea_rt_readings_all), for the last `days` days. Measure URIs are
+#   reduced to URL characters before they reach the SQL.
+# fetch_rt_boundary(): midnight UTC at the end of the last archived day; readings after
+#   it are live and not yet archived (job 10).
+# -----------------------------------------------------------------------------
+
+fetch_rt_register <- function() db_query(sprintf("SELECT * FROM %s", TBL_RT_REGISTER))
+
+fetch_rt_readings <- function(measure_uris, days) {
+  uris <- gsub("[^A-Za-z0-9:/._#-]", "", as.character(measure_uris))
+  uris <- uris[nzchar(uris)]
+  if (length(uris) == 0L) return(data.table(measure_uri = character(), date_time = as.POSIXct(character(), tz = "UTC"), value = numeric()))
+  d <- db_query(sprintf("
+    SELECT measure_uri, date_time, value
+    FROM %s
+    WHERE measure_uri IN (%s)
+      AND date_time >= current_timestamp() - INTERVAL %d DAYS
+    ORDER BY measure_uri, date_time
+  ", TBL_RT_ALL, paste0("'", uris, "'", collapse = ", "), as.integer(days)))
+  d <- as.data.table(d)
+  if (nrow(d)) d[, `:=`(date_time = as.POSIXct(date_time, tz = "UTC"), value = as.numeric(value))]
+  d
+}
+
+fetch_rt_boundary <- function() {
+  d <- db_query(sprintf("SELECT MAX(reading_date) AS d FROM %s", TBL_RT_BRONZE))
+  rt_boundary(if (nrow(d)) d$d[1L] else NULL)
+}
+
+
+# -----------------------------------------------------------------------------
 # fetch_situation()
 #
 # One row per constituency (job 19): worst forecast risk over five days, risk
@@ -1048,6 +1083,8 @@ fetch_situation                    <- with_cache(fetch_situation,               
 fetch_briefing_drafts              <- with_cache(fetch_briefing_drafts,              "briefings", ttl = 0)
 fetch_exposure                     <- with_cache(fetch_exposure,                     "exposure",  ttl = 0)
 fetch_warning_history              <- with_cache(fetch_warning_history,              "warning_history", ttl = 0)
+fetch_rt_register                  <- with_cache(fetch_rt_register,                  "rt_register", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
+fetch_rt_boundary                  <- with_cache(fetch_rt_boundary,                  "rt_boundary", ttl = min(CACHE_TTL_SECONDS, 300))
 fetch_data_signature               <- with_cache(fetch_data_signature,               "signature", ttl = 0)
 
 

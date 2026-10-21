@@ -89,3 +89,14 @@ test_that("the EA area lookup carries the constituency id, so it can follow the 
   suppressWarnings(d$fetch_ea_constituency_mp())
   expect_match(d$captured[1L], "l\\.constituency_id")
 })
+
+
+test_that("the readings query takes only URL characters from a measure id, and bounds the window", {
+  d <- load_data_layer()
+  suppressWarnings(d$fetch_rt_readings(c("http://x/id/measures/1-level-i-15_min-mASD", "a'); DROP TABLE t; --"), 3))
+  q <- gsub("\\s+", " ", d$captured[length(d$captured)])
+  expect_match(q, "cat\\.sch\\.ea_rt_readings_all")
+  expect_match(q, "INTERVAL 3 DAYS")
+  expect_false(grepl(";", q, fixed = TRUE)); expect_false(grepl("'a'", q, fixed = TRUE))
+  expect_equal(lengths(regmatches(q, gregexpr("'", q))), 4L)                           # two ids, each in its own pair of quotes
+})
