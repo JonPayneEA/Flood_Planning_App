@@ -610,7 +610,8 @@ fetch_summary_counts <- function(statement_id, day_index) {
 fetch_ea_constituency_mp <- function() demo_memo("ea_constituency_mp", {
   g <- demo_geometry(); ea <- demo_ea_areas()
   m <- demo_overlap(ea$geom_m, g$hex_m, g$hex_area)
-  data.table(ea_area_code = ea$table$ea_area_code[m$poly], constituency_name = g$table$constituency_name[m$target],
+  data.table(ea_area_code = ea$table$ea_area_code[m$poly], constituency_id = g$table$constituency_id[m$target],
+             constituency_name = g$table$constituency_name[m$target],
              constituency_overlap_pct = m$pct, mp_name = g$table$mp_name[m$target],
              mp_party = g$table$mp_party[m$target], mp_email = g$table$mp_email[m$target],
              mp_phone = g$table$mp_phone[m$target])

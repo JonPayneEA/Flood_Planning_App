@@ -502,3 +502,14 @@ test_that("notification_id gives a repeat the same id and a different failure it
   expect_false(identical(notification_id(a, "layer_"), notification_id(c, "layer_")))
   expect_match(notification_id(a), "^note_[A-Za-z]+$")
 })
+
+
+test_that("in_nations keeps the chosen nations, keeps unknown ids, and no choice means all", {
+  ids <- c("E14001549", "W07000041", "S14000001", "N06000001", "DEMO-C001", NA)
+  expect_equal(in_nations(ids, "E14"),               c(TRUE, FALSE, FALSE, FALSE, TRUE, TRUE))
+  expect_equal(in_nations(ids, c("E14", "W07")),     c(TRUE, TRUE, FALSE, FALSE, TRUE, TRUE))
+  expect_equal(in_nations(ids, c("S14", "N06")),     c(FALSE, FALSE, TRUE, TRUE, TRUE, TRUE))
+  expect_equal(in_nations(ids, NULL),                rep(TRUE, 6))
+  expect_equal(in_nations(ids, character(0)),        rep(TRUE, 6))
+  expect_equal(in_nations(character(0), "E14"),      logical(0))
+})

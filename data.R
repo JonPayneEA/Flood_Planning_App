@@ -526,6 +526,7 @@ fetch_ea_constituency_mp <- function() {
   db_query(sprintf("
     SELECT
       l.ea_area_code,
+      l.constituency_id,
       l.constituency_name,
       l.intersection_pct AS constituency_overlap_pct,
       m.name              AS mp_name,

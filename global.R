@@ -206,6 +206,22 @@ env_number <- function(name, default, min = 0) {
 # remove when the app goes live. Default on, because this is a proof of concept.
 POC_FEATURES <- tolower(Sys.getenv("FGS_POC_FEATURES", unset = "1")) %in% c("1", "true", "yes", "on")
 
+# The four nations, by the first three characters of a constituency's ONS code. The data holds
+# every nation, because the Environment Agency's flood areas run up to the borders, and a
+# "Nations" filter at the top of the app chooses which constituencies are shown.
+# FGS_DEFAULT_NATIONS sets the starting choice (default England only). A comma separated list
+# of codes, for example FGS_DEFAULT_NATIONS=E14,W07. An empty selection in the app shows all four.
+NATIONS <- c(England = "E14", Wales = "W07", Scotland = "S14", "Northern Ireland" = "N06")
+
+DEFAULT_NATIONS <- local({
+  p <- trimws(strsplit(Sys.getenv("FGS_DEFAULT_NATIONS", unset = "E14"), ",", fixed = TRUE)[[1L]])
+  p <- p[nzchar(p)]
+  if (length(p) == 0L || any(!(p %in% NATIONS))) {
+    stop("FGS_DEFAULT_NATIONS must be a comma separated list of ", paste(NATIONS, collapse = ", "), ".")
+  }
+  p
+})
+
 # Share of a constituency a polygon must cover before it counts. Match the
 # pipeline's FGS_CONTACT_MIN_PCT in config.py (0.01 = 1%). Used only to rebuild
 # the situation table for a past statement (POC-ONLY look-back).

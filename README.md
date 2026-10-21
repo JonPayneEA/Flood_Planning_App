@@ -186,6 +186,7 @@ Optional settings, all in `.env.example`:
 | `FGS_CACHE_SECONDS` | `600` | How long query results are shared across sessions. `0` is off (a missing table is still remembered for five minutes). |
 | `FGS_CACHE_GEOMETRY_ENTRIES` | `30` | How many map-geometry results the shared cache keeps. One entry is one layer for one statement and day. The oldest is dropped first, so memory stays bounded. Other results are capped separately at 200. |
 | `FGS_CONTACT_MIN_PCT` | `0.01` | Share of a constituency a forecast polygon must cover, used only to rebuild past statements in the look-back. Match the pipeline's `FGS_CONTACT_MIN_PCT`. |
+| `FGS_DEFAULT_NATIONS` | `E14` | Which nations the **Nations** filter starts on: `E14` England, `W07` Wales, `S14` Scotland, `N06` Northern Ireland. A comma separated list, for example `E14,W07`. The data always holds all four; the filter under the header changes the choice, and clearing it shows all four. |
 | `FGS_POC_FEATURES` | `1` | `0` hides the proof-of-concept features (the look-back). |
 | `FGS_SHOW_QUERY_PROGRESS` | off | `1` shows the driver's "Submitting query" progress pop-ups again. Off by default: they appeared for every query, with terminal colour codes in the text. |
 | `FGS_DEMO_MODE` | off | `1` runs on generated data with no warehouse. See Demo mode. |
@@ -341,6 +342,18 @@ The FGS risk colours (red, amber, yellow, green on the matrix, map, chips and
 heat grid) are deliberately **not** brand colours. They come from the FGS User
 Guide and keep a fixed meaning. The frame is blue so that it is never read as the
 "Very Low" green, and magenta stays reserved for flood warning areas on the map.
+
+## Nations filter
+
+The Environment Agency works in England, but its flood areas run up to the borders, so the data
+holds constituencies in Wales, Scotland and Northern Ireland too. A **Nations** filter under the
+header chooses which are shown, on every tab: the counts, lists, map layers, changes, MP briefing
+drafts, exposure history and the CSV exports follow it. It starts on England (`FGS_DEFAULT_NATIONS`),
+you can add the other nations, and clearing it shows all four. A constituency's nation comes from
+the first three characters of its ONS code (`E14`, `W07`, `S14`, `N06`), in `in_nations()`
+(`helpers.R`). An ID that matches none of them, such as the demonstration's, is always shown. The
+filter works on what is already fetched, so changing it does not query the warehouse again, and it
+is saved in the shareable link like the other filters.
 
 ## Behaviour worth knowing
 

@@ -104,10 +104,22 @@ server <- function(input, output, session) {
   # ---------------------------------------------------------------------------
 
   ea_constituency_lookup <- fetch_ea_constituency_mp()
-  area_constituency_map <- ea_constituency_lookup[
-    , .(constituency_names = paste(unique(constituency_name), collapse = ", ")),
-    by = ea_area_code
-  ]
+
+  # The nations chosen at the top of the page (see the Nations filter). NULL means all four.
+  nation_codes <- reactive(input$nations)
+
+  # The lookup limited to the chosen nations. An older lookup with no constituency_id is used as it is.
+  scoped_lookup <- reactive({
+    lk <- ea_constituency_lookup
+    if (!("constituency_id" %in% names(lk))) return(lk)
+    lk[in_nations(constituency_id, nation_codes())]
+  })
+  area_constituency_map <- reactive({
+    scoped_lookup()[
+      , .(constituency_names = paste(unique(constituency_name), collapse = ", ")),
+      by = ea_area_code
+    ]
+  })
   
   
   # ===========================================================================
@@ -334,7 +346,8 @@ server <- function(input, output, session) {
     req(f)
 
     areas <- fetch_constituencies_for_statement(f$statement_id, f$day_index)
-    areas <- areas[tolower(source) %in% f$source_codes & clears_threshold(intersection_pct, f$min_intersection)]
+    areas <- areas[tolower(source) %in% f$source_codes & clears_threshold(intersection_pct, f$min_intersection)
+                   & in_nations(constituency_id, nation_codes())]
 
     if (nrow(f$selected_cells) == 0L) return(areas[0])
     areas[f$selected_cells, on = c("risk_x" = "x", "risk_y" = "y"), nomatch = NULL]
@@ -359,7 +372,8 @@ server <- function(input, output, session) {
     if (nrow(shape) == 0L) return(shape)
 
     shape <- shape[tolower(shape$source) %in% f$source_codes
-                   & clears_threshold(shape$intersection_pct, f$min_intersection), ]
+                   & clears_threshold(shape$intersection_pct, f$min_intersection)
+                   & in_nations(shape$constituency_id, nation_codes()), ]
     if (nrow(shape) == 0L) return(shape)
 
     if (nrow(f$selected_cells) == 0L) return(shape[0, ])
@@ -569,7 +583,7 @@ server <- function(input, output, session) {
       return(tags$p("No EA Warnings above threshold.", class = "text-muted small"))
     }
 
-    areas <- area_constituency_map[areas, on = "ea_area_code",
+    areas <- area_constituency_map()[areas, on = "ea_area_code",
                                     .(ea_area_code     = i.ea_area_code,
                                       ea_area_name     = i.ea_area_name,
                                       ea_area_type     = i.ea_area_type,
@@ -647,7 +661,7 @@ server <- function(input, output, session) {
     },
     content = function(file) {
       areas  <- ea_areas()
-      lookup <- ea_constituency_lookup
+      lookup <- scoped_lookup()
 
       # lookup[areas, on=...] looks up each area's matching lookup rows
       # (expanded per match when an area spans more than one constituency).
@@ -996,6 +1010,10 @@ server <- function(input, output, session) {
   situation_rv <- reactiveVal(NULL)
   briefing_rv  <- reactiveVal(NULL)
   exposure_rv  <- reactiveVal(NULL)
+  exposure_scoped <- reactive({
+    e <- exposure_rv()
+    if (is.null(e)) NULL else e[in_nations(constituency_id, nation_codes())]
+  })
 
   load_products <- function() {
     health_rv(safe_fetch(fetch_pipeline_health))
@@ -1024,6 +1042,7 @@ server <- function(input, output, session) {
 
   briefing_effective <- reactive({
     b  <- briefing_rv()
+    if (!is.null(b)) b <- b[in_nations(constituency_id, nation_codes())]
     st <- review_status()
     if (is.null(b) || length(st) == 0L) return(b)
     b <- copy(b)
@@ -1382,7 +1401,9 @@ server <- function(input, output, session) {
   changes <- reactive({
     stmt <- selected_statement()
     req(stmt)
-    safe_fetch(fetch_changes, stmt$statement_id)
+    x <- safe_fetch(fetch_changes, stmt$statement_id)
+    if (is.null(x) || !("constituency_id" %in% names(x))) return(x)
+    x[in_nations(constituency_id, nation_codes())]
   })
 
   # Did job 18 really compare this statement? NULL when its log table is not
@@ -1514,6 +1535,7 @@ server <- function(input, output, session) {
       showNotification("Constituency risk could not be loaded.", type = "warning", id = "const_risk_failed")
       return()
     }
+    shape <- shape[in_nations(shape$constituency_id, nation_codes()), ]
     if (nrow(shape) == 0L) {
       showNotification("No constituency has a forecast risk in the latest statement.", type = "message", id = "const_risk_none")
       return()
@@ -1577,7 +1599,7 @@ server <- function(input, output, session) {
     d[, `:=`(fgs_worst_rank     = as.integer(fgs_worst_rank),
              fgs_escalated      = as.logical(fgs_escalated),
              has_active_warning = as.logical(has_active_warning))]
-    d[]
+    d[in_nations(constituency_id, nation_codes())]
   }
 
   # The Overview always shows the latest statement.
@@ -1617,7 +1639,9 @@ server <- function(input, output, session) {
 
   briefing_view <- reactive({
     id <- poc_past_id()
-    if (is.null(id)) briefing_effective() else safe_fetch(fetch_briefing_drafts, id)
+    if (is.null(id)) return(briefing_effective())
+    b <- safe_fetch(fetch_briefing_drafts, id)
+    if (is.null(b)) b else b[in_nations(constituency_id, nation_codes())]
   })
 
   # Potential warnings and alerts: flood warning and alert areas under the
@@ -1900,7 +1924,7 @@ server <- function(input, output, session) {
   # ---------------------------------------------------------------------------
 
   exposure_prepared <- reactive({
-    e <- exposure_rv()
+    e <- exposure_scoped()
     req(e)
     e <- e[source == input$exp_source]
     if (nrow(e) == 0L) return(NULL)
@@ -1923,7 +1947,7 @@ server <- function(input, output, session) {
   })
 
   output$exposure_grid <- renderUI({
-    e0 <- exposure_rv()
+    e0 <- exposure_scoped()
     if (is.null(e0)) {
       return(tags$div(class = "alert alert-warning",
         "fgs_constituency_exposure could not be read. Check the pipeline health badge."))
@@ -1985,7 +2009,7 @@ server <- function(input, output, session) {
   observeEvent(input$exp_pick, {
     p <- exposure_prepared()
     req(p)
-    e <- exposure_rv()[source == input$exp_source & constituency_id == input$exp_pick]
+    e <- exposure_scoped()[source == input$exp_source & constituency_id == input$exp_pick]
     if (nrow(e) == 0L) return()
     cname <- e$constituency_name[1L]
     cov <- as.numeric(e$days_covered); names(cov) <- e$month

@@ -445,6 +445,9 @@ a { color: var(--app-blue); }
 }
 .app-header .btn-outline-secondary:hover { background: rgba(255,255,255,0.14); color: var(--app-surface); }
 .brand-mark { height: 46px; margin-right: 14px; flex: none; }
+.nation-strip { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; padding: 8px 4px 0; }
+.nation-strip .form-group { margin-bottom: 0; }
+.nation-note { font-size: 12px; color: var(--app-muted); padding-bottom: 8px; }
 .header-left { display: flex; align-items: center; }
 
 /* Tabs: sky rule on the active tab. */
@@ -721,6 +724,18 @@ make_right_panel <- function() tags$div(
 # one exists. The drafts are text only: nothing is sent from here.
 # -----------------------------------------------------------------------------
 
+# Nations filter, under the header. The data holds constituencies in every nation; this chooses
+# which are shown, on every tab. England is the starting choice (FGS_DEFAULT_NATIONS), and
+# clearing the box shows all four.
+make_nation_strip <- function() tags$div(
+  class = "nation-strip",
+  selectizeInput("nations", "Constituencies in",
+                 choices  = NATIONS, selected = DEFAULT_NATIONS, multiple = TRUE,
+                 options  = list(placeholder = "All four nations"), width = "380px"),
+  tags$span(class = "nation-note",
+            "Wales, Scotland and Northern Ireland are included in the data. Add them here to see constituencies the forecast reaches there.")
+)
+
 make_situation_tab <- function() tags$div(
   class = "p-3",
   uiOutput("situation_note"),
@@ -921,6 +936,8 @@ ui <- function(request) {
     uiOutput("stale_banner"),
     # Shown only when a pipeline table has not been built yet.
     uiOutput("data_gaps_banner"),
+
+    make_nation_strip(),
 
     do.call(tabsetPanel, c(list(id = "main_tabs"), Filter(Negate(is.null), tabs)))
   )
