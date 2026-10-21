@@ -657,6 +657,41 @@ fetch_potential_areas <- function(statement_id, min_rank = 0L, sources = NULL) {
 
 
 # -----------------------------------------------------------------------------
+# fetch_warning_history()
+#
+# Every alert and warning the pipeline has recorded (job 25, one episode per run
+# in force) linked to constituencies by the same rule as the contacts: an area
+# belongs to a constituency when at least TARGET_AREA_MIN_PCT of it lies inside.
+# Counted by day of issue so the app can narrow the period without another
+# query. n_severe counts the warnings that reached severe at any point.
+# -----------------------------------------------------------------------------
+
+fetch_warning_history <- function() {
+  db_query(sprintf("
+    SELECT
+      l.constituency_id,
+      e.ea_area_code,
+      MAX(n.ea_area_name)                                  AS ea_area_name,
+      LOWER(e.area_type)                                   AS ea_area_type,
+      CAST(e.start_time AS DATE)                           AS issued_date,
+      COUNT(*)                                             AS n_issued,
+      SUM(CASE WHEN e.had_severe THEN 1 ELSE 0 END)        AS n_severe
+    FROM %s e
+    JOIN %s l ON l.ea_area_code = e.ea_area_code
+    LEFT JOIN (
+      SELECT ea_area_code, ea_area_name FROM %s
+      UNION ALL
+      SELECT ea_area_code, ea_area_name FROM %s
+    ) n ON n.ea_area_code = e.ea_area_code
+    WHERE l.intersection_pct >= %s
+      AND LOWER(e.area_type) IN ('flood_alert', 'flood_warning')
+    GROUP BY l.constituency_id, e.ea_area_code, LOWER(e.area_type), CAST(e.start_time AS DATE)
+  ", TBL_WARNING_EPISODES, TBL_EA_CONSTITUENCY_LOOKUP, TBL_EA_FWA, TBL_EA_FAA,
+     format(TARGET_AREA_MIN_PCT, scientific = FALSE)))
+}
+
+
+# -----------------------------------------------------------------------------
 # fetch_situation()
 #
 # One row per constituency (job 19): worst forecast risk over five days, risk
@@ -1012,6 +1047,7 @@ fetch_pipeline_health              <- with_cache(fetch_pipeline_health,         
 fetch_situation                    <- with_cache(fetch_situation,                    "situation", ttl = 0)
 fetch_briefing_drafts              <- with_cache(fetch_briefing_drafts,              "briefings", ttl = 0)
 fetch_exposure                     <- with_cache(fetch_exposure,                     "exposure",  ttl = 0)
+fetch_warning_history              <- with_cache(fetch_warning_history,              "warning_history", ttl = 0)
 fetch_data_signature               <- with_cache(fetch_data_signature,               "signature", ttl = 0)
 
 

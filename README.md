@@ -14,6 +14,9 @@ Tabs:
   forecast, warnings in force, MP) with the MP briefing draft, and a statement
   look-back (proof of concept).
 - **Exposure history**: how often each constituency has been at each risk level.
+- **Warning history**: for each constituency, how many flood alerts and flood
+  warnings have been issued for areas inside it, with a period slider and a
+  breakdown by area.
 - **MP audit log** (demo mode only) and **Guide** (how each figure is calculated).
 - A **Planned** menu for tabs that wait on data the pipeline does not hold yet.
 
@@ -307,6 +310,7 @@ Which notebook builds which table, and when they run:
 | `mp_briefing_drafts` | 20 | 8 (refuses if step 7 is out of date) |
 | `pipeline_health` | 22 | 9 |
 | `fgs_constituency_exposure` | 21 | Master_daily |
+| `ea_warning_episodes` | 25 | 10 |
 
 To find the cause, check which step of the last `Master_polling` run failed (a
 failure is recorded and the later steps still run), or list what exists:
@@ -472,6 +476,7 @@ Pipeline products (FGS_Notebooks jobs 18 to 22), all plain tables:
 | `constituency_flood_situation` | Constituency situation tab: one row per constituency. Always the pipeline's latest complete statement. |
 | `mp_briefing_drafts` | Briefing draft shown when a constituency row is selected. Read only: nothing is sent. |
 | `fgs_constituency_exposure` | Exposure history tab: heat grid of constituencies by month, 12 months. |
+| `ea_warning_episodes` | Warning history tab: alerts and warnings issued per constituency, from notebook 25. |
 
 Each product is fetched defensively. If a table is missing or unreadable the
 view says so and the rest of the app carries on.

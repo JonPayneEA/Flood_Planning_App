@@ -47,11 +47,11 @@ GUIDE_TABLES <- data.frame(
             "ea_flood_warning_areas", "ea_flood_alert_areas", "parliamentary_constituencies",
             "ea_area_constituency_lookup", "mp_contact_details",
             "fgs_constituency_changes", "fgs_changes_log", "constituency_flood_situation", "mp_briefing_drafts",
-            "fgs_constituency_exposure", "pipeline_health"),
-  notebook = c("01", "01", "07", "07", "03", "03", "05", "06", "04", "18", "18", "19", "20", "21", "22"),
+            "fgs_constituency_exposure", "pipeline_health", "ea_warning_episodes"),
+  notebook = c("01", "01", "07", "07", "03", "03", "05", "06", "04", "18", "18", "19", "20", "21", "22", "25"),
   refresh = c("Each FGS issue or amendment", "Each FGS issue or amendment", "Each FGS issue", "Each FGS issue",
               "Weekly", "Weekly", "Quarterly, or after an election", "Weekly and quarterly", "Weekly",
-              "Every poll", "Every poll", "Every poll", "Every poll", "Daily", "Every poll"),
+              "Every poll", "Every poll", "Every poll", "Every poll", "Daily", "Every poll", "Every poll"),
   holds = c("One row per statement: the headline and the forecast text.",
             "One row per risk polygon, flood source and day, with impact, likelihood and risk level.",
             "Each FGS shape that overlaps an EA flood warning or alert area.",
@@ -66,7 +66,8 @@ GUIDE_TABLES <- data.frame(
             "One row per constituency: the forecast, the warnings in force and the MP. The latest statement only.",
             "Draft briefings for MPs. Nothing is sent. Older statements' drafts are kept.",
             "Days each constituency sat at each risk level, by month. Sparse.",
-            "One row per health check of the pipeline's own outputs."),
+            "One row per health check of the pipeline's own outputs.",
+            "Each alert and warning from the time it was switched on to the time it ended, with its duration."),
   stringsAsFactors = FALSE
 )
 
@@ -312,6 +313,27 @@ guide_products <- function(s) {
       limits = c(
         "This measures what was forecast, not what happened. It is a history of forecasts, and it is not a record of observed flooding.",
         "A gap in the statement history shortens a month's denominator. Compare shares, not raw days, across months with gaps."
+      )
+    ),
+
+    list(
+      id = "warning_history", title = "Warning history", where = "Warning history",
+      answers = "How many flood alerts and flood warnings have been issued for each constituency, and for which areas?",
+      tables = c("ea_warning_episodes", "ea_area_constituency_lookup", "ea_flood_warning_areas", "ea_flood_alert_areas"),
+      steps = c(
+        "Notebook 25 turns the Environment Agency's message history, and then the live warnings log, into episodes. An episode runs from the message that switched an area on to the message that ended it, at any level. A warning that rises to severe and falls back is one episode.",
+        "An issue is one episode. Alerts and warnings are counted separately. Severe is the number of warning episodes that reached severe at any point, so it is part of Warnings and not added to the total. The total is alerts plus warnings.",
+        "An area belongs to a constituency when at least the same share of it lies inside as is used for the warning contacts. An area that spans several constituencies counts once in each.",
+        "Each issue is dated by the day it was switched on. The slider keeps the issues dated inside the chosen period. Select a row to see each area, how often it was issued and when last."
+      ),
+      read = c(
+        "The total counts issues, not days in force and not people affected. Duration is held in the episodes table but is not shown here.",
+        "Constituencies with no issue in the period are left out of the table.",
+        "The Nations filter at the top applies."
+      ),
+      limits = c(
+        "History before the live log began comes from the message file, which can be incomplete. Notebook 25 reports where the two sources meet.",
+        "A coastal warning area is a line, linked to constituencies on a 1000 m buffer, so a coastal area can count towards a constituency it only touches."
       )
     ),
 

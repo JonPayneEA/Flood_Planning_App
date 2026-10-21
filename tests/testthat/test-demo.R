@@ -29,6 +29,8 @@ test_that("no demo fetcher reaches for the warehouse", {
       expect_no_error(demo_env[[fn]]())
     }
     expect_no_error(demo_env$fetch_exposure(12))
+    wh <- demo_env$fetch_warning_history()
+    expect_true(nrow(wh) > 0L && all(c("constituency_id", "ea_area_name", "issued_date", "n_issued", "n_severe") %in% names(wh)))
     expect_no_error(demo_env$fetch_changes(4812L))
     for (d in 1:5) {
       expect_no_error(demo_env$fetch_risk_polygons(4812L, d))

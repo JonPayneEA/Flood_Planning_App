@@ -334,6 +334,46 @@ in_nations <- function(ids, codes, known = c("E14", "W07", "S14", "N06")) {
 
 
 # -----------------------------------------------------------------------------
+# Warning history by constituency
+#
+# h is the output of fetch_warning_history(): one row per constituency, area and
+# day of issue, with n_issued (alerts or warnings switched on that day) and
+# n_severe (how many of those went on to severe). An "issue" is one episode: a
+# run of an area being in force, whatever level it reached. A warning that goes
+# severe and back is one issue, counted once in Warnings and once in Severe, so
+# Severe is a subset of Warnings and the total is alerts plus warnings.
+# -----------------------------------------------------------------------------
+
+warning_history_window <- function(h, from, to) {
+  if (is.null(h) || nrow(h) == 0L) return(h)
+  h[as.Date(issued_date) >= as.Date(from) & as.Date(issued_date) <= as.Date(to)]
+}
+
+warning_constituency_counts <- function(h) {
+  empty <- data.table(constituency_id = character(), alerts = integer(), warnings = integer(),
+                      severe = integer(), total = integer())
+  if (is.null(h) || nrow(h) == 0L) return(empty)
+  h[, .(alerts   = sum(as.integer(n_issued)[ea_area_type == "flood_alert"]),
+        warnings = sum(as.integer(n_issued)[ea_area_type == "flood_warning"]),
+        severe   = sum(as.integer(n_severe)[ea_area_type == "flood_warning"])),
+    by = constituency_id][, total := alerts + warnings][order(-total, constituency_id)]
+}
+
+warning_area_counts <- function(h, constituency_id) {
+  empty <- data.table(ea_area_code = character(), ea_area_name = character(), ea_area_type = character(),
+                      issued = integer(), severe = integer(), last_issued = as.Date(character()))
+  if (is.null(h) || nrow(h) == 0L) return(empty)
+  cid <- constituency_id
+  x <- h[constituency_id == cid]
+  if (nrow(x) == 0L) return(empty)
+  x[, .(ea_area_name = ea_area_name[1L], issued = sum(as.integer(n_issued)),
+        severe = sum(as.integer(n_severe)), last_issued = max(as.Date(issued_date))),
+    by = .(ea_area_code, ea_area_type)][order(-issued, ea_area_code),
+    .(ea_area_code, ea_area_name, ea_area_type, issued, severe, last_issued)]
+}
+
+
+# -----------------------------------------------------------------------------
 # polygons_only()
 #
 # The polygon layers (EA flood areas, constituencies) are drawn with
@@ -633,7 +673,7 @@ empty_situation_message <- function(ranks, floor, other_filters = FALSE) {
 
 PIPELINE_TABLE_JOBS <- c(
   fgs_constituency_changes = 18L, constituency_flood_situation = 19L, mp_briefing_drafts = 20L,
-  fgs_constituency_exposure = 21L, pipeline_health = 22L, fgs_constituency_mp_contacts = 14L,
+  fgs_constituency_exposure = 21L, pipeline_health = 22L, ea_warning_episodes = 25L, fgs_constituency_mp_contacts = 14L,
   flood_warning_constituency_contacts = 13L, fgs_constituency_intersections = 7L,
   fgs_ea_area_intersections = 7L, ea_area_constituency_lookup = 6L)
 

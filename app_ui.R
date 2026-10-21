@@ -770,6 +770,34 @@ make_situation_tab <- function() tags$div(
 
 
 # -----------------------------------------------------------------------------
+# Warning history tab.
+#
+# One row per constituency: how many flood alerts and flood warnings have been
+# issued for areas inside it, and the total. Select a row to see each area.
+# Counts come from ea_warning_episodes (job 25). The slider narrows the period.
+# -----------------------------------------------------------------------------
+
+make_warning_history_tab <- function() tags$div(
+  class = "p-3",
+  uiOutput("wh_note"),
+  tags$div(
+    class = "filter-row",
+    sliderInput("wh_range", "Issued between",
+                min = Sys.Date() - 3650L, max = Sys.Date(), value = c(Sys.Date() - 3650L, Sys.Date()),
+                timeFormat = "%d %b %Y", width = "420px"),
+    textInput("wh_search", "Search", placeholder = "Constituency or MP", width = "220px"),
+    downloadButton("download_warning_history", "Export CSV", class = "btn-sm btn-outline-secondary")
+  ),
+  DT::dataTableOutput("wh_table"),
+  tags$hr(),
+  uiOutput("wh_detail_title"),
+  DT::dataTableOutput("wh_areas"),
+  tags$div(class = "mt-2", downloadButton("download_wh_areas", "Export this constituency's areas",
+                                          class = "btn-sm btn-outline-secondary"))
+)
+
+
+# -----------------------------------------------------------------------------
 # Exposure history tab.
 #
 # Heat grid from fgs_constituency_exposure (job 21): the constituencies with
@@ -894,13 +922,14 @@ ui <- function(request) {
 
     tabPanel("Constituency situation", make_situation_tab()),
     tabPanel("Exposure history",       make_exposure_tab()),
+    tabPanel("Warning history",        make_warning_history_tab()),
     if (DEMO_MODE) tabPanel("MP audit log", make_audit_tab()),
     tabPanel("Guide", make_guide_tab()),
 
     # Planned. These need data the pipeline does not hold yet (observed gauge
     # levels, the Met Office licence decision), so they sit in one menu.
     do.call(navbarMenu, c(list("Planned"), Filter(Negate(is.null), list(
-      tabPanel("Warning issue times",   tags$p(class = "p-3 text-muted", "Planned. Needs warning issue history.")),
+      tabPanel("Warning issue times",   tags$p(class = "p-3 text-muted", "Planned. The history is held (see Warning history); a view of the hour and day warnings are issued is still to come.")),
       tabPanel("Forecast verification", tags$p(class = "p-3 text-muted", "Planned. Needs observed gauge levels and a decision on the Met Office licence.")),
       tabPanel("Event playback",        tags$p(class = "p-3 text-muted", "Planned. Needs observed gauge levels and a decision on the Met Office licence.")),
       if (!DEMO_MODE) tabPanel("MP audit log", tags$p(class = "p-3 text-muted", "Planned. Needs a record of who sent what."))
