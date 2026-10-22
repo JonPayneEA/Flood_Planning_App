@@ -728,6 +728,37 @@ fetch_rt_readings <- function(measure_uris, days, sum_uris = character()) {
 }
 
 # Two years of invented warnings and alerts, heavier where the demo's storms fall.
+# Invented forecasts and warnings: a year of days for every demo constituency. Warnings cluster where
+# the demo's flooding does, and forecast skill falls as the lead grows, so the tab has something to show.
+demo_verification <- function() demo_memo("verification", demo_with_seed(616, {
+  g <- demo_geometry()$table
+  days <- seq(Sys.Date() - 400L, Sys.Date() - 1L, by = "day")
+  d <- CJ(i = seq_len(nrow(g)), day = days)
+  month <- as.integer(format(d$day, "%m"))
+  season <- c(1, .9, .7, .4, .25, .15, .15, .25, .4, .7, .9, 1)[month]
+  prone <- 0.02 + 0.06 * (g$vuln[d$i] / 4)
+  d[, happened := runif(.N) < prone * season * 2.2]
+  rows <- rbindlist(lapply(1:5, function(k) {
+    z <- d$happened * 1.25 + rnorm(nrow(d), 0, 0.45 + 0.28 * k)
+    rk <- as.integer(cut(z, c(-Inf, 0.55, 0.85, 1.15, 1.5, Inf), labels = FALSE)) - 1L
+    x <- data.table(i = d$i, forecast_date = d$day, lead_day = k, forecast_rank = rk, happened = d$happened)
+    x[forecast_rank > 0L | happened]
+  }))
+  rows[, `:=`(constituency_id = g$constituency_id[i])]
+  rows[, `:=`(alerts = as.integer(happened) * (1L + rpois(.N, 0.6)),
+              warnings = as.integer(happened & runif(.N) < 0.4) * (1L + rpois(.N, 0.3)))]
+  rows[, severe := as.integer(warnings > 0L & runif(.N) < 0.1)]
+  rows[, .(constituency_id, forecast_date, lead_day, forecast_rank, alerts, warnings, severe)]
+}))
+
+fetch_verification_by_lead <- function(min_rank, outcome, from, to, nations = NULL)
+  verification_counts(demo_verification(), min_rank, outcome, from, to, nations, by = "lead_day")
+
+fetch_verification_by_constituency <- function(min_rank, outcome, from, to, nations = NULL, lead = 1L)
+  verification_counts(demo_verification(), min_rank, outcome, from, to, nations, by = "constituency_id", lead = lead)
+
+fetch_verification_span <- function() { v <- demo_verification(); list(first = as.Date(min(v$forecast_date)), last = as.Date(max(v$forecast_date))) }
+
 # Invented episodes for one constituency, so the Detailed table and the graph work in the demo.
 fetch_warning_episodes <- function(constituency_id) {
   h <- { cid_ <- constituency_id; fetch_warning_history()[constituency_id == cid_] }

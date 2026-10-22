@@ -625,3 +625,46 @@ test_that("long windows are bucketed to about 1,500 points, and short ones are n
   expect_equal(rt_bucket_label(86400L), "1 day")
   expect_equal(unname(RT_WINDOWS[["All available"]]), 0L)
 })
+
+
+# ---- Forecast against warnings -----------------------------------------------------
+
+ver_fake <- function() data.table(
+  constituency_id = c("E14000001", "E14000002", "E14000003", "E14000004", "W07000001", "E14000001"),
+  forecast_date = as.Date(c("2026-10-10", "2026-10-10", "2026-10-10", "2026-10-10", "2026-10-10", "2026-09-01")),
+  lead_day = c(1L, 1L, 1L, 1L, 1L, 2L),
+  forecast_rank = c(3L, 4L, 0L, 2L, 3L, 3L),
+  alerts   = c(0L, 0L, 1L, 0L, 0L, 0L),
+  warnings = c(1L, 0L, 0L, 1L, 1L, 0L),
+  severe   = c(0L, 0L, 0L, 0L, 0L, 0L))
+
+test_that("hits, false alarms and misses are counted for the chosen threshold and outcome", {
+  v <- ver_fake()
+  c1 <- verification_counts(v, 3, "any", "2026-10-01", "2026-10-31", by = "lead_day")
+  expect_equal(c1$lead_day, 1L)
+  expect_equal(c(c1$hits, c1$false_alarms, c1$misses), c(2L, 1L, 2L))      # c1 and W hit, c2 false alarm, c3 and c4 miss
+  c2 <- verification_counts(v, 2, "any", "2026-10-01", "2026-10-31", by = "lead_day")
+  expect_equal(c(c2$hits, c2$misses), c(3L, 1L))                            # a lower threshold turns c4's miss into a hit
+  w <- verification_counts(v, 3, "warnings", "2026-10-01", "2026-10-31", by = "lead_day")
+  expect_equal(c(w$hits, w$false_alarms, w$misses), c(2L, 1L, 1L))         # the alert-only day no longer happened
+  a <- verification_counts(v, 3, "alerts", "2026-10-01", "2026-10-31", by = "lead_day")
+  expect_equal(c(a$hits, a$false_alarms, a$misses), c(0L, 3L, 1L))
+})
+
+test_that("the period, the nations and the lead day narrow the counts", {
+  v <- ver_fake()
+  expect_equal(verification_counts(v, 3, "any", "2026-09-01", "2026-09-30", by = "lead_day")$lead_day, 2L)
+  e <- verification_counts(v, 3, "any", "2026-10-01", "2026-10-31", nations = "E14", by = "lead_day")
+  expect_equal(c(e$hits, e$false_alarms, e$misses), c(1L, 1L, 2L))        # the Welsh hit is out
+  b <- verification_counts(v, 3, "any", "2026-10-01", "2026-10-31", by = "constituency_id", lead = 1)
+  expect_equal(b$constituency_id[b$hits == 1L], c("E14000001", "W07000001"))
+  expect_equal(nrow(verification_counts(v, 3, "any", "2020-01-01", "2020-12-31", by = "lead_day")), 0L)
+  expect_error(verification_counts(v, 3, "everything", "2026-10-01", "2026-10-31"))     # only the four outcomes
+})
+
+test_that("hit rate and precision divide by what could have been right, and are blank where nothing does", {
+  s <- verification_scores(data.table(lead_day = 1:2, hits = c(2L, 0L), false_alarms = c(1L, 0L), misses = c(2L, 0L)))
+  expect_equal(c(s$forecast_days[1], s$event_days[1]), c(3L, 4L))
+  expect_equal(c(s$hit_rate[1], s$precision[1]), c(0.5, 2 / 3))
+  expect_true(is.na(s$hit_rate[2]) && is.na(s$precision[2]))
+})
