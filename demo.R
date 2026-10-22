@@ -728,36 +728,73 @@ fetch_rt_readings <- function(measure_uris, days, sum_uris = character()) {
 }
 
 # Two years of invented warnings and alerts, heavier where the demo's storms fall.
-# Invented forecasts and warnings: a year of days for every demo constituency. Warnings cluster where
-# the demo's flooding does, and forecast skill falls as the lead grows, so the tab has something to show.
-demo_verification <- function() demo_memo("verification", demo_with_seed(616, {
-  g <- demo_geometry()$table
-  days <- seq(Sys.Date() - 400L, Sys.Date() - 1L, by = "day")
-  d <- CJ(i = seq_len(nrow(g)), day = days)
-  month <- as.integer(format(d$day, "%m"))
-  season <- c(1, .9, .7, .4, .25, .15, .15, .25, .4, .7, .9, 1)[month]
-  prone <- 0.02 + 0.06 * (g$vuln[d$i] / 4)
-  d[, happened := runif(.N) < prone * season * 2.2]
-  rows <- rbindlist(lapply(1:5, function(k) {
-    z <- d$happened * 1.25 + rnorm(nrow(d), 0, 0.45 + 0.28 * k)
-    rk <- as.integer(cut(z, c(-Inf, 0.55, 0.85, 1.15, 1.5, Inf), labels = FALSE)) - 1L
-    x <- data.table(i = d$i, forecast_date = d$day, lead_day = k, forecast_rank = rk, happened = d$happened)
-    x[forecast_rank > 0L | happened]
-  }))
-  rows[, `:=`(constituency_id = g$constituency_id[i])]
-  rows[, `:=`(alerts = as.integer(happened) * (1L + rpois(.N, 0.6)),
-              warnings = as.integer(happened & runif(.N) < 0.4) * (1L + rpois(.N, 0.3)))]
-  rows[, severe := as.integer(warnings > 0L & runif(.N) < 0.1)]
-  rows[, .(constituency_id, forecast_date, lead_day, forecast_rank, alerts, warnings, severe)]
+# Invented warnings and how the FGS covered them: two years, heavier in winter. The earliest covering
+# statement comes more often before the warning for serious polygons than for Very Low ones.
+demo_coverage <- function() demo_memo("coverage", demo_with_seed(717, {
+  ea <- demo_ea_areas()$table
+  n <- 1800L
+  day <- Sys.Date() - sample.int(730L, n, replace = TRUE)
+  month <- as.integer(format(day, "%m"))
+  keep <- runif(n) < c(1, .9, .7, .4, .25, .15, .15, .25, .4, .7, .9, 1)[month]
+  i <- sample(nrow(ea), sum(keep), replace = TRUE)
+  x <- data.table(episode_id = sprintf("%s_%d", ea$ea_area_code[i], seq_along(i)), ea_area_code = ea$ea_area_code[i],
+                  ea_area_name = ea$ea_area_name[i], area_type = ea$ea_area_type[i], issue_date = day[keep])
+  x[, start_time := format(as.POSIXct(paste(issue_date, "00:00:00"), tz = "UTC") + sample.int(86000L, .N, replace = TRUE), "%Y-%m-%dT%H:%M:%S")]
+  x[, end_time := format(as.POSIXct(start_time, tz = "UTC", format = "%Y-%m-%dT%H:%M:%S") + 3600 * (3 + rexp(.N, 1 / 20)), "%Y-%m-%dT%H:%M:%S")]
+  x[, had_severe := area_type == "flood_warning" & runif(.N) < 0.1]
+  x[, `:=`(peak_level = fifelse(had_severe, "severe_flood_warning", area_type), stale_open = FALSE)]
+  # Lead in days: positive is before the warning, 0 the same day, negative after, NA none.
+  lead_for <- function(n, p_cover, p_ahead) {
+    ok <- runif(n) < p_cover
+    ahead <- runif(n) < p_ahead
+    ifelse(!ok, NA_integer_, ifelse(ahead, sample(1:4, n, replace = TRUE, prob = c(.35, .3, .2, .15)),
+                                   sample(c(0L, -1L, -2L), n, replace = TRUE, prob = c(.5, .35, .15))))
+  }
+  l1 <- lead_for(nrow(x), 0.94, 0.62)
+  l2 <- ifelse(runif(nrow(x)) < 0.85, pmin(l1, ifelse(is.na(l1), NA_integer_, l1 - sample(0:1, nrow(x), TRUE))), NA_integer_)
+  l3 <- ifelse(runif(nrow(x)) < 0.7, pmin(l2, ifelse(is.na(l2), NA_integer_, l2 - sample(0:1, nrow(x), TRUE))), NA_integer_)
+  l4 <- ifelse(runif(nrow(x)) < 0.45, pmin(l3, ifelse(is.na(l3), NA_integer_, l3 - sample(0:1, nrow(x), TRUE))), NA_integer_)
+  # A higher threshold is met by a later or equal statement, never an earlier one.
+  l2 <- pmin(l2, l1); l3 <- pmin(l3, l2); l4 <- pmin(l4, l3)
+  for (r in 1:4) x[[paste0("first_cover_ge", r)]] <- as.Date(x$issue_date) - get(paste0("l", r))
+  x[, max_rank := as.integer(fifelse(!is.na(l4), 4L, fifelse(!is.na(l3), 3L, fifelse(!is.na(l2), 2L, fifelse(!is.na(l1), 1L, 0L)))))]
+  x[, sources := fifelse(is.na(l1), NA_character_, sample(c("river", "river,surface", "coastal", "river,coastal"), .N, replace = TRUE))]
+  x[]
 }))
 
-fetch_verification_by_lead <- function(min_rank, outcome, from, to, nations = NULL)
-  verification_counts(demo_verification(), min_rank, outcome, from, to, nations, by = "lead_day")
+fetch_coverage_summary <- function(from, to, type = "any") coverage_summary_counts(demo_coverage(), from, to, type)
 
-fetch_verification_by_constituency <- function(min_rank, outcome, from, to, nations = NULL, lead = 1L)
-  verification_counts(demo_verification(), min_rank, outcome, from, to, nations, by = "constituency_id", lead = lead)
+fetch_coverage_warnings <- function(from, to, type = "any", min_rank = 1L, limit = 20000L) {
+  x <- demo_coverage()[as.Date(issue_date) >= as.Date(from) & as.Date(issue_date) <= as.Date(to)]
+  x <- x[coverage_type_rows(x, type)]
+  x[, first_cover := get(paste0("first_cover_ge", as.integer(min_rank)))]
+  x <- x[order(-as.numeric(as.POSIXct(start_time, tz = "UTC", format = "%Y-%m-%dT%H:%M:%S")))][seq_len(min(.N, limit))]
+  x[, .(episode_id, ea_area_code, ea_area_name, area_type, start_time, end_time, peak_level, had_severe, stale_open, issue_date,
+        max_rank, first_cover, sources)]
+}
 
-fetch_verification_span <- function() { v <- demo_verification(); list(first = as.Date(min(v$forecast_date)), last = as.Date(max(v$forecast_date))) }
+# The statements behind one invented warning: one per issue day from the earliest covering one, with the
+# risk rising to the worst reached by then.
+fetch_coverage_detail <- function(ea_area_code, from, to) {
+  code <- ea_area_code; start <- as.Date(from)
+  empty <- data.table(statement_id = integer(), issued_at = character(), forecast_date = character(), day_index = integer(),
+                      source = character(), risk_level = character(), impact_label = character(), likelihood_label = character(),
+                      intersection_pct = numeric(), link_type = character())
+  w <- demo_coverage()[ea_area_code == code & as.Date(substr(start_time, 1L, 10L)) == start][1L]
+  if (nrow(w) == 0L || is.na(w$first_cover_ge1)) return(empty)
+  days <- seq(as.Date(w$first_cover_ge1), max(as.Date(w$first_cover_ge1), as.Date(w$issue_date)) + 1L, by = "day")
+  src <- strsplit(w$sources, ",", fixed = TRUE)[[1L]]
+  rbindlist(lapply(days, function(s) {
+    reached <- vapply(1:4, function(r) { f <- w[[paste0("first_cover_ge", r)]]; !is.na(f) && as.Date(f) <= s }, logical(1))
+    rk <- max(which(reached))
+    data.table(statement_id = as.integer(s - as.Date("2020-01-01")), issued_at = paste0(format(s), "T09:30:00"),
+               forecast_date = format(start), day_index = as.integer(start - s) + 1L, source = src,
+               risk_level = RANK_LABELS[rk + 1L], impact_label = "Minor", likelihood_label = "Low",
+               intersection_pct = round(runif(length(src), 0.3, 1), 2), link_type = "intersects")
+  }))
+}
+
+fetch_coverage_span <- function() { v <- demo_coverage(); list(first = as.Date(min(v$issue_date)), last = as.Date(max(v$issue_date))) }
 
 # Invented episodes for one constituency, so the Detailed table and the graph work in the demo.
 fetch_warning_episodes <- function(constituency_id) {

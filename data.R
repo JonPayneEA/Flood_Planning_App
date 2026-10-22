@@ -692,50 +692,68 @@ fetch_warning_history <- function() {
 
 
 # -----------------------------------------------------------------------------
-# Forecast against warnings (fgs_forecast_verification, job 26)
+# Warnings against the FGS (ea_warning_fgs_coverage, job 26)
 #
-# The counts are made in the warehouse for the chosen threshold, outcome, period, nations and
-# (for the constituency table) lead day, so only a few hundred small rows cross the wire. The
-# outcome and every other argument are checked or reduced to safe characters before the SQL is built.
-# fetch_verification_span(): the first and last forecast date held.
+# fetch_coverage_summary(): counts of warnings by risk threshold, category (before, same day,
+#   after, none) and lead, made in the warehouse so little crosses the wire.
+# fetch_coverage_warnings(): the warnings themselves for a period, newest first, with how the
+#   chosen risk threshold covered each. Capped at `limit` rows.
+# fetch_coverage_detail(): every FGS statement that put a polygon over one warning's area for a
+#   date it was in force. The area code reaches the SQL as letters, digits, dashes and
+#   underscores only.
+# fetch_coverage_span(): the first and last issue dates held.
 # -----------------------------------------------------------------------------
 
-verification_sql <- function(group_col, min_rank, outcome, from, to, nations = NULL, lead = NULL) {
-  happened <- verification_happened_sql(outcome)
-  known <- c("E14", "W07", "S14", "N06")
-  codes <- gsub("[^A-Za-z0-9]", "", as.character(nations))
-  codes <- codes[nzchar(codes)]
-  nation_sql <- if (length(codes) == 0L) "1 = 1" else sprintf(
-    "(substr(constituency_id, 1, 3) IN (%s) OR substr(constituency_id, 1, 3) NOT IN (%s))",
-    paste0("'", codes, "'", collapse = ", "), paste0("'", known, "'", collapse = ", "))
-  lead_sql <- if (is.null(lead)) "1 = 1" else sprintf("lead_day = %d", as.integer(lead))
-  sprintf("
-    SELECT
-      %s,
-      SUM(CASE WHEN forecast_rank >= %d AND %s     THEN 1 ELSE 0 END) AS hits,
-      SUM(CASE WHEN forecast_rank >= %d AND NOT (%s) THEN 1 ELSE 0 END) AS false_alarms,
-      SUM(CASE WHEN forecast_rank <  %d AND %s     THEN 1 ELSE 0 END) AS misses
+coverage_where <- function(from, to, type) {
+  sprintf("issue_date BETWEEN '%s' AND '%s' AND %s", format(as.Date(from), "%Y-%m-%d"), format(as.Date(to), "%Y-%m-%d"),
+          coverage_type_sql(type))
+}
+
+fetch_coverage_summary <- function(from, to, type = "any") {
+  one <- function(r) sprintf("
+    SELECT %d AS threshold, category, lead_days, COUNT(*) AS n FROM (
+      SELECT CASE WHEN first_cover_ge%d IS NULL THEN 'none'
+                  WHEN first_cover_ge%d < issue_date THEN 'before'
+                  WHEN first_cover_ge%d = issue_date THEN 'same_day' ELSE 'after' END AS category,
+             CASE WHEN first_cover_ge%d < issue_date THEN datediff(issue_date, first_cover_ge%d) END AS lead_days
+      FROM %s WHERE %s
+    ) GROUP BY category, lead_days", r, r, r, r, r, r, TBL_WARNING_FGS, coverage_where(from, to, type))
+  d <- as.data.table(db_query(paste(vapply(1:4, one, character(1)), collapse = " UNION ALL ")))
+  if (nrow(d)) d[, `:=`(threshold = as.integer(threshold), lead_days = as.integer(lead_days), n = as.integer(n))]
+  d
+}
+
+fetch_coverage_warnings <- function(from, to, type = "any", min_rank = 1L, limit = 20000L) {
+  r <- max(1L, min(4L, as.integer(min_rank)))
+  db_query(sprintf("
+    SELECT episode_id, ea_area_code, ea_area_name, area_type, start_time, end_time, peak_level, had_severe, stale_open,
+           issue_date, max_rank, first_cover_ge%d AS first_cover, sources
     FROM %s
-    WHERE forecast_date BETWEEN '%s' AND '%s'
-      AND %s
-      AND %s
-    GROUP BY %s
-    ORDER BY %s
-  ", group_col, as.integer(min_rank), happened, as.integer(min_rank), happened, as.integer(min_rank), happened,
-     TBL_VERIFICATION, format(as.Date(from), "%Y-%m-%d"), format(as.Date(to), "%Y-%m-%d"), nation_sql, lead_sql,
-     group_col, group_col)
+    WHERE %s
+    ORDER BY start_time DESC
+    LIMIT %d
+  ", r, TBL_WARNING_FGS, coverage_where(from, to, type), as.integer(limit)))
 }
 
-fetch_verification_by_lead <- function(min_rank, outcome, from, to, nations = NULL) {
-  as.data.table(db_query(verification_sql("lead_day", min_rank, outcome, from, to, nations)))
+fetch_coverage_detail <- function(ea_area_code, from, to) {
+  code <- gsub("[^A-Za-z0-9_-]", "", as.character(ea_area_code))
+  db_query(sprintf("
+    SELECT s.statement_id, s.issued_at, i.forecast_date, i.day_index, i.source, i.risk_level,
+           i.impact_label, i.likelihood_label, i.intersection_pct, i.link_type
+    FROM %s i
+    JOIN %s s ON s.statement_id = i.statement_id
+    WHERE i.ea_area_code = '%s'
+      AND i.geometry_source = '%s'
+      AND to_date(i.forecast_date) BETWEEN '%s' AND '%s'
+      AND %s >= 1
+    ORDER BY s.issued_at, i.forecast_date, i.source
+  ", TBL_EA_INTERSECT, TBL_STATEMENTS, code, GEOMETRY_SOURCE,
+     format(as.Date(from), "%Y-%m-%d"), format(as.Date(to), "%Y-%m-%d"),
+     "CASE i.risk_level WHEN 'Very Low' THEN 1 WHEN 'Low' THEN 2 WHEN 'Medium' THEN 3 WHEN 'High' THEN 4 ELSE 0 END"))
 }
 
-fetch_verification_by_constituency <- function(min_rank, outcome, from, to, nations = NULL, lead = 1L) {
-  as.data.table(db_query(verification_sql("constituency_id", min_rank, outcome, from, to, nations, lead)))
-}
-
-fetch_verification_span <- function() {
-  d <- db_query(sprintf("SELECT MIN(forecast_date) AS first_date, MAX(forecast_date) AS last_date FROM %s", TBL_VERIFICATION))
+fetch_coverage_span <- function() {
+  d <- db_query(sprintf("SELECT MIN(issue_date) AS first_date, MAX(issue_date) AS last_date FROM %s", TBL_WARNING_FGS))
   if (nrow(d) == 0L || is.na(d$first_date[1L])) NULL else list(first = as.Date(d$first_date[1L]), last = as.Date(d$last_date[1L]))
 }
 
@@ -1204,9 +1222,10 @@ fetch_briefing_drafts              <- with_cache(fetch_briefing_drafts,         
 fetch_exposure                     <- with_cache(fetch_exposure,                     "exposure",  ttl = 0)
 fetch_warning_history              <- with_cache(fetch_warning_history,              "warning_history", ttl = 0)
 fetch_warning_episodes             <- with_cache(fetch_warning_episodes,             "warning_episodes", ttl = min(CACHE_TTL_SECONDS, 300))
-fetch_verification_by_lead         <- with_cache(fetch_verification_by_lead,         "ver_lead", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
-fetch_verification_by_constituency <- with_cache(fetch_verification_by_constituency, "ver_const", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
-fetch_verification_span            <- with_cache(fetch_verification_span,            "ver_span", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
+fetch_coverage_summary             <- with_cache(fetch_coverage_summary,             "cov_summary", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
+fetch_coverage_warnings            <- with_cache(fetch_coverage_warnings,            "cov_warnings", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
+fetch_coverage_detail              <- with_cache(fetch_coverage_detail,              "cov_detail", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
+fetch_coverage_span                <- with_cache(fetch_coverage_span,                "cov_span", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_rt_register                  <- with_cache(fetch_rt_register,                  "rt_register", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_rt_boundary                  <- with_cache(fetch_rt_boundary,                  "rt_boundary", ttl = min(CACHE_TTL_SECONDS, 300))
 fetch_data_signature               <- with_cache(fetch_data_signature,               "signature", ttl = 0)

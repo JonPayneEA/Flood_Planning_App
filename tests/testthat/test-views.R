@@ -629,45 +629,54 @@ test_that("ticking Detailed lists each alert and warning with its date and time"
 })
 
 
-test_that("Forecast vs warnings asks the warehouse for the chosen threshold, outcome, period and nations", {
-  seen <- new.env(); seen$lead <- NULL; seen$const <- NULL
-  span <- function() list(first = as.Date("2025-01-01"), last = as.Date("2026-10-20"))
-  by_lead <- function(min_rank, outcome, from, to, nations = NULL) {
-    seen$lead <- list(min_rank = min_rank, outcome = outcome, from = from, to = to, nations = nations)
-    data.table(lead_day = 1:2, hits = c(3L, 1L), false_alarms = c(1L, 1L), misses = c(1L, 3L))
+
+test_that("Warnings vs FGS shows the shares, the warnings and the statements behind a selected warning", {
+  seen <- new.env(); seen$args <- NULL; seen$detail <- NULL
+  span <- function() list(first = as.Date("2024-01-01"), last = as.Date("2026-10-20"))
+  summ <- function(from, to, type = "any") {
+    seen$args <- list(from = from, to = to, type = type)
+    data.table(threshold = c(1L, 1L, 1L, 3L), category = c("before", "after", "none", "none"), lead_days = c(2L, NA, NA, NA), n = c(6L, 2L, 2L, 10L))
   }
-  by_const <- function(min_rank, outcome, from, to, nations = NULL, lead = 1L) {
-    seen$const <- list(lead = lead)
-    data.table(constituency_id = "E14000001", hits = 3L, false_alarms = 1L, misses = 1L)
+  lst <- function(from, to, type = "any", min_rank = 1L, limit = 20000L) data.table(
+    episode_id = c("e1", "e2"), ea_area_code = c("A1", "B1"), ea_area_name = c("Alder", "Beech"), area_type = c("flood_warning", "flood_alert"),
+    start_time = c("2026-10-10T14:00:00", "2026-10-09T08:00:00"), end_time = c("2026-10-11T02:00:00", NA), peak_level = c("flood_warning", "flood_alert"),
+    had_severe = FALSE, stale_open = FALSE, issue_date = as.Date(c("2026-10-10", "2026-10-09")), max_rank = c(3L, 0L),
+    first_cover = as.Date(c("2026-10-08", NA)), sources = c("river", NA))
+  det <- function(code, from, to) {
+    seen$detail <- list(code = code, from = from, to = to)
+    data.table(statement_id = 5L, issued_at = "2026-10-08T09:30:00", forecast_date = "2026-10-10", day_index = 3L, source = "river",
+               risk_level = "Medium", impact_label = "Minor", likelihood_label = "Medium", intersection_pct = 0.4, link_type = "intersects")
   }
-  lk <- function() data.table(ea_area_code = "a", constituency_id = "E14000001", constituency_name = "Alpha",
-                              constituency_overlap_pct = 1, mp_name = "A MP", mp_party = "p", mp_email = "e", mp_phone = "t")
-  env <- make_server_env(list(fetch_verification_span = span, fetch_verification_by_lead = by_lead,
-                              fetch_verification_by_constituency = by_const, fetch_ea_constituency_mp = lk))
+  env <- make_server_env(list(fetch_coverage_span = span, fetch_coverage_summary = summ, fetch_coverage_warnings = lst, fetch_coverage_detail = det))
   testServer(env$server, {
     do.call(session$setInputs, base_inputs)
-    session$setInputs(main_tabs = "Forecast vs warnings", nations = "E14", ver_min_rank = "3", ver_outcome = "warnings",
-                      ver_range = as.Date(c("2025-06-01", "2026-06-01")), ver_lead = "2")
-    x <- ver_lead_data()
-    expect_equal(x$hits, c(3L, 1L))
-    expect_equal(seen$lead$outcome, "warnings"); expect_equal(seen$lead$min_rank, 3L)
-    expect_equal(seen$lead$nations, "E14"); expect_equal(as.character(seen$lead$from), "2025-06-01")
-    tbl <- ver_const_table_data()
-    expect_equal(seen$const$lead, 2L)
-    expect_equal(tbl$Constituency, "Alpha"); expect_equal(tbl$`Hit rate`, 0.75); expect_equal(tbl$Precision, 0.75)
+    session$setInputs(main_tabs = "Warnings vs FGS", cov_range = as.Date(c("2026-01-01", "2026-10-20")), cov_type = "warnings", cov_rank = 1L)
+    expect_equal(seen$args$type, "warnings")
+    s <- cov_shares_data()[threshold == 1L]
+    expect_equal(c(s$before, s$after, s$none, s$total), c(6, 2, 2, 10))
+    expect_equal(s$covered_pct, 0.8)
+    expect_match(html_of(output$cov_kpis), "80%|60%")                                    # before is 6 of 10
+    tbl <- cov_table_data()
+    expect_equal(tbl$`FGS coverage`, c("Before (2 days)", "Not covered"))
+    expect_equal(tbl$`Highest FGS risk`, c("Medium", "None"))
+    session$setInputs(cov_table_rows_selected = 1L)
+    d <- cov_detail_data()
+    expect_equal(seen$detail$code, "A1"); expect_equal(as.character(seen$detail$from), "2026-10-10"); expect_equal(as.character(seen$detail$to), "2026-10-11")
+    expect_equal(d$`Compared with the warning`, "Before")
+    expect_equal(d$Timing, "2 d 4 h before")
+    expect_match(html_of(output$cov_detail_title), "Alder")
   })
 })
 
-test_that("a missing verification table is named on screen", {
+test_that("a missing coverage table is named on screen", {
   env <- make_server_env(list(
-    fetch_verification_span = function() NULL,
-    fetch_verification_by_lead = function(...) stop("[TABLE_OR_VIEW_NOT_FOUND] The table or view `cat`.`sch`.`fgs_forecast_verification` cannot be found")))
+    fetch_coverage_span = function() NULL,
+    fetch_coverage_summary = function(...) stop("[TABLE_OR_VIEW_NOT_FOUND] The table or view `cat`.`sch`.`ea_warning_fgs_coverage` cannot be found")))
   testServer(env$server, {
     do.call(session$setInputs, base_inputs)
-    session$setInputs(main_tabs = "Forecast vs warnings", ver_min_rank = "3", ver_outcome = "any",
-                      ver_range = as.Date(c("2025-06-01", "2026-06-01")), ver_lead = "1")
-    ver_lead_data()
-    expect_match(html_of(output$ver_note), "fgs_forecast_verification")
-    expect_match(html_of(output$ver_note), "notebook 26")
+    session$setInputs(main_tabs = "Warnings vs FGS", cov_range = as.Date(c("2026-01-01", "2026-10-20")), cov_type = "any", cov_rank = 1L)
+    cov_summary()
+    expect_match(html_of(output$cov_note), "ea_warning_fgs_coverage")
+    expect_match(html_of(output$cov_note), "notebook 26")
   })
 })

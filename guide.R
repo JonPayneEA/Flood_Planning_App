@@ -48,7 +48,7 @@ GUIDE_TABLES <- data.frame(
             "ea_area_constituency_lookup", "mp_contact_details",
             "fgs_constituency_changes", "fgs_changes_log", "constituency_flood_situation", "mp_briefing_drafts",
             "fgs_constituency_exposure", "pipeline_health", "ea_warning_episodes",
-            "ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_readings_bronze", "fgs_forecast_verification"),
+            "ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_readings_bronze", "ea_warning_fgs_coverage"),
   notebook = c("01", "01", "07", "07", "03", "03", "05", "06", "04", "18", "18", "19", "20", "21", "22", "25", "09", "23", "10", "26"),
   refresh = c("Each FGS issue or amendment", "Each FGS issue or amendment", "Each FGS issue", "Each FGS issue",
               "Weekly", "Weekly", "Quarterly, or after an election", "Weekly and quarterly", "Weekly",
@@ -73,7 +73,7 @@ GUIDE_TABLES <- data.frame(
             "One row per measure at an Environment Agency gauge: what it measures, the station, river and area.",
             "Real-time readings, the daily archive and the live tail joined as one series.",
             "The daily archive of readings. Its last day marks where the live tail begins.",
-            "The forecast risk for each constituency, date and lead day against the alerts and warnings in force. Sparse."),
+            "Each alert and warning, and whether and when an FGS polygon covered it."),
   stringsAsFactors = FALSE
 )
 
@@ -347,24 +347,25 @@ guide_products <- function(s) {
     ),
 
     list(
-      id = "verification", title = "Forecast vs warnings", where = "Forecast vs warnings",
-      answers = "When the forecast flagged a constituency, did an alert or warning follow, and how often did one come that was not forecast?",
-      tables = c("fgs_forecast_verification"),
+      id = "coverage", title = "Warnings vs FGS", where = "Warnings vs FGS",
+      answers = "Was this warning under an FGS polygon, and was the forecast issued before it, on the day or after? Across a period, how often did the polygons cover the warnings?",
+      tables = c("ea_warning_fgs_coverage", "fgs_ea_area_intersections", "fgs_statements"),
       steps = c(
-        "For each date, the pipeline takes the forecast made one to five days earlier (the lead day) from the last statement issued on each date, and the worst risk across flood sources for each constituency.",
-        "It counts the areas with an alert, a warning and a severe flood warning in force in each constituency on that date. Any point in the date counts, an area counts once however often it was issued, and an area under several constituencies counts in each.",
-        "You choose the risk that counts as a forecast (Medium or above to start), what counts as having happened (any alert or warning, or one kind), and the period. A hit is a forecast day on which it happened, a false alarm one on which it did not, and a miss a day it happened that was not forecast at that level.",
-        "Hit rate is hits over hits plus misses: of the days it happened, how many were forecast. Precision is hits over hits plus false alarms: of the days forecast, how many it happened on. The table and chart give both for each lead day, and the second table for each constituency at one lead day."
+        "Each alert and warning is an episode from the warning history: one area, from the day it was issued to the day it ended.",
+        "The pipeline finds every complete FGS statement whose polygon was linked to that area for a date the warning was in force. A link is an overlap, or, for a coastal warning area, the alert area above it being under the polygon.",
+        "It compares the day each of those statements was issued with the day the warning was issued. The earliest decides: an earlier day is Before (the FGS gave notice, and the table says how many days), the same day is Same day, a later day is After (the warning came first), and none is Not covered.",
+        "A Very Low polygon covers a great deal of England, so you choose how serious a polygon must be to count. The table and chart show all four levels side by side for the period and kind of warning you chose.",
+        "Select a warning to list the statements behind it: when each was issued compared with the warning, for which date, the source, the risk, and whether it overlaps the area or reaches it through the parent alert."
       ),
       read = c(
-        "Expect the hit rate and precision to fall as the lead day rises: a forecast made four days ahead has less to go on.",
-        "A low precision at Medium is not a fault by itself. The FGS forecasts the risk of flooding across a region, and a warning needs a specific river or coast to be affected.",
-        "The Nations filter applies. Dates up to yesterday are scored."
+        "Covered at all is Before plus Same day plus After. The share covered Before is the closest to saying the polygons gave notice.",
+        "Expect the share covered Before to fall as the polygon must be more serious: High polygons are rare.",
+        "A warning issued on a day, with a polygon issued the same day, could have been drawn before or after it in time. The Timing column in the statement list says by how many hours."
       ),
       limits = c(
-        "Alerts and warnings are the Environment Agency's decisions, not observed flooding. A warning can follow no forecast, and a forecast can pass with no warning because action elsewhere prevented one.",
-        "Quiet days that were forecast quiet are not held, so there is no measure of how often a quiet forecast was right.",
-        "An alert or warning with no end message for over 30 days counts only on its first date. A coastal area can count towards a constituency it only touches, as in Warning history."
+        "Not covered is a disagreement between two forecasts of a different kind, not a missed forecast: the FGS forecasts risk across regions and the Environment Agency warns for particular rivers and coasts.",
+        "Polygons that had no warning under them are not counted. This shows how often warnings were covered, not how often polygons were followed by warnings.",
+        "A warning open for over 30 days is treated as having lost its end message and counts only for its first day. A span is capped at 60 days."
       )
     ),
 
