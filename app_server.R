@@ -2061,108 +2061,191 @@ server <- function(input, output, session) {
   )
 
   # ---------------------------------------------------------------------------
-  # Forecast vs warnings tab (job 26).
+  # Warnings vs FGS tab (job 26).
   #
-  # The counts are made in the warehouse for the chosen threshold, outcome, period, nations
-  # and lead day, so each change is a small query (cached). The period slider is sized
-  # from the dates held the first time the tab is opened.
+  # The summary is counted in the warehouse for the chosen period and kind of warning; the
+  # list holds the warnings themselves, newest first, for the chosen risk. The period slider
+  # is sized from the dates held the first time the tab is opened.
   # ---------------------------------------------------------------------------
 
-  ver_started <- reactiveVal(FALSE)
+  cov_started <- reactiveVal(FALSE)
+  COV_LIST_LIMIT <- 20000L
 
   observeEvent(input$main_tabs, {
-    if (!identical(input$main_tabs, "Forecast vs warnings") || ver_started()) return()
-    ver_started(TRUE)
-    sp <- safe_fetch(fetch_verification_span)
+    if (!identical(input$main_tabs, "Warnings vs FGS") || cov_started()) return()
+    cov_started(TRUE)
+    sp <- safe_fetch(fetch_coverage_span)
     if (is.null(sp)) return()
-    updateSliderInput(session, "ver_range", min = sp$first, max = sp$last, value = c(sp$first, sp$last))
+    from <- max(sp$first, sp$last - 365L)
+    updateSliderInput(session, "cov_range", min = sp$first, max = sp$last, value = c(from, sp$last))
   })
 
-  ver_args <- reactive({
-    r <- input$ver_range
-    req(r, input$ver_min_rank, input$ver_outcome)
-    list(min_rank = as.integer(input$ver_min_rank), outcome = input$ver_outcome, from = r[1L], to = r[2L], nations = nation_codes())
+  cov_summary <- reactive({
+    req(cov_started(), input$cov_range, input$cov_type)
+    r <- input$cov_range
+    safe_fetch(fetch_coverage_summary, r[1L], r[2L], input$cov_type)
   })
 
-  ver_lead_data <- reactive({
-    req(ver_started())
-    a <- ver_args()
-    safe_fetch(fetch_verification_by_lead, a$min_rank, a$outcome, a$from, a$to, a$nations)
+  cov_shares_data <- reactive({
+    s <- cov_summary()
+    req(s)
+    coverage_shares(s)
   })
 
-  ver_const_data <- reactive({
-    req(ver_started())
-    a <- ver_args()
-    safe_fetch(fetch_verification_by_constituency, a$min_rank, a$outcome, a$from, a$to, a$nations, as.integer(input$ver_lead))
+  cov_list <- reactive({
+    req(cov_started(), input$cov_range, input$cov_type, input$cov_rank)
+    r <- input$cov_range
+    safe_fetch(fetch_coverage_warnings, r[1L], r[2L], input$cov_type, as.integer(input$cov_rank), COV_LIST_LIMIT)
   })
 
-  output$ver_note <- renderUI({
-    # Read the data first: a missing table is only recorded once the fetch has failed.
-    loaded <- if (ver_started()) ver_lead_data() else NULL
-    if ("fgs_forecast_verification" %in% names(data_gaps())) {
-      return(tags$p(class = "text-muted", gap_text("fgs_forecast_verification", "Forecast vs warnings")))
+  output$cov_note <- renderUI({
+    loaded <- if (cov_started()) cov_summary() else NULL            # read first: a missing table is recorded once a fetch fails
+    if ("ea_warning_fgs_coverage" %in% names(data_gaps())) {
+      return(tags$p(class = "text-muted", gap_text("ea_warning_fgs_coverage", "Warnings vs FGS")))
     }
-    if (ver_started() && is.null(loaded)) return(tags$p(class = "text-muted", "Forecast against warnings could not be loaded."))
+    if (cov_started() && is.null(loaded)) return(tags$p(class = "text-muted", "Warning coverage could not be loaded."))
     NULL
   })
 
-  ver_pct_cols <- c("Hit rate", "Precision")
+  pct <- function(x) ifelse(is.na(x), "n/a", sprintf("%.0f%%", 100 * x))
 
-  output$ver_lead_table <- DT::renderDataTable({
-    x <- ver_lead_data()
-    req(x)
-    s <- verification_scores(x)
-    tbl <- s[, .(`Lead day` = lead_day, `Days forecast` = forecast_days, Hits = hits, `False alarms` = false_alarms,
-                 Misses = misses, `Hit rate` = hit_rate, Precision = precision)]
-    DT::datatable(tbl, rownames = FALSE, selection = "none",
-                  options = list(dom = "t", ordering = FALSE, pageLength = 5,
-                                 language = list(emptyTable = "Nothing forecast or in force in this period."))) |>
-      DT::formatPercentage(ver_pct_cols, digits = 0)
+  output$cov_kpis <- renderUI({
+    s <- cov_shares_data()
+    r <- s[threshold == as.integer(input$cov_rank)]
+    req(nrow(r) == 1L)
+    card <- function(n, label, accent = FALSE) {
+      tags$div(class = "stat-card", tags$div(class = paste("stat-num", if (accent) "accent"), n), tags$div(class = "stat-label", label))
+    }
+    tags$div(class = "kpi-row",
+      card(format(r$total, big.mark = ","), "Warnings in the period"),
+      card(pct(r$before_pct), sprintf("Covered before (%s)", format(r$before, big.mark = ",")), TRUE),
+      card(pct(r$same_day_pct), sprintf("Covered the same day (%s)", format(r$same_day, big.mark = ","))),
+      card(pct(r$later_pct), sprintf("Later days only (%s)", format(r$later, big.mark = ","))),
+      card(pct(r$none_pct), sprintf("Not covered (%s)", format(r$none, big.mark = ","))))
   })
 
-  ver_const_table_data <- reactive({
-    x <- ver_const_data()
-    req(x)
-    s <- verification_scores(x)
-    nm <- wh_names()
-    out <- merge(s, nm, by = "constituency_id", all.x = TRUE, sort = FALSE)
-    out[is.na(constituency_name), constituency_name := constituency_id]
-    out[order(-forecast_days, constituency_name),
-        .(Constituency = constituency_name, MP = fifelse(is.na(mp_name), "(vacant or unmatched)", mp_name),
-          `Days forecast` = forecast_days, Hits = hits, `False alarms` = false_alarms, Misses = misses,
-          `Hit rate` = hit_rate, Precision = precision)]
+  output$cov_shares <- DT::renderDataTable({
+    s <- cov_shares_data()
+    tbl <- s[, .(`Polygon at or above` = c("Very Low", "Low", "Medium", "High")[threshold], Warnings = total,
+                 Before = before_pct, `Same day` = same_day_pct, `Later days only` = later_pct, `Not covered` = none_pct,
+                 `Covered on the issue day` = covered_pct)]
+    DT::datatable(tbl, rownames = FALSE, selection = "none", options = list(dom = "t", ordering = FALSE)) |>
+      DT::formatPercentage(c("Before", "Same day", "Later days only", "Not covered", "Covered on the issue day"), digits = 0) |>
+      DT::formatRound("Warnings", digits = 0)
   })
-
-  output$ver_const_table <- DT::renderDataTable({
-    tbl <- ver_const_table_data()
-    DT::datatable(tbl, rownames = FALSE, selection = "none",
-                  options = list(pageLength = 25, scrollX = TRUE, dom = "ftip",
-                                 language = list(info = "Showing _START_ to _END_ of _TOTAL_ constituencies",
-                                                 emptyTable = "Nothing forecast or in force at this lead in this period."))) |>
-      DT::formatPercentage(ver_pct_cols, digits = 0)
-  })
-
-  output$download_verification <- downloadHandler(
-    filename = function() sprintf("forecast_vs_warnings_lead%s_%s.csv", input$ver_lead, format(Sys.time(), "%Y%m%d_%H%M")),
-    content  = function(file) data.table::fwrite(ver_const_table_data(), file)
-  )
 
   if (requireNamespace("plotly", quietly = TRUE)) {
-    output$ver_plot <- plotly::renderPlotly({
-      x <- ver_lead_data()
-      req(x, nrow(x) > 0L)
-      s <- verification_scores(x)
-      fig <- plotly::plot_ly(s, x = ~paste("Lead", lead_day))
-      fig <- plotly::add_bars(fig, y = ~hit_rate, name = "Hit rate", marker = list(color = APP_ALERT_HEX),
-                              hovertemplate = "%{y:.0%} of days it happened were forecast<extra>Hit rate</extra>")
-      fig <- plotly::add_bars(fig, y = ~precision, name = "Precision", marker = list(color = APP_WARNING_HEX),
-                              hovertemplate = "%{y:.0%} of days forecast had it happen<extra>Precision</extra>")
-      app_plot_style(fig, height = 300, barmode = "group", hovermode = "x unified",
-                     xaxis = app_plot_axis(),
-                     yaxis = app_plot_axis("Share of days", grid = TRUE, range = c(0, 1.02), tickformat = ".0%", dtick = 0.25),
-                     margin = list(t = 40, l = 60, r = 20))
+    output$cov_plot <- plotly::renderPlotly({
+      s <- cov_shares_data()
+      req(nrow(s) > 0L, any(s$total > 0L))
+      lab <- c("Very Low", "Low", "Medium", "High")[s$threshold]
+      cols <- c(before = APP_PALETTE$navy, same_day = APP_PALETTE$bright, later = APP_PALETTE$ice, none = APP_PALETTE$line_strong)
+      fig <- plotly::plot_ly(y = factor(lab, levels = rev(lab)), orientation = "h")
+      for (cat in COVERAGE_CATEGORIES) {
+        fig <- plotly::add_bars(fig, x = s[[paste0(cat, "_pct")]], name = COVERAGE_NAMES[[cat]], marker = list(color = cols[[cat]]),
+                                hovertemplate = paste0("%{x:.0%} of warnings<extra>", COVERAGE_NAMES[[cat]], "</extra>"))
+      }
+      app_plot_style(fig, height = 260, barmode = "stack", hovermode = "y unified",
+                     xaxis = app_plot_axis(tickformat = ".0%", range = c(0, 1), dtick = 0.25, grid = TRUE),
+                     yaxis = app_plot_axis("Polygon at or above"),
+                     margin = list(t = 40, l = 110, r = 20))
     })
   }
+
+  cov_table_data <- reactive({
+    x <- cov_list()
+    req(x)
+    if (nrow(x) == 0L) return(data.table())
+    x <- as.data.table(x)
+    rank <- as.integer(input$cov_rank)
+    x[, `:=`(cat = coverage_category(issue_date, first_cover, later_rank, rank), label = coverage_label(issue_date, first_cover, later_rank, rank))]
+    x[, .(Area = ea_area_name, Code = ea_area_code,
+          Type = fifelse(area_type == "flood_alert", "Flood alert", "Flood warning"),
+          Issued = format(as.POSIXct(start_time, tz = "UTC", tryFormats = c("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S")), "%d %b %Y %H:%M"),
+          `Highest level` = level_label(peak_level),
+          `FGS coverage` = label,
+          `Earliest statement` = fifelse(is.na(first_cover), "", format(as.Date(first_cover), "%d %b %Y")),
+          `Highest FGS risk` = RANK_LABELS[pmin(pmax(as.integer(max_rank), 0L, na.rm = TRUE), 4L) + 1L],
+          `Flood sources` = fifelse(is.na(sources) | !nzchar(sources), "", gsub(",", ", ", sources)),
+          cat = cat, start_raw = start_time, end_raw = end_time, stale = as.logical(stale_open))]
+  })
+
+  output$cov_list_note <- renderUI({
+    x <- cov_list()
+    if (!is.null(x) && nrow(x) >= COV_LIST_LIMIT) {
+      tags$p(class = "text-muted", sprintf("Showing the newest %s warnings. Narrow the period or the kind to see the rest. The shares above use every warning.", format(COV_LIST_LIMIT, big.mark = ",")))
+    } else NULL
+  })
+
+  output$cov_table <- DT::renderDataTable({
+    tbl <- cov_table_data()
+    shown <- c("Area", "Code", "Type", "Issued", "Highest level", "FGS coverage", "Earliest statement", "Highest FGS risk", "Flood sources")
+    if (nrow(tbl) == 0L) {
+      return(DT::datatable(data.frame(Note = "No alerts or warnings were issued in this period."), rownames = FALSE, selection = "none", options = list(dom = "t")))
+    }
+    hidden <- match(c("cat", "start_raw", "end_raw", "stale"), names(tbl)) - 1L
+    DT::datatable(tbl, rownames = FALSE, selection = "single",
+                  options = list(pageLength = 15, scrollX = TRUE, dom = "ftip", order = list(),
+                                 columnDefs = list(list(visible = FALSE, targets = hidden)),
+                                 language = list(info = "Showing _START_ to _END_ of _TOTAL_ warnings"))) |>
+      DT::formatStyle("FGS coverage", valueColumns = "cat",
+                      backgroundColor = DT::styleEqual(COVERAGE_CATEGORIES, c(APP_PALETTE$ice, APP_PALETTE$tint, "#FFFFFF", "#FFFFFF")),
+                      fontWeight = DT::styleEqual(COVERAGE_CATEGORIES, c("600", "400", "400", "400")),
+                      color = DT::styleEqual(COVERAGE_CATEGORIES, c(APP_PALETTE$navy, APP_PALETTE$ink, APP_PALETTE$ink, APP_PALETTE$magenta)))
+  })
+
+  cov_selected <- reactive({
+    row <- input$cov_table_rows_selected
+    if (is.null(row)) return(NULL)
+    tbl <- cov_table_data()
+    if (row > nrow(tbl)) NULL else tbl[row]
+  })
+
+  # The statements behind the selected warning: every one that put a polygon over its area for a date it was in force.
+  cov_detail_data <- reactive({
+    w <- cov_selected()
+    req(w)
+    start <- as.Date(substr(w$start_raw, 1L, 10L))
+    end <- if (is.na(w$end_raw) || !nzchar(w$end_raw)) (if (isTRUE(w$stale)) start else Sys.Date()) else as.Date(substr(w$end_raw, 1L, 10L))
+    end <- min(max(end, start), start + 59L)
+    d <- safe_fetch(fetch_coverage_detail, w$Code, start, end)
+    if (is.null(d)) return(NULL)
+    d <- as.data.table(d)
+    if (nrow(d) == 0L) return(d)
+    d[, `:=`(day = as.Date(substr(issued_at, 1L, 10L)))]
+    issued_day <- as.Date(substr(w$start_raw, 1L, 10L))
+    d[, .(`Statement issued` = format(as.POSIXct(issued_at, tz = "UTC", tryFormats = c("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d")), "%d %b %Y %H:%M"),
+          `Compared with the warning` = fifelse(day < issued_day, "Before", fifelse(day == issued_day, "Same day", "After")),
+          Timing = relative_timing(issued_at, w$start_raw),
+          `For forecast date` = format(as.Date(substr(forecast_date, 1L, 10L)), "%a %d %b"),
+          Covers = fifelse(as.Date(substr(forecast_date, 1L, 10L)) == issued_day, "The issue day", "A later day"),
+          Source = tools::toTitleCase(gsub("_", " ", source)), Risk = risk_level,
+          Impact = impact_label, Likelihood = likelihood_label,
+          Overlap = fifelse(is.na(intersection_pct), "linked", sprintf("%.0f%%", 100 * as.numeric(intersection_pct))),
+          Link = fifelse(is.na(link_type) | link_type == "intersects", "overlaps the area", "through the parent alert area"))]
+  })
+
+  output$cov_detail_title <- renderUI({
+    w <- cov_selected()
+    if (is.null(w)) return(tags$p(class = "text-muted", "Select a warning to see the FGS statements that covered its area."))
+    tags$h6(sprintf("%s (%s), %s: %s", w$Area, w$Code, w$Issued, w$`FGS coverage`))
+  })
+
+  output$cov_detail <- DT::renderDataTable({
+    req(cov_selected())
+    d <- cov_detail_data()
+    if (is.null(d)) return(DT::datatable(data.frame(Note = "The statements could not be loaded."), rownames = FALSE, selection = "none", options = list(dom = "t")))
+    if (nrow(d) == 0L) return(DT::datatable(data.frame(Note = "No FGS polygon covered this area on any date the warning was in force."), rownames = FALSE, selection = "none", options = list(dom = "t")))
+    DT::datatable(d, rownames = FALSE, selection = "none", options = list(pageLength = 10, scrollX = TRUE, dom = "tip", order = list()))
+  })
+
+  output$download_coverage <- downloadHandler(
+    filename = function() sprintf("warnings_vs_fgs_%s.csv", format(Sys.time(), "%Y%m%d_%H%M")),
+    content  = function(file) {
+      tbl <- cov_table_data()
+      data.table::fwrite(if (nrow(tbl)) tbl[, c("Area", "Code", "Type", "Issued", "Highest level", "FGS coverage", "Earliest statement", "Highest FGS risk", "Flood sources")] else tbl, file)
+    }
+  )
 
   # ---------------------------------------------------------------------------
   # Hydrometrics tab (port of explore/Explore_live_readings).

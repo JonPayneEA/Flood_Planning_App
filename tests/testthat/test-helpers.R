@@ -627,44 +627,59 @@ test_that("long windows are bucketed to about 1,500 points, and short ones are n
 })
 
 
-# ---- Forecast against warnings -----------------------------------------------------
 
-ver_fake <- function() data.table(
-  constituency_id = c("E14000001", "E14000002", "E14000003", "E14000004", "W07000001", "E14000001"),
-  forecast_date = as.Date(c("2026-10-10", "2026-10-10", "2026-10-10", "2026-10-10", "2026-10-10", "2026-09-01")),
-  lead_day = c(1L, 1L, 1L, 1L, 1L, 2L),
-  forecast_rank = c(3L, 4L, 0L, 2L, 3L, 3L),
-  alerts   = c(0L, 0L, 1L, 0L, 0L, 0L),
-  warnings = c(1L, 0L, 0L, 1L, 1L, 0L),
-  severe   = c(0L, 0L, 0L, 0L, 0L, 0L))
+# ---- Warnings against the FGS ------------------------------------------------------
 
-test_that("hits, false alarms and misses are counted for the chosen threshold and outcome", {
-  v <- ver_fake()
-  c1 <- verification_counts(v, 3, "any", "2026-10-01", "2026-10-31", by = "lead_day")
-  expect_equal(c1$lead_day, 1L)
-  expect_equal(c(c1$hits, c1$false_alarms, c1$misses), c(2L, 1L, 2L))      # c1 and W hit, c2 false alarm, c3 and c4 miss
-  c2 <- verification_counts(v, 2, "any", "2026-10-01", "2026-10-31", by = "lead_day")
-  expect_equal(c(c2$hits, c2$misses), c(3L, 1L))                            # a lower threshold turns c4's miss into a hit
-  w <- verification_counts(v, 3, "warnings", "2026-10-01", "2026-10-31", by = "lead_day")
-  expect_equal(c(w$hits, w$false_alarms, w$misses), c(2L, 1L, 1L))         # the alert-only day no longer happened
-  a <- verification_counts(v, 3, "alerts", "2026-10-01", "2026-10-31", by = "lead_day")
-  expect_equal(c(a$hits, a$false_alarms, a$misses), c(0L, 3L, 1L))
+cov_fake <- function() data.table(
+  episode_id = paste0("e", 1:7),
+  area_type = c("flood_warning", "flood_warning", "flood_alert", "flood_warning", "flood_alert", "flood_warning", "flood_warning"),
+  had_severe = c(FALSE, TRUE, FALSE, FALSE, FALSE, FALSE, FALSE),
+  issue_date = as.Date(c("2025-03-10", "2025-03-10", "2025-03-10", "2025-03-10", "2025-03-10", "2024-01-01", "2025-03-10")),
+  first_cover_ge1 = as.Date(c("2025-03-07", "2025-03-10", NA, NA, "2025-03-09", "2024-01-01", NA)),
+  first_cover_ge2 = as.Date(c("2025-03-08", "2025-03-10", NA, NA, NA, "2024-01-01", NA)),
+  first_cover_ge3 = as.Date(c("2025-03-09", NA, NA, NA, NA, NA, NA)),
+  first_cover_ge4 = as.Date(c(NA, NA, NA, NA, NA, NA, NA)),
+  later_rank = c(4L, 3L, 2L, 0L, 0L, 0L, 3L))
+
+test_that("a warning is before, same day, later days only or not covered by its issue day", {
+  x <- cov_fake()
+  expect_equal(coverage_category(x$issue_date, x$first_cover_ge1, x$later_rank, 1), c("before", "same_day", "later", "none", "before", "same_day", "later"))
+  expect_equal(coverage_lead_days(x$issue_date, x$first_cover_ge1), c(3L, NA, NA, NA, 1L, NA, NA))
+  expect_equal(coverage_label(x$issue_date, x$first_cover_ge1, x$later_rank, 1)[c(1, 2, 3, 4, 5)],
+               c("Before (3 days)", "Same day", "Later days only", "Not covered", "Before (1 day)"))
+  # At Medium, the same-day polygon was only Low or Very Low on the issue day, but a Medium polygon came on a later day.
+  expect_equal(coverage_category(x$issue_date, x$first_cover_ge3, x$later_rank, 3)[1:3], c("before", "later", "none"))
+  expect_equal(coverage_category(x$issue_date, x$first_cover_ge4, x$later_rank, 4)[1:2], c("later", "none"))
 })
 
-test_that("the period, the nations and the lead day narrow the counts", {
-  v <- ver_fake()
-  expect_equal(verification_counts(v, 3, "any", "2026-09-01", "2026-09-30", by = "lead_day")$lead_day, 2L)
-  e <- verification_counts(v, 3, "any", "2026-10-01", "2026-10-31", nations = "E14", by = "lead_day")
-  expect_equal(c(e$hits, e$false_alarms, e$misses), c(1L, 1L, 2L))        # the Welsh hit is out
-  b <- verification_counts(v, 3, "any", "2026-10-01", "2026-10-31", by = "constituency_id", lead = 1)
-  expect_equal(b$constituency_id[b$hits == 1L], c("E14000001", "W07000001"))
-  expect_equal(nrow(verification_counts(v, 3, "any", "2020-01-01", "2020-12-31", by = "lead_day")), 0L)
-  expect_error(verification_counts(v, 3, "everything", "2026-10-01", "2026-10-31"))     # only the four outcomes
+test_that("the summary counts each threshold, the period and the kind of warning", {
+  x <- cov_fake()
+  s <- coverage_summary_counts(x, "2025-01-01", "2025-12-31", "any")
+  at1 <- s[threshold == 1L]
+  expect_equal(sum(at1$n), 6L)                                           # the 2024 warning is outside the period
+  expect_equal(at1[category == "before", sum(n)], 2L)
+  expect_equal(at1[category == "before" & lead_days == 3L, n], 1L)
+  expect_equal(at1[category == "later", sum(n)], 2L)
+  w <- coverage_summary_counts(x, "2025-01-01", "2025-12-31", "warnings")
+  expect_equal(sum(w[threshold == 1L]$n), 4L)
+  sv <- coverage_summary_counts(x, "2025-01-01", "2025-12-31", "severe")
+  expect_equal(sum(sv[threshold == 1L]$n), 1L)
+  expect_error(coverage_summary_counts(x, "2025-01-01", "2025-12-31", "everything"))
+  expect_equal(nrow(coverage_summary_counts(x, "2020-01-01", "2020-12-31")), 0L)
 })
 
-test_that("hit rate and precision divide by what could have been right, and are blank where nothing does", {
-  s <- verification_scores(data.table(lead_day = 1:2, hits = c(2L, 0L), false_alarms = c(1L, 0L), misses = c(2L, 0L)))
-  expect_equal(c(s$forecast_days[1], s$event_days[1]), c(3L, 4L))
-  expect_equal(c(s$hit_rate[1], s$precision[1]), c(0.5, 2 / 3))
-  expect_true(is.na(s$hit_rate[2]) && is.na(s$precision[2]))
+test_that("shares are of all warnings in the period, and covered on the issue day is before plus same day", {
+  s <- coverage_shares(coverage_summary_counts(cov_fake(), "2025-01-01", "2025-12-31"))
+  r1 <- s[threshold == 1L]
+  expect_equal(c(r1$before, r1$same_day, r1$later, r1$none, r1$total), c(2, 1, 2, 1, 6))
+  expect_equal(r1$covered_pct, 3 / 6)
+  expect_equal(s[threshold == 4L]$later_pct, 1 / 6)                       # only e1 had a High polygon, and on a later day
+  expect_true(is.na(coverage_shares(data.table(threshold = integer(), category = character(), lead_days = integer(), n = integer()))$covered_pct[1]))
+})
+
+test_that("timing says how long before or after the warning a statement was issued", {
+  expect_equal(relative_timing("2026-10-10T09:30:00", "2026-10-10T14:00:00"), "4 h 30 min before")
+  expect_equal(relative_timing("2026-10-07T12:00:00", "2026-10-10T14:00:00"), "3 d 2 h before")
+  expect_equal(relative_timing("2026-10-11T09:30:00", "2026-10-10T14:00:00"), "19 h 30 min after")
+  expect_equal(relative_timing("2026-10-10T14:00:00", "2026-10-10T14:00:00"), "at the same time")
 })

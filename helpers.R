@@ -374,61 +374,96 @@ warning_area_counts <- function(h, constituency_id) {
 
 
 # -----------------------------------------------------------------------------
-# Forecast against warnings (fgs_forecast_verification, job 26)
+# Warnings against the FGS (ea_warning_fgs_coverage, job 26)
 #
-# One row per constituency, forecast date and lead day (lead 1 is the statement issued on the
-# day, lead 5 the one issued four days before) where something was forecast or in force:
-# forecast_rank 0 to 4, and the areas with an alert, a warning and a severe warning in force.
-# Sparse: a date with nothing forecast and nothing in force has no row.
-#
-# For a chosen forecast threshold and a chosen outcome:
-#   hit          forecast at or above the threshold, and it happened
-#   false alarm  forecast at or above the threshold, and it did not
-#   miss         below the threshold (or not forecast), and it happened
-# Correct quiet forecasts are not rows, so they cannot be counted and are not claimed.
+# Each row is one alert or warning. The reference is the day it was issued: where there is an impact
+# the FGS keeps a coloured polygon over the area for the whole warning, so polygons on later days say
+# nothing about timing. first_cover_ge1 to first_cover_ge4 are the days the earliest FGS statement was
+# issued whose polygon over the warning's area FOR THE ISSUE DAY was at risk rank 1 (Very Low) to 4
+# (High) or higher, NA where none was. later_rank is the worst rank over the later days it was in force.
+#   before    that statement was issued on an earlier day: the FGS gave notice
+#   same_day  it was issued on the issue day
+#   later     no polygon covered the issue day at that rank, but one covered a later day in force
+#   none      no polygon covered the area on any day the warning was in force
 # -----------------------------------------------------------------------------
 
-VER_OUTCOMES <- c("Alert or warning" = "any", "Flood alert" = "alerts", "Flood warning" = "warnings",
-                  "Severe flood warning" = "severe")
+COVERAGE_RISKS <- c("Any polygon (Very Low or above)" = 1L, "Low or above" = 2L, "Medium or above" = 3L, "High" = 4L)
+COVERAGE_TYPES <- c("Alerts and warnings" = "any", "Flood alerts" = "alerts", "Flood warnings" = "warnings",
+                    "Severe flood warnings" = "severe")
+COVERAGE_CATEGORIES <- c("before", "same_day", "later", "none")
+COVERAGE_NAMES <- c(before = "Before", same_day = "Same day", later = "Later days only", none = "Not covered")
 
-# SQL for "it happened" under the chosen outcome. Only the four known outcomes can reach the query.
-verification_happened_sql <- function(outcome) {
-  switch(match.arg(outcome, unname(VER_OUTCOMES)),
-         any = "(alerts + warnings) > 0", alerts = "alerts > 0", warnings = "warnings > 0", severe = "severe > 0")
+# SQL for the chosen kind of warning. Only the four known types can reach a query.
+coverage_type_sql <- function(type) {
+  switch(match.arg(type, unname(COVERAGE_TYPES)),
+         any = "1 = 1", alerts = "area_type = 'flood_alert'", warnings = "area_type = 'flood_warning'", severe = "had_severe = TRUE")
 }
 
-verification_happened <- function(v, outcome) {
-  switch(match.arg(outcome, unname(VER_OUTCOMES)),
-         any = (v$alerts + v$warnings) > 0, alerts = v$alerts > 0, warnings = v$warnings > 0, severe = v$severe > 0)
+coverage_type_rows <- function(x, type) {
+  switch(match.arg(type, unname(COVERAGE_TYPES)),
+         any = rep(TRUE, nrow(x)), alerts = x$area_type == "flood_alert", warnings = x$area_type == "flood_warning",
+         severe = as.logical(x$had_severe) %in% TRUE)
 }
 
-# The same counts the warehouse query gives, in R: used by the demo and by the tests, which hold the
-# query to the same answer. by is "lead_day" or "constituency_id"; lead limits to one lead day.
-verification_counts <- function(v, min_rank, outcome, from, to, nations = NULL, by = "lead_day", lead = NULL) {
-  x <- v[as.Date(forecast_date) >= as.Date(from) & as.Date(forecast_date) <= as.Date(to)]
-  if (length(nations)) x <- x[in_nations(constituency_id, nations)]
-  if (!is.null(lead)) x <- x[lead_day == as.integer(lead)]
-  empty <- data.table(grp = if (by == "lead_day") integer() else character(),
-                      hits = integer(), false_alarms = integer(), misses = integer())
-  setnames(empty, "grp", by)
-  if (nrow(x) == 0L) return(empty)
-  hit <- verification_happened(x, outcome)
-  fc  <- x$forecast_rank >= as.integer(min_rank)
-  x[, `:=`(h = fc & hit, f = fc & !hit, m = !fc & hit)]
-  out <- x[, .(hits = sum(h), false_alarms = sum(f), misses = sum(m)), by = c(by)]
-  out[, c("hits", "false_alarms", "misses") := lapply(.SD, as.integer), .SDcols = c("hits", "false_alarms", "misses")]
-  setorderv(out, by)
-  out[hits + false_alarms + misses > 0L]
+coverage_category <- function(issue_date, first_cover, later_rank = 0L, rank = 1L) {
+  i <- as.Date(issue_date); f <- as.Date(first_cover)
+  lr <- suppressWarnings(as.integer(later_rank))
+  out <- ifelse(!is.na(f), ifelse(f < i, "before", "same_day"), ifelse(!is.na(lr) & lr >= as.integer(rank), "later", "none"))
+  out[is.na(i)] <- NA_character_
+  out
 }
 
-# Adds the days forecast, the days it happened, the hit rate (of the days it happened, how many
-# were forecast) and the precision (of the days forecast, how many happened). NA where there is nothing to divide.
-verification_scores <- function(x) {
-  x <- copy(x)
-  x[, `:=`(forecast_days = hits + false_alarms, event_days = hits + misses)]
-  x[, `:=`(hit_rate  = ifelse(event_days > 0L, hits / event_days, NA_real_),
-           precision = ifelse(forecast_days > 0L, hits / forecast_days, NA_real_))]
-  x[]
+# Whole days the covering statement was issued before the warning (NA unless it was before).
+coverage_lead_days <- function(issue_date, first_cover) {
+  d <- as.integer(as.Date(issue_date) - as.Date(first_cover))
+  ifelse(!is.na(d) & d > 0L, d, NA_integer_)
+}
+
+# "Before (3 days)", "Same day", "Later days only", "Not covered".
+coverage_label <- function(issue_date, first_cover, later_rank = 0L, rank = 1L) {
+  cat <- coverage_category(issue_date, first_cover, later_rank, rank)
+  d <- as.integer(as.Date(issue_date) - as.Date(first_cover))
+  plural <- function(n) paste0(n, if (n == 1L) " day" else " days")
+  vapply(seq_along(cat), function(k) {
+    switch(if (is.na(cat[k])) "none" else cat[k],
+           before = paste0("Before (", plural(d[k]), ")"), same_day = "Same day", later = "Later days only", none = "Not covered")
+  }, character(1))
+}
+
+# The counts the warehouse query gives, in R: used by the demo and the tests, which hold the query to the
+# same answer. One row per risk threshold, category and (for "before") lead in days.
+coverage_summary_counts <- function(x, from, to, type = "any") {
+  x <- x[as.Date(issue_date) >= as.Date(from) & as.Date(issue_date) <= as.Date(to)]
+  x <- x[coverage_type_rows(x, type)]
+  out <- rbindlist(lapply(1:4, function(r) {
+    col <- x[[paste0("first_cover_ge", r)]]
+    d <- data.table(category = coverage_category(x$issue_date, col, x$later_rank, r), lead_days = coverage_lead_days(x$issue_date, col))
+    d[, .(n = .N), by = .(category, lead_days)][, threshold := r]
+  }))
+  if (nrow(out) == 0L) return(data.table(threshold = integer(), category = character(), lead_days = integer(), n = integer()))
+  out[, n := as.integer(n)]
+  out[, .(threshold, category, lead_days, n)]
+}
+
+# One row per threshold with the number and share in each category.
+coverage_shares <- function(counts) {
+  out <- data.table(threshold = 1:4)
+  for (cat in COVERAGE_CATEGORIES) {
+    out[[cat]] <- vapply(1:4, function(r) sum(counts$n[counts$threshold == r & counts$category == cat]), numeric(1))
+  }
+  out[, total := before + same_day + later + none]
+  for (cat in COVERAGE_CATEGORIES) out[[paste0(cat, "_pct")]] <- ifelse(out$total > 0, out[[cat]] / out$total, NA_real_)
+  out[, covered_pct := ifelse(total > 0, (before + same_day) / total, NA_real_)]     # covered on the issue day
+  out[]
+}
+
+# How long before or after the warning a statement was issued: "3 d 2 h before", "4 h after".
+relative_timing <- function(issued_at, warning_time) {
+  a <- as.POSIXct(issued_at, tz = "UTC", tryFormats = c("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"))
+  w <- as.POSIXct(warning_time, tz = "UTC", tryFormats = c("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"))
+  m <- as.numeric(difftime(w, a, units = "mins"))
+  ifelse(is.na(m), "", ifelse(abs(m) < 1, "at the same time",
+         paste(duration_label(abs(m)), ifelse(m > 0, "before", "after"))))
 }
 
 
@@ -942,7 +977,7 @@ empty_situation_message <- function(ranks, floor, other_filters = FALSE) {
 
 PIPELINE_TABLE_JOBS <- c(
   fgs_constituency_changes = 18L, constituency_flood_situation = 19L, mp_briefing_drafts = 20L,
-  fgs_constituency_exposure = 21L, pipeline_health = 22L, ea_warning_episodes = 25L, fgs_forecast_verification = 26L, ea_rt_measure_register = 9L, ea_rt_readings_all = 23L, ea_rt_readings_bronze = 10L, fgs_constituency_mp_contacts = 14L,
+  fgs_constituency_exposure = 21L, pipeline_health = 22L, ea_warning_episodes = 25L, ea_warning_fgs_coverage = 26L, ea_rt_measure_register = 9L, ea_rt_readings_all = 23L, ea_rt_readings_bronze = 10L, fgs_constituency_mp_contacts = 14L,
   flood_warning_constituency_contacts = 13L, fgs_constituency_intersections = 7L,
   fgs_ea_area_intersections = 7L, ea_area_constituency_lookup = 6L)
 

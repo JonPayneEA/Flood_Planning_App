@@ -128,23 +128,24 @@ test_that("a long readings window is summarised in the warehouse, rainfall total
 })
 
 
-test_that("the verification query holds the threshold, the outcome, the period, the nations and the lead, and nothing else", {
+
+test_that("the coverage queries take the period and kind, name the threshold column, and nothing else", {
   d <- load_data_layer()
-  suppressWarnings(d$fetch_verification_by_constituency(3L, "warnings", as.Date("2025-01-01"), as.Date("2025-12-31"), "E14", 2L))
+  suppressWarnings(d$fetch_coverage_summary(as.Date("2025-01-01"), as.Date("2025-12-31"), "severe"))
   q <- gsub("\\s+", " ", d$captured[length(d$captured)])
-  expect_match(q, "cat\\.sch\\.fgs_forecast_verification")
-  expect_match(q, "forecast_rank >= 3 AND warnings > 0")
-  expect_match(q, "forecast_rank >= 3 AND NOT \\(warnings > 0\\)")
-  expect_match(q, "forecast_rank < 3 AND warnings > 0")
-  expect_match(q, "BETWEEN '2025-01-01' AND '2025-12-31'")
-  expect_match(q, "lead_day = 2"); expect_match(q, "GROUP BY constituency_id")
-  expect_match(q, "substr\\(constituency_id, 1, 3\\) IN \\('E14'\\)")
-  suppressWarnings(d$fetch_verification_by_lead(4L, "any", as.Date("2025-01-01"), as.Date("2025-12-31")))
+  expect_match(q, "cat\\.sch\\.ea_warning_fgs_coverage")
+  expect_equal(lengths(regmatches(q, gregexpr("UNION ALL", q))), 3L)             # one block per risk threshold
+  expect_match(q, "first_cover_ge4 < issue_date"); expect_match(q, "later_rank >= 4"); expect_match(q, "had_severe = TRUE")
+  expect_match(q, "issue_date BETWEEN '2025-01-01' AND '2025-12-31'")
+  expect_error(d$fetch_coverage_summary(as.Date("2025-01-01"), as.Date("2025-12-31"), "all'; DROP TABLE x; --"))
+  suppressWarnings(d$fetch_coverage_warnings(as.Date("2025-01-01"), as.Date("2025-12-31"), "alerts", 3L, 500L))
   q2 <- gsub("\\s+", " ", d$captured[length(d$captured)])
-  expect_match(q2, "\\(alerts \\+ warnings\\) > 0"); expect_match(q2, "GROUP BY lead_day")
-  expect_false(grepl("lead_day =", q2, fixed = TRUE))
-  expect_error(d$fetch_verification_by_lead(3L, "any'; DROP TABLE x; --", as.Date("2025-01-01"), as.Date("2025-12-31")))
-  suppressWarnings(d$fetch_verification_by_lead(3L, "any", as.Date("2025-01-01"), as.Date("2025-12-31"), "E14'); DROP TABLE x; --"))
-  q3 <- d$captured[length(d$captured)]
-  expect_false(grepl(";", q3, fixed = TRUE)); expect_false(grepl("--", q3, fixed = TRUE))
+  expect_match(q2, "first_cover_ge3 AS first_cover"); expect_match(q2, "area_type = 'flood_alert'"); expect_match(q2, "LIMIT 500")
+  suppressWarnings(d$fetch_coverage_warnings(as.Date("2025-01-01"), as.Date("2025-12-31"), "any", 99L))
+  expect_match(d$captured[length(d$captured)], "first_cover_ge4 AS first_cover")   # a threshold outside 1 to 4 is held to it
+  suppressWarnings(d$fetch_coverage_detail("011FWF'; DROP TABLE x; --", as.Date("2025-03-10"), as.Date("2025-03-12")))
+  q3 <- gsub("\\s+", " ", d$captured[length(d$captured)])
+  expect_match(q3, "i.ea_area_code = '011FWFDROPTABLEx--'")
+  expect_false(grepl(";", q3, fixed = TRUE))
+  expect_match(q3, "i.geometry_source = 'risk_areas'"); expect_match(q3, "BETWEEN '2025-03-10' AND '2025-03-12'")
 })
