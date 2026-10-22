@@ -48,12 +48,12 @@ GUIDE_TABLES <- data.frame(
             "ea_area_constituency_lookup", "mp_contact_details",
             "fgs_constituency_changes", "fgs_changes_log", "constituency_flood_situation", "mp_briefing_drafts",
             "fgs_constituency_exposure", "pipeline_health", "ea_warning_episodes",
-            "ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_readings_bronze", "ea_warning_fgs_coverage"),
-  notebook = c("01", "01", "07", "07", "03", "03", "05", "06", "04", "18", "18", "19", "20", "21", "22", "25", "09", "23", "10", "26"),
+            "ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_readings_bronze", "ea_warning_fgs_coverage", "ea_rt_measures_mapped"),
+  notebook = c("01", "01", "07", "07", "03", "03", "05", "06", "04", "18", "18", "19", "20", "21", "22", "25", "09", "23", "10", "26", "16"),
   refresh = c("Each FGS issue or amendment", "Each FGS issue or amendment", "Each FGS issue", "Each FGS issue",
               "Weekly", "Weekly", "Quarterly, or after an election", "Weekly and quarterly", "Weekly",
               "Every poll", "Every poll", "Every poll", "Every poll", "Daily", "Every poll", "Every poll",
-              "Weekly", "Every 15 minutes", "Daily", "Daily"),
+              "Weekly", "Every 15 minutes", "Daily", "Daily", "When the mapping file changes"),
   holds = c("One row per statement: the headline and the forecast text.",
             "One row per risk polygon, flood source and day, with impact, likelihood and risk level.",
             "Each FGS shape that overlaps an EA flood warning or alert area.",
@@ -73,7 +73,8 @@ GUIDE_TABLES <- data.frame(
             "One row per measure at an Environment Agency gauge: what it measures, the station, river and area.",
             "Real-time readings, the daily archive and the live tail joined as one series.",
             "The daily archive of readings. Its last day marks where the live tail begins.",
-            "Each alert and warning, and whether and when an FGS polygon covered it."),
+            "Each alert and warning, and whether and when an FGS polygon covered it.",
+            "The measure register with each measure's real gauge name, FFFS id and WISKI id, where the telemetry mapping matched it. Optional."),
   stringsAsFactors = FALSE
 )
 
@@ -373,9 +374,9 @@ guide_products <- function(s) {
     list(
       id = "hydrometrics", title = "Hydrometrics", where = "Hydrometrics",
       answers = "What have river levels, flows and rainfall been doing at the Environment Agency's gauges?",
-      tables = c("ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_readings_bronze"),
+      tables = c("ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_readings_bronze", "ea_rt_measures_mapped"),
       steps = c(
-        "The measure register lists every measure: a level, flow or rainfall series at a station. The four drop-downs (EA area, river, parameter, station) narrow each other, so a choice never leads to an empty list.",
+        "The measure register lists every measure: a level, flow or rainfall series at a station. Where the telemetry mapping has matched a measure, a rain gauge the API calls only \"Rainfall station\" takes its real name, and the label carries its WISKI and FFFS ids, so you can search by either. The four drop-downs (EA area, river, parameter, station) narrow each other, so a choice never leads to an empty list.",
         "Choose up to eight measures and how far back to look, from 1 day to everything held. Readings are fetched only for those measures and that window, from one series that joins the daily archive to the live tail.",
         "Up to about 15 days every reading is drawn. Beyond that the warehouse summarises each measure to about 1,500 points, so a long window stays quick: level and flow are the mean of the readings in each point, and rainfall is the total. A short window shows the detail.",
         "Each unit gets its own panel, because metres and cubic metres a second do not share an axis.",

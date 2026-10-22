@@ -805,7 +805,8 @@ fetch_warning_episodes <- function(constituency_id) {
 # -----------------------------------------------------------------------------
 # Hydrometrics (Environment Agency real-time data)
 #
-# fetch_rt_register(): one row per measure (what is measured, where, on which river).
+# fetch_rt_register(): one row per measure (what is measured, where, on which river), with the real
+#   gauge name, FFFS id and WISKI id from ea_rt_measures_mapped where job 16 has built it.
 # fetch_rt_readings(): readings for chosen measures, the archive and the live tail as
 #   one series (job 23's ea_rt_readings_all), for the last `days` days. Measure URIs are
 #   reduced to URL characters before they reach the SQL.
@@ -813,7 +814,14 @@ fetch_warning_episodes <- function(constituency_id) {
 #   it are live and not yet archived (job 10).
 # -----------------------------------------------------------------------------
 
-fetch_rt_register <- function() db_query(sprintf("SELECT * FROM %s", TBL_RT_REGISTER))
+fetch_rt_register <- function() {
+  # The register with each measure's real gauge name, FFFS id and WISKI id (job 16) where that has been built.
+  # A missing view is not an error: the plain register is used and the generic names stay.
+  tryCatch(db_query(sprintf("SELECT * FROM %s", TBL_RT_MAPPED)), error = function(e) {
+    if (is.null(missing_table_info(conditionMessage(e)))) stop(e)
+    db_query(sprintf("SELECT * FROM %s", TBL_RT_REGISTER))
+  })
+}
 
 fetch_rt_readings <- function(measure_uris, days, sum_uris = character()) {
   clean <- function(x) { x <- gsub("[^A-Za-z0-9:/._#-]", "", as.character(x)); x[nzchar(x)] }
