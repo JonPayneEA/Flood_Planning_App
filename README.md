@@ -21,7 +21,8 @@ Tabs:
   from the Environment Agency real-time data, archive and live tail together,
   from one day back to everything held (long windows are summarised to about
   1,500 points per measure).
-  Needs the `plotly` R package.
+  Needs the `plotly` R package. Where FGS_Notebooks job 16 has built `ea_rt_measures_mapped`,
+  rain gauges show their real names and every label carries the WISKI and FFFS ids.
 - **Warning history**: for each constituency, how many flood alerts and flood
   warnings have been issued for areas inside it, with a period slider and a
   breakdown by area.
@@ -488,6 +489,7 @@ Pipeline products (FGS_Notebooks jobs 18 to 22), all plain tables:
 | `ea_warning_episodes` | Warning history tab: alerts and warnings issued per constituency, from notebook 25. |
 | `ea_warning_fgs_coverage` | Warnings vs FGS tab: each alert and warning, and whether and when an FGS polygon covered it. |
 | `ea_rt_measure_register`, `ea_rt_readings_all`, `ea_rt_readings_bronze` | Hydrometrics tab: the gauges, their readings (archive and live tail), and where the archive ends. |
+| `ea_rt_measures_mapped` | Hydrometrics tab, optional: the register with each measure's real gauge name, FFFS id and WISKI id (FGS_Notebooks job 16). Without it the plain register is used. |
 
 Each product is fetched defensively. If a table is missing or unreadable the
 view says so and the rest of the app carries on.

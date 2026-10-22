@@ -149,3 +149,19 @@ test_that("the coverage queries take the period and kind, name the threshold col
   expect_false(grepl(";", q3, fixed = TRUE))
   expect_match(q3, "i.geometry_source = 'risk_areas'"); expect_match(q3, "BETWEEN '2025-03-10' AND '2025-03-12'")
 })
+
+
+test_that("the register is read from the mapped view, and from the plain register if that view is not built", {
+  d <- load_data_layer(stub_query = FALSE)
+  seen <- character()
+  d$db_query <- function(sql) {
+    seen <<- c(seen, gsub("\\s+", " ", sql))
+    if (grepl("ea_rt_measures_mapped", sql, fixed = TRUE)) stop("[TABLE_OR_VIEW_NOT_FOUND] table or view `cat`.`sch`.`ea_rt_measures_mapped` cannot be found")
+    data.table(measure_uri = "m/1")
+  }
+  r <- d$fetch_rt_register()
+  expect_equal(r$measure_uri, "m/1")
+  expect_match(seen[1], "FROM cat\\.sch\\.ea_rt_measures_mapped"); expect_match(seen[2], "FROM cat\\.sch\\.ea_rt_measure_register")
+  d$db_query <- function(sql) stop("Failed to connect to warehouse")         # any other failure is still a failure
+  expect_error(d$fetch_rt_register(), "Failed to connect")
+})

@@ -698,6 +698,10 @@ demo_rt_register <- function() demo_memo("rt_register", {
   }))
   m[, `:=`(station_uri = paste0("http://demo.invalid/id/stations/", station_reference),
            measure_uri = paste0("http://demo.invalid/id/measures/", station_reference, "-", parameter, "-", period))]
+  # The telemetry mapping names the rain gauges the API calls "Rainfall station", and gives every mapped measure its ids.
+  m[, `:=`(gauge_name = fifelse(parameter == "rainfall", paste0(town, " RG"), NA_character_),
+           fffs_id = fifelse(station_reference %in% c("DM1001", "DM1002", "DM4001"), paste0("F", station_reference), NA_character_),
+           wiski_id = fifelse(station_reference %in% c("DM1001", "DM1002", "DM4001"), as.character(710000L + seq_len(.N)), NA_character_))]
   m[]
 })
 

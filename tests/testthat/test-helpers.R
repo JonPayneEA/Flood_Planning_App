@@ -683,3 +683,25 @@ test_that("timing says how long before or after the warning a statement was issu
   expect_equal(relative_timing("2026-10-11T09:30:00", "2026-10-10T14:00:00"), "19 h 30 min after")
   expect_equal(relative_timing("2026-10-10T14:00:00", "2026-10-10T14:00:00"), "at the same time")
 })
+
+
+test_that("a rain gauge the API calls only 'Rainfall station' takes its mapped name, and ids go on the label", {
+  reg <- data.table(
+    station_label = c("Rainfall station", "Rainfall station", "Aldwyn", "Aldwyn Gauge", NA),
+    station_reference = c("R1", "R2", "S1", "S2", "S3"), station_uri = c("u/R1", "u/R2", "u/S1", "u/S2", "u/S3"),
+    measure_uri = c("m/1", "m/2", "m/3", "m/4", "m/5"), parameter = c("rainfall", "rainfall", "level", "level", "rainfall"),
+    qualifier = "Gauge", unit_name = "mm",
+    gauge_name = c("Cwm Rheidol RG", NA, "Wrongly Named", NA, "Beer Quarry Lane RG"),
+    wiski_id = c("520455", NA, "713207", NA, NA), fffs_id = c("F1", NA, NA, NA, "F5"))
+  r <- rt_prepare_register(reg)
+  expect_equal(r$station[1], "Cwm Rheidol RG")                              # a generic name is replaced
+  expect_equal(r$station[2], "Rainfall station")                            # no mapped name: unchanged
+  expect_equal(r$station[3], "Aldwyn")                                      # a real API name is kept, not overridden
+  expect_equal(r$station[5], "Beer Quarry Lane RG")                         # a blank name takes the mapped one
+  expect_match(r$measure_label[1], "WISKI 520455 · FFFS F1$")
+  expect_match(r$measure_label[5], "· FFFS F5$"); expect_false(grepl("WISKI", r$measure_label[5], fixed = TRUE))
+  expect_false(grepl("WISKI|FFFS", r$measure_label[2]))
+  expect_equal(rt_generic_name(c("Rainfall station", "Rain gauge", "Aldwyn", "", NA)), c(TRUE, TRUE, FALSE, TRUE, TRUE))
+  # Without the mapping columns at all, the register still prepares.
+  expect_equal(nrow(rt_prepare_register(reg[, 1:7])), 5L)
+})

@@ -593,16 +593,27 @@ rt_disambiguate <- function(names, key, extras) {
   names
 }
 
+# TRUE for a station name that names no place: blank, or "Rainfall station" and its kind. Every rain gauge the
+# API calls that is told apart by the real gauge name when the telemetry mapping holds one.
+rt_generic_name <- function(x) {
+  t <- tolower(trimws(as.character(x)))
+  is.na(t) | !nzchar(t) | grepl("^(rainfall|rain|level|flow|river|groundwater)? ?(station|gauge|raingauge|rain gauge)$", t)
+}
+
 rt_prepare_register <- function(register) {
   r <- as.data.table(copy(register))
   for (col in c("station_label", "label", "station_reference", "station_uri", "measure_uri", "parameter", "qualifier",
-                "unit_name", "river_name", "ea_area_name", "period", "town", "catchment_name")) {
+                "unit_name", "river_name", "ea_area_name", "period", "town", "catchment_name",
+                "gauge_name", "fffs_id", "wiski_id")) {
     if (!(col %in% names(r))) r[, (col) := NA_character_]
     r[, (col) := as.character(get(col))]
   }
   if (nrow(r) == 0L) return(r[, `:=`(station = character(), measure_name = character(), measure_label = character())])
   st <- rt_text(r$station_label)
   st <- ifelse(nzchar(st), st, rt_text(r$label))
+  # The mapped gauge name replaces a name that names no place ("Rainfall station").
+  gauge <- rt_text(r$gauge_name)
+  st <- ifelse(rt_generic_name(st) & nzchar(gauge), gauge, st)
   st <- ifelse(nzchar(st), st, rt_text(r$station_reference))
   st <- ifelse(nzchar(st), st, "(unnamed station)")
   skey <- ifelse(nzchar(rt_text(r$station_uri)), rt_text(r$station_uri),
@@ -613,7 +624,11 @@ rt_prepare_register <- function(register) {
   unit  <- ifelse(nzchar(rt_text(r$unit_name)), paste0(" (", rt_text(r$unit_name), ")"), "")
   r[, measure_name := paste0(param, qual, unit)]
   mkey <- ifelse(nzchar(rt_text(r$measure_uri)), rt_text(r$measure_uri), as.character(seq_len(nrow(r))))
-  r[, measure_label := rt_disambiguate(paste0(station, ": ", measure_name), mkey, list(r$period))]
+  base <- paste0(r$station, ": ", r$measure_name)
+  # Where the mapping gives them, the WISKI and FFFS ids go on the label, so a measure can be found by either.
+  ids <- paste0(ifelse(nzchar(rt_text(r$wiski_id)), paste0(" \u00b7 WISKI ", rt_text(r$wiski_id)), ""),
+                ifelse(nzchar(rt_text(r$fffs_id)), paste0(" \u00b7 FFFS ", rt_text(r$fffs_id)), ""))
+  r[, measure_label := paste0(rt_disambiguate(base, mkey, list(r$period)), ids)]
   r[]
 }
 
