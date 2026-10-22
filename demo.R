@@ -776,8 +776,8 @@ fetch_coverage_warnings <- function(from, to, type = "any", min_rank = 1L, limit
         max_rank, issue_day_rank, later_rank, first_cover, sources)]
 }
 
-# The statements behind one invented warning: one per issue day from the earliest covering one, with the
-# risk rising to the worst reached by then.
+# The statements behind one invented warning: one per issue day from the earliest covering one to the day of the
+# warning, with the risk rising to the worst reached by then.
 fetch_coverage_detail <- function(ea_area_code, from, to) {
   code <- ea_area_code; start <- as.Date(from)
   empty <- data.table(statement_id = integer(), issued_at = character(), forecast_date = character(), day_index = integer(),
@@ -785,7 +785,7 @@ fetch_coverage_detail <- function(ea_area_code, from, to) {
                       intersection_pct = numeric(), link_type = character())
   w <- demo_coverage()[ea_area_code == code & as.Date(substr(start_time, 1L, 10L)) == start][1L]
   if (nrow(w) == 0L || is.na(w$first_cover_ge1)) return(empty)
-  days <- seq(as.Date(w$first_cover_ge1), max(as.Date(w$first_cover_ge1), as.Date(w$issue_date)) + 1L, by = "day")
+  days <- seq(as.Date(w$first_cover_ge1), as.Date(w$issue_date), by = "day")
   src <- strsplit(w$sources, ",", fixed = TRUE)[[1L]]
   rbindlist(lapply(days, function(s) {
     reached <- vapply(1:4, function(r) { f <- w[[paste0("first_cover_ge", r)]]; !is.na(f) && as.Date(f) <= s }, logical(1))
