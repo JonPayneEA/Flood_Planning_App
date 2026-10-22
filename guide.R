@@ -348,19 +348,20 @@ guide_products <- function(s) {
 
     list(
       id = "coverage", title = "Warnings vs FGS", where = "Warnings vs FGS",
-      answers = "Was this warning under an FGS polygon, and was the forecast issued before it, on the day or after? Across a period, how often did the polygons cover the warnings?",
+      answers = "Was this warning under an FGS polygon on the day it was issued, and was the forecast made before the day or on it? Across a period, how often did the polygons cover the warnings?",
       tables = c("ea_warning_fgs_coverage", "fgs_ea_area_intersections", "fgs_statements"),
       steps = c(
         "Each alert and warning is an episode from the warning history: one area, from the day it was issued to the day it ended.",
         "The pipeline finds every complete FGS statement whose polygon was linked to that area for a date the warning was in force. A link is an overlap, or, for a coastal warning area, the alert area above it being under the polygon.",
-        "It compares the day each of those statements was issued with the day the warning was issued. The earliest decides: an earlier day is Before (the FGS gave notice, and the table says how many days), the same day is Same day, a later day is After (the warning came first), and none is Not covered.",
+        "The reference is the day the warning was issued. Where there is an impact the FGS keeps a coloured polygon over the area for the whole warning, so polygons on later days say nothing about timing. The day each statement covering the issue day was issued is compared with the issue day, and the earliest decides: an earlier day is Before (the FGS gave notice, and the table says how many days) and the same day is Same day.",
+        "If no polygon covered the issue day but one covered a later day the warning was in force, it is Later days only: the FGS caught up, or the impact came after the warning. If none covered any day it is Not covered.",
         "A Very Low polygon covers a great deal of England, so you choose how serious a polygon must be to count. The table and chart show all four levels side by side for the period and kind of warning you chose.",
-        "Select a warning to list the statements behind it: when each was issued compared with the warning, for which date, the source, the risk, and whether it overlaps the area or reaches it through the parent alert."
+        "Select a warning to list the statements behind it: when each was issued compared with the warning, whether it covers the issue day or a later one, the source, the risk, and whether it overlaps the area or reaches it through the parent alert."
       ),
       read = c(
-        "Covered at all is Before plus Same day plus After. The share covered Before is the closest to saying the polygons gave notice.",
+        "Covered on the issue day is Before plus Same day. The share covered Before is the closest to saying the polygons gave notice.",
         "Expect the share covered Before to fall as the polygon must be more serious: High polygons are rare.",
-        "A warning issued on a day, with a polygon issued the same day, could have been drawn before or after it in time. The Timing column in the statement list says by how many hours."
+        "Days are compared, not hours, because statement and message times are not held in one zone. The Timing column in the statement list gives the hours between them."
       ),
       limits = c(
         "Not covered is a disagreement between two forecasts of a different kind, not a missed forecast: the FGS forecasts risk across regions and the Environment Agency warns for particular rivers and coasts.",

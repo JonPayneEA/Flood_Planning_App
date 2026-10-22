@@ -135,7 +135,7 @@ test_that("the coverage queries take the period and kind, name the threshold col
   q <- gsub("\\s+", " ", d$captured[length(d$captured)])
   expect_match(q, "cat\\.sch\\.ea_warning_fgs_coverage")
   expect_equal(lengths(regmatches(q, gregexpr("UNION ALL", q))), 3L)             # one block per risk threshold
-  expect_match(q, "first_cover_ge4 < issue_date"); expect_match(q, "had_severe = TRUE")
+  expect_match(q, "first_cover_ge4 < issue_date"); expect_match(q, "later_rank >= 4"); expect_match(q, "had_severe = TRUE")
   expect_match(q, "issue_date BETWEEN '2025-01-01' AND '2025-12-31'")
   expect_error(d$fetch_coverage_summary(as.Date("2025-01-01"), as.Date("2025-12-31"), "all'; DROP TABLE x; --"))
   suppressWarnings(d$fetch_coverage_warnings(as.Date("2025-01-01"), as.Date("2025-12-31"), "alerts", 3L, 500L))

@@ -743,22 +743,25 @@ demo_coverage <- function() demo_memo("coverage", demo_with_seed(717, {
   x[, end_time := format(as.POSIXct(start_time, tz = "UTC", format = "%Y-%m-%dT%H:%M:%S") + 3600 * (3 + rexp(.N, 1 / 20)), "%Y-%m-%dT%H:%M:%S")]
   x[, had_severe := area_type == "flood_warning" & runif(.N) < 0.1]
   x[, `:=`(peak_level = fifelse(had_severe, "severe_flood_warning", area_type), stale_open = FALSE)]
-  # Lead in days: positive is before the warning, 0 the same day, negative after, NA none.
+  # Lead in days for the issue day: positive is before the warning, 0 the same day, NA not covered on it.
   lead_for <- function(n, p_cover, p_ahead) {
     ok <- runif(n) < p_cover
     ahead <- runif(n) < p_ahead
-    ifelse(!ok, NA_integer_, ifelse(ahead, sample(1:4, n, replace = TRUE, prob = c(.35, .3, .2, .15)),
-                                   sample(c(0L, -1L, -2L), n, replace = TRUE, prob = c(.5, .35, .15))))
+    ifelse(!ok, NA_integer_, ifelse(ahead, sample(1:4, n, replace = TRUE, prob = c(.35, .3, .2, .15)), 0L))
   }
-  l1 <- lead_for(nrow(x), 0.94, 0.62)
-  l2 <- ifelse(runif(nrow(x)) < 0.85, pmin(l1, ifelse(is.na(l1), NA_integer_, l1 - sample(0:1, nrow(x), TRUE))), NA_integer_)
-  l3 <- ifelse(runif(nrow(x)) < 0.7, pmin(l2, ifelse(is.na(l2), NA_integer_, l2 - sample(0:1, nrow(x), TRUE))), NA_integer_)
-  l4 <- ifelse(runif(nrow(x)) < 0.45, pmin(l3, ifelse(is.na(l3), NA_integer_, l3 - sample(0:1, nrow(x), TRUE))), NA_integer_)
+  l1 <- lead_for(nrow(x), 0.9, 0.62)
+  step_down <- function(prev, keep) ifelse(runif(length(prev)) < keep & !is.na(prev), pmax(0L, prev - sample(0:1, length(prev), TRUE)), NA_integer_)
+  l2 <- step_down(l1, 0.85); l3 <- step_down(l2, 0.7); l4 <- step_down(l3, 0.45)
   # A higher threshold is met by a later or equal statement, never an earlier one.
   l2 <- pmin(l2, l1); l3 <- pmin(l3, l2); l4 <- pmin(l4, l3)
   for (r in 1:4) x[[paste0("first_cover_ge", r)]] <- as.Date(x$issue_date) - get(paste0("l", r))
-  x[, max_rank := as.integer(fifelse(!is.na(l4), 4L, fifelse(!is.na(l3), 3L, fifelse(!is.na(l2), 2L, fifelse(!is.na(l1), 1L, 0L)))))]
-  x[, sources := fifelse(is.na(l1), NA_character_, sample(c("river", "river,surface", "coastal", "river,coastal"), .N, replace = TRUE))]
+  x[, issue_day_rank := as.integer(fifelse(!is.na(l4), 4L, fifelse(!is.na(l3), 3L, fifelse(!is.na(l2), 2L, fifelse(!is.na(l1), 1L, 0L)))))]
+  # The polygon stays for the duration of a warning, so a covered warning is covered on later days at least as seriously;
+  # one not covered on the issue day is covered on later days about a third of the time.
+  x[, later_rank := as.integer(fifelse(issue_day_rank > 0L, pmin(4L, issue_day_rank + sample(0:1, .N, TRUE)),
+                                       fifelse(runif(.N) < 0.35, sample(1:3, .N, TRUE, prob = c(.6, .3, .1)), 0L)))]
+  x[, max_rank := pmax(issue_day_rank, later_rank)]
+  x[, sources := fifelse(max_rank == 0L, NA_character_, sample(c("river", "river,surface", "coastal", "river,coastal"), .N, replace = TRUE))]
   x[]
 }))
 
@@ -770,7 +773,7 @@ fetch_coverage_warnings <- function(from, to, type = "any", min_rank = 1L, limit
   x[, first_cover := get(paste0("first_cover_ge", as.integer(min_rank)))]
   x <- x[order(-as.numeric(as.POSIXct(start_time, tz = "UTC", format = "%Y-%m-%dT%H:%M:%S")))][seq_len(min(.N, limit))]
   x[, .(episode_id, ea_area_code, ea_area_name, area_type, start_time, end_time, peak_level, had_severe, stale_open, issue_date,
-        max_rank, first_cover, sources)]
+        max_rank, issue_day_rank, later_rank, first_cover, sources)]
 }
 
 # The statements behind one invented warning: one per issue day from the earliest covering one, with the

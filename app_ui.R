@@ -804,10 +804,10 @@ make_warning_history_tab <- function() tags$div(
 # -----------------------------------------------------------------------------
 # Warnings vs FGS tab.
 #
-# Was each alert and warning under an FGS risk polygon, and was that forecast issued
-# before it, on the day, or after? Reads ea_warning_fgs_coverage (job 26). The top shows
-# how the polygons covered the warnings in a period, at each risk level. Below, the
-# warnings themselves; select one for the statements behind it.
+# Was each alert and warning under an FGS risk polygon on the day it was issued, and was
+# that forecast made before the day or on it? Reads ea_warning_fgs_coverage (job 26). The
+# top shows how the polygons covered the warnings in a period, at each risk level. Below,
+# the warnings themselves; select one for the statements behind it.
 # -----------------------------------------------------------------------------
 
 make_coverage_tab <- function() tags$div(
@@ -834,9 +834,10 @@ make_coverage_tab <- function() tags$div(
   uiOutput("cov_detail_title"),
   DT::dataTableOutput("cov_detail"),
   tags$small(class = "text-muted d-block mt-3",
-             "A warning is covered when an FGS risk polygon was linked to its area for a date the warning was in force. ",
-             "The earliest covering statement decides: issued on an earlier day is Before, the same day is Same day, a later day is After. ",
-             "Not covered means no polygon was over the area on any of those dates. ",
+             "The reference is the day the warning was issued, because where there is an impact the FGS keeps a polygon over the area for the whole warning. ",
+             "Before: a statement issued on an earlier day put a polygon over the area for the issue day, and the earliest one decides. ",
+             "Same day: the earliest was issued on the issue day. Later days only: no polygon covered the issue day, but one covered a later day the warning was in force. ",
+             "Not covered: no polygon was over the area on any day the warning was in force. ",
              "A coastal warning area counts as covered when a polygon covers the alert area above it. ",
              "The FGS forecasts risk across regions and the Environment Agency warns for particular rivers and coasts, ",
              "so a warning with no polygon is a disagreement between the two, not necessarily a missed forecast. ",

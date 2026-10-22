@@ -695,11 +695,11 @@ fetch_warning_history <- function() {
 # Warnings against the FGS (ea_warning_fgs_coverage, job 26)
 #
 # fetch_coverage_summary(): counts of warnings by risk threshold, category (before, same day,
-#   after, none) and lead, made in the warehouse so little crosses the wire.
+#   later days only, none) and lead, made in the warehouse so little crosses the wire.
 # fetch_coverage_warnings(): the warnings themselves for a period, newest first, with how the
 #   chosen risk threshold covered each. Capped at `limit` rows.
 # fetch_coverage_detail(): every FGS statement that put a polygon over one warning's area for a
-#   date it was in force. The area code reaches the SQL as letters, digits, dashes and
+#   date it was in force (the issue day and any later day). The area code reaches the SQL as letters, digits, dashes and
 #   underscores only.
 # fetch_coverage_span(): the first and last issue dates held.
 # -----------------------------------------------------------------------------
@@ -710,14 +710,18 @@ coverage_where <- function(from, to, type) {
 }
 
 fetch_coverage_summary <- function(from, to, type = "any") {
-  one <- function(r) sprintf("
-    SELECT %d AS threshold, category, lead_days, COUNT(*) AS n FROM (
-      SELECT CASE WHEN first_cover_ge%d IS NULL THEN 'none'
-                  WHEN first_cover_ge%d < issue_date THEN 'before'
-                  WHEN first_cover_ge%d = issue_date THEN 'same_day' ELSE 'after' END AS category,
-             CASE WHEN first_cover_ge%d < issue_date THEN datediff(issue_date, first_cover_ge%d) END AS lead_days
-      FROM %s WHERE %s
-    ) GROUP BY category, lead_days", r, r, r, r, r, r, TBL_WARNING_FGS, coverage_where(from, to, type))
+  one <- function(r) {
+    sql <- sprintf("
+      SELECT %d AS threshold, category, lead_days, COUNT(*) AS n FROM (
+        SELECT CASE WHEN first_cover_ge{R} < issue_date THEN 'before'
+                    WHEN first_cover_ge{R} IS NOT NULL THEN 'same_day'
+                    WHEN later_rank >= {R} THEN 'later'
+                    ELSE 'none' END AS category,
+               CASE WHEN first_cover_ge{R} < issue_date THEN datediff(issue_date, first_cover_ge{R}) END AS lead_days
+        FROM %s WHERE %s
+      ) GROUP BY category, lead_days", r, TBL_WARNING_FGS, coverage_where(from, to, type))
+    gsub("{R}", as.character(r), sql, fixed = TRUE)
+  }
   d <- as.data.table(db_query(paste(vapply(1:4, one, character(1)), collapse = " UNION ALL ")))
   if (nrow(d)) d[, `:=`(threshold = as.integer(threshold), lead_days = as.integer(lead_days), n = as.integer(n))]
   d
@@ -727,7 +731,7 @@ fetch_coverage_warnings <- function(from, to, type = "any", min_rank = 1L, limit
   r <- max(1L, min(4L, as.integer(min_rank)))
   db_query(sprintf("
     SELECT episode_id, ea_area_code, ea_area_name, area_type, start_time, end_time, peak_level, had_severe, stale_open,
-           issue_date, max_rank, first_cover_ge%d AS first_cover, sources
+           issue_date, max_rank, issue_day_rank, later_rank, first_cover_ge%d AS first_cover, sources
     FROM %s
     WHERE %s
     ORDER BY start_time DESC

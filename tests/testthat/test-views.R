@@ -635,13 +635,13 @@ test_that("Warnings vs FGS shows the shares, the warnings and the statements beh
   span <- function() list(first = as.Date("2024-01-01"), last = as.Date("2026-10-20"))
   summ <- function(from, to, type = "any") {
     seen$args <- list(from = from, to = to, type = type)
-    data.table(threshold = c(1L, 1L, 1L, 3L), category = c("before", "after", "none", "none"), lead_days = c(2L, NA, NA, NA), n = c(6L, 2L, 2L, 10L))
+    data.table(threshold = c(1L, 1L, 1L, 3L), category = c("before", "later", "none", "none"), lead_days = c(2L, NA, NA, NA), n = c(6L, 2L, 2L, 10L))
   }
   lst <- function(from, to, type = "any", min_rank = 1L, limit = 20000L) data.table(
     episode_id = c("e1", "e2"), ea_area_code = c("A1", "B1"), ea_area_name = c("Alder", "Beech"), area_type = c("flood_warning", "flood_alert"),
     start_time = c("2026-10-10T14:00:00", "2026-10-09T08:00:00"), end_time = c("2026-10-11T02:00:00", NA), peak_level = c("flood_warning", "flood_alert"),
     had_severe = FALSE, stale_open = FALSE, issue_date = as.Date(c("2026-10-10", "2026-10-09")), max_rank = c(3L, 0L),
-    first_cover = as.Date(c("2026-10-08", NA)), sources = c("river", NA))
+    issue_day_rank = c(3L, 0L), later_rank = c(3L, 0L), first_cover = as.Date(c("2026-10-08", NA)), sources = c("river", NA))
   det <- function(code, from, to) {
     seen$detail <- list(code = code, from = from, to = to)
     data.table(statement_id = 5L, issued_at = "2026-10-08T09:30:00", forecast_date = "2026-10-10", day_index = 3L, source = "river",
@@ -653,9 +653,9 @@ test_that("Warnings vs FGS shows the shares, the warnings and the statements beh
     session$setInputs(main_tabs = "Warnings vs FGS", cov_range = as.Date(c("2026-01-01", "2026-10-20")), cov_type = "warnings", cov_rank = 1L)
     expect_equal(seen$args$type, "warnings")
     s <- cov_shares_data()[threshold == 1L]
-    expect_equal(c(s$before, s$after, s$none, s$total), c(6, 2, 2, 10))
-    expect_equal(s$covered_pct, 0.8)
-    expect_match(html_of(output$cov_kpis), "80%|60%")                                    # before is 6 of 10
+    expect_equal(c(s$before, s$later, s$none, s$total), c(6, 2, 2, 10))
+    expect_equal(s$covered_pct, 0.6)
+    expect_match(html_of(output$cov_kpis), "60%")                                           # before is 6 of 10
     tbl <- cov_table_data()
     expect_equal(tbl$`FGS coverage`, c("Before (2 days)", "Not covered"))
     expect_equal(tbl$`Highest FGS risk`, c("Medium", "None"))

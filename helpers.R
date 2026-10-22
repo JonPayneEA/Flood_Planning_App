@@ -376,22 +376,22 @@ warning_area_counts <- function(h, constituency_id) {
 # -----------------------------------------------------------------------------
 # Warnings against the FGS (ea_warning_fgs_coverage, job 26)
 #
-# Each row is one alert or warning. first_cover_ge1 to first_cover_ge4 are the days the
-# earliest FGS statement was issued whose polygon over the warning's area, for a date it
-# was in force, was at risk rank 1 (Very Low) to 4 (High) or higher; NA where none was.
-# Compared with the day the warning was issued (issue_date):
-#   before    the statement was issued on an earlier day: the FGS gave notice
-#   same_day  issued the same day
-#   after     issued later: the warning came first
-#   none      no polygon covered the area for any date the warning was in force
-# The earliest covering statement decides.
+# Each row is one alert or warning. The reference is the day it was issued: where there is an impact
+# the FGS keeps a coloured polygon over the area for the whole warning, so polygons on later days say
+# nothing about timing. first_cover_ge1 to first_cover_ge4 are the days the earliest FGS statement was
+# issued whose polygon over the warning's area FOR THE ISSUE DAY was at risk rank 1 (Very Low) to 4
+# (High) or higher, NA where none was. later_rank is the worst rank over the later days it was in force.
+#   before    that statement was issued on an earlier day: the FGS gave notice
+#   same_day  it was issued on the issue day
+#   later     no polygon covered the issue day at that rank, but one covered a later day in force
+#   none      no polygon covered the area on any day the warning was in force
 # -----------------------------------------------------------------------------
 
 COVERAGE_RISKS <- c("Any polygon (Very Low or above)" = 1L, "Low or above" = 2L, "Medium or above" = 3L, "High" = 4L)
 COVERAGE_TYPES <- c("Alerts and warnings" = "any", "Flood alerts" = "alerts", "Flood warnings" = "warnings",
                     "Severe flood warnings" = "severe")
-COVERAGE_CATEGORIES <- c("before", "same_day", "after", "none")
-COVERAGE_NAMES <- c(before = "Before", same_day = "Same day", after = "After", none = "Not covered")
+COVERAGE_CATEGORIES <- c("before", "same_day", "later", "none")
+COVERAGE_NAMES <- c(before = "Before", same_day = "Same day", later = "Later days only", none = "Not covered")
 
 # SQL for the chosen kind of warning. Only the four known types can reach a query.
 coverage_type_sql <- function(type) {
@@ -405,9 +405,10 @@ coverage_type_rows <- function(x, type) {
          severe = as.logical(x$had_severe) %in% TRUE)
 }
 
-coverage_category <- function(issue_date, first_cover) {
+coverage_category <- function(issue_date, first_cover, later_rank = 0L, rank = 1L) {
   i <- as.Date(issue_date); f <- as.Date(first_cover)
-  out <- ifelse(is.na(f), "none", ifelse(f < i, "before", ifelse(f == i, "same_day", "after")))
+  lr <- suppressWarnings(as.integer(later_rank))
+  out <- ifelse(!is.na(f), ifelse(f < i, "before", "same_day"), ifelse(!is.na(lr) & lr >= as.integer(rank), "later", "none"))
   out[is.na(i)] <- NA_character_
   out
 }
@@ -418,15 +419,14 @@ coverage_lead_days <- function(issue_date, first_cover) {
   ifelse(!is.na(d) & d > 0L, d, NA_integer_)
 }
 
-# "Before (3 days)", "Same day", "After (1 day)", "Not covered".
-coverage_label <- function(issue_date, first_cover) {
-  cat <- coverage_category(issue_date, first_cover)
-  d <- as.integer(as.Date(first_cover) - as.Date(issue_date))
+# "Before (3 days)", "Same day", "Later days only", "Not covered".
+coverage_label <- function(issue_date, first_cover, later_rank = 0L, rank = 1L) {
+  cat <- coverage_category(issue_date, first_cover, later_rank, rank)
+  d <- as.integer(as.Date(issue_date) - as.Date(first_cover))
   plural <- function(n) paste0(n, if (n == 1L) " day" else " days")
   vapply(seq_along(cat), function(k) {
     switch(if (is.na(cat[k])) "none" else cat[k],
-           before = paste0("Before (", plural(-d[k]), ")"), same_day = "Same day",
-           after = paste0("After (", plural(d[k]), ")"), none = "Not covered")
+           before = paste0("Before (", plural(d[k]), ")"), same_day = "Same day", later = "Later days only", none = "Not covered")
   }, character(1))
 }
 
@@ -437,7 +437,7 @@ coverage_summary_counts <- function(x, from, to, type = "any") {
   x <- x[coverage_type_rows(x, type)]
   out <- rbindlist(lapply(1:4, function(r) {
     col <- x[[paste0("first_cover_ge", r)]]
-    d <- data.table(category = coverage_category(x$issue_date, col), lead_days = coverage_lead_days(x$issue_date, col))
+    d <- data.table(category = coverage_category(x$issue_date, col, x$later_rank, r), lead_days = coverage_lead_days(x$issue_date, col))
     d[, .(n = .N), by = .(category, lead_days)][, threshold := r]
   }))
   if (nrow(out) == 0L) return(data.table(threshold = integer(), category = character(), lead_days = integer(), n = integer()))
@@ -451,9 +451,9 @@ coverage_shares <- function(counts) {
   for (cat in COVERAGE_CATEGORIES) {
     out[[cat]] <- vapply(1:4, function(r) sum(counts$n[counts$threshold == r & counts$category == cat]), numeric(1))
   }
-  out[, total := before + same_day + after + none]
+  out[, total := before + same_day + later + none]
   for (cat in COVERAGE_CATEGORIES) out[[paste0(cat, "_pct")]] <- ifelse(out$total > 0, out[[cat]] / out$total, NA_real_)
-  out[, covered_pct := ifelse(total > 0, (before + same_day + after) / total, NA_real_)]
+  out[, covered_pct := ifelse(total > 0, (before + same_day) / total, NA_real_)]     # covered on the issue day
   out[]
 }
 

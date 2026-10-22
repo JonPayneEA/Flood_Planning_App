@@ -631,46 +631,49 @@ test_that("long windows are bucketed to about 1,500 points, and short ones are n
 # ---- Warnings against the FGS ------------------------------------------------------
 
 cov_fake <- function() data.table(
-  episode_id = paste0("e", 1:6),
-  area_type = c("flood_warning", "flood_warning", "flood_alert", "flood_warning", "flood_alert", "flood_warning"),
-  had_severe = c(FALSE, TRUE, FALSE, FALSE, FALSE, FALSE),
-  issue_date = as.Date(c("2025-03-10", "2025-03-10", "2025-03-10", "2025-03-10", "2025-03-10", "2024-01-01")),
-  first_cover_ge1 = as.Date(c("2025-03-07", "2025-03-10", "2025-03-11", NA, "2025-03-09", "2024-01-01")),
-  first_cover_ge2 = as.Date(c("2025-03-08", "2025-03-10", "2025-03-11", NA, NA, "2024-01-01")),
-  first_cover_ge3 = as.Date(c("2025-03-09", "2025-03-11", NA, NA, NA, NA)),
-  first_cover_ge4 = as.Date(c(NA, NA, NA, NA, NA, NA)))
+  episode_id = paste0("e", 1:7),
+  area_type = c("flood_warning", "flood_warning", "flood_alert", "flood_warning", "flood_alert", "flood_warning", "flood_warning"),
+  had_severe = c(FALSE, TRUE, FALSE, FALSE, FALSE, FALSE, FALSE),
+  issue_date = as.Date(c("2025-03-10", "2025-03-10", "2025-03-10", "2025-03-10", "2025-03-10", "2024-01-01", "2025-03-10")),
+  first_cover_ge1 = as.Date(c("2025-03-07", "2025-03-10", NA, NA, "2025-03-09", "2024-01-01", NA)),
+  first_cover_ge2 = as.Date(c("2025-03-08", "2025-03-10", NA, NA, NA, "2024-01-01", NA)),
+  first_cover_ge3 = as.Date(c("2025-03-09", NA, NA, NA, NA, NA, NA)),
+  first_cover_ge4 = as.Date(c(NA, NA, NA, NA, NA, NA, NA)),
+  later_rank = c(4L, 3L, 2L, 0L, 0L, 0L, 3L))
 
-test_that("a warning is before, same day, after or not covered by the earliest covering statement", {
+test_that("a warning is before, same day, later days only or not covered by its issue day", {
   x <- cov_fake()
-  expect_equal(coverage_category(x$issue_date, x$first_cover_ge1), c("before", "same_day", "after", "none", "before", "same_day"))
-  expect_equal(coverage_lead_days(x$issue_date, x$first_cover_ge1), c(3L, NA, NA, NA, 1L, NA))
-  expect_equal(coverage_label(x$issue_date, x$first_cover_ge1)[c(1, 2, 3, 4, 5)],
-               c("Before (3 days)", "Same day", "After (1 day)", "Not covered", "Before (1 day)"))
-  # The same warning at a higher threshold can move from before to after.
-  expect_equal(coverage_category(x$issue_date, x$first_cover_ge3)[1:2], c("before", "after"))
+  expect_equal(coverage_category(x$issue_date, x$first_cover_ge1, x$later_rank, 1), c("before", "same_day", "later", "none", "before", "same_day", "later"))
+  expect_equal(coverage_lead_days(x$issue_date, x$first_cover_ge1), c(3L, NA, NA, NA, 1L, NA, NA))
+  expect_equal(coverage_label(x$issue_date, x$first_cover_ge1, x$later_rank, 1)[c(1, 2, 3, 4, 5)],
+               c("Before (3 days)", "Same day", "Later days only", "Not covered", "Before (1 day)"))
+  # At Medium, the same-day polygon was only Low or Very Low on the issue day, but a Medium polygon came on a later day.
+  expect_equal(coverage_category(x$issue_date, x$first_cover_ge3, x$later_rank, 3)[1:3], c("before", "later", "none"))
+  expect_equal(coverage_category(x$issue_date, x$first_cover_ge4, x$later_rank, 4)[1:2], c("later", "none"))
 })
 
 test_that("the summary counts each threshold, the period and the kind of warning", {
   x <- cov_fake()
   s <- coverage_summary_counts(x, "2025-01-01", "2025-12-31", "any")
   at1 <- s[threshold == 1L]
-  expect_equal(sum(at1$n), 5L)                                           # the 2024 warning is outside the period
+  expect_equal(sum(at1$n), 6L)                                           # the 2024 warning is outside the period
   expect_equal(at1[category == "before", sum(n)], 2L)
   expect_equal(at1[category == "before" & lead_days == 3L, n], 1L)
+  expect_equal(at1[category == "later", sum(n)], 2L)
   w <- coverage_summary_counts(x, "2025-01-01", "2025-12-31", "warnings")
-  expect_equal(sum(w[threshold == 1L]$n), 3L)
+  expect_equal(sum(w[threshold == 1L]$n), 4L)
   sv <- coverage_summary_counts(x, "2025-01-01", "2025-12-31", "severe")
   expect_equal(sum(sv[threshold == 1L]$n), 1L)
   expect_error(coverage_summary_counts(x, "2025-01-01", "2025-12-31", "everything"))
   expect_equal(nrow(coverage_summary_counts(x, "2020-01-01", "2020-12-31")), 0L)
 })
 
-test_that("shares are of all warnings in the period, and covered at all is before plus same day plus after", {
+test_that("shares are of all warnings in the period, and covered on the issue day is before plus same day", {
   s <- coverage_shares(coverage_summary_counts(cov_fake(), "2025-01-01", "2025-12-31"))
   r1 <- s[threshold == 1L]
-  expect_equal(c(r1$before, r1$same_day, r1$after, r1$none, r1$total), c(2, 1, 1, 1, 5))
-  expect_equal(r1$covered_pct, 4 / 5)
-  expect_equal(s[threshold == 4L]$none_pct, 1)                           # nothing reaches High
+  expect_equal(c(r1$before, r1$same_day, r1$later, r1$none, r1$total), c(2, 1, 2, 1, 6))
+  expect_equal(r1$covered_pct, 3 / 6)
+  expect_equal(s[threshold == 4L]$later_pct, 1 / 6)                       # only e1 had a High polygon, and on a later day
   expect_true(is.na(coverage_shares(data.table(threshold = integer(), category = character(), lead_days = integer(), n = integer()))$covered_pct[1]))
 })
 

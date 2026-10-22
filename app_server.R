@@ -2120,16 +2120,17 @@ server <- function(input, output, session) {
       card(format(r$total, big.mark = ","), "Warnings in the period"),
       card(pct(r$before_pct), sprintf("Covered before (%s)", format(r$before, big.mark = ",")), TRUE),
       card(pct(r$same_day_pct), sprintf("Covered the same day (%s)", format(r$same_day, big.mark = ","))),
-      card(pct(r$after_pct), sprintf("Covered after (%s)", format(r$after, big.mark = ","))),
+      card(pct(r$later_pct), sprintf("Later days only (%s)", format(r$later, big.mark = ","))),
       card(pct(r$none_pct), sprintf("Not covered (%s)", format(r$none, big.mark = ","))))
   })
 
   output$cov_shares <- DT::renderDataTable({
     s <- cov_shares_data()
     tbl <- s[, .(`Polygon at or above` = c("Very Low", "Low", "Medium", "High")[threshold], Warnings = total,
-                 Before = before_pct, `Same day` = same_day_pct, After = after_pct, `Not covered` = none_pct, `Covered at all` = covered_pct)]
+                 Before = before_pct, `Same day` = same_day_pct, `Later days only` = later_pct, `Not covered` = none_pct,
+                 `Covered on the issue day` = covered_pct)]
     DT::datatable(tbl, rownames = FALSE, selection = "none", options = list(dom = "t", ordering = FALSE)) |>
-      DT::formatPercentage(c("Before", "Same day", "After", "Not covered", "Covered at all"), digits = 0) |>
+      DT::formatPercentage(c("Before", "Same day", "Later days only", "Not covered", "Covered on the issue day"), digits = 0) |>
       DT::formatRound("Warnings", digits = 0)
   })
 
@@ -2138,7 +2139,7 @@ server <- function(input, output, session) {
       s <- cov_shares_data()
       req(nrow(s) > 0L, any(s$total > 0L))
       lab <- c("Very Low", "Low", "Medium", "High")[s$threshold]
-      cols <- c(before = APP_PALETTE$navy, same_day = APP_PALETTE$bright, after = APP_PALETTE$ice, none = APP_PALETTE$line_strong)
+      cols <- c(before = APP_PALETTE$navy, same_day = APP_PALETTE$bright, later = APP_PALETTE$ice, none = APP_PALETTE$line_strong)
       fig <- plotly::plot_ly(y = factor(lab, levels = rev(lab)), orientation = "h")
       for (cat in COVERAGE_CATEGORIES) {
         fig <- plotly::add_bars(fig, x = s[[paste0(cat, "_pct")]], name = COVERAGE_NAMES[[cat]], marker = list(color = cols[[cat]]),
@@ -2156,7 +2157,8 @@ server <- function(input, output, session) {
     req(x)
     if (nrow(x) == 0L) return(data.table())
     x <- as.data.table(x)
-    x[, `:=`(cat = coverage_category(issue_date, first_cover), label = coverage_label(issue_date, first_cover))]
+    rank <- as.integer(input$cov_rank)
+    x[, `:=`(cat = coverage_category(issue_date, first_cover, later_rank, rank), label = coverage_label(issue_date, first_cover, later_rank, rank))]
     x[, .(Area = ea_area_name, Code = ea_area_code,
           Type = fifelse(area_type == "flood_alert", "Flood alert", "Flood warning"),
           Issued = format(as.POSIXct(start_time, tz = "UTC", tryFormats = c("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S")), "%d %b %Y %H:%M"),
@@ -2216,6 +2218,7 @@ server <- function(input, output, session) {
           `Compared with the warning` = fifelse(day < issued_day, "Before", fifelse(day == issued_day, "Same day", "After")),
           Timing = relative_timing(issued_at, w$start_raw),
           `For forecast date` = format(as.Date(substr(forecast_date, 1L, 10L)), "%a %d %b"),
+          Covers = fifelse(as.Date(substr(forecast_date, 1L, 10L)) == issued_day, "The issue day", "A later day"),
           Source = tools::toTitleCase(gsub("_", " ", source)), Risk = risk_level,
           Impact = impact_label, Likelihood = likelihood_label,
           Overlap = fifelse(is.na(intersection_pct), "linked", sprintf("%.0f%%", 100 * as.numeric(intersection_pct))),
