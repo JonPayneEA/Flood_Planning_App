@@ -705,3 +705,18 @@ test_that("a rain gauge the API calls only 'Rainfall station' takes its mapped n
   # Without the mapping columns at all, the register still prepares.
   expect_equal(nrow(rt_prepare_register(reg[, 1:7])), 5L)
 })
+
+
+test_that("a gauge's instantaneous and total measures are told apart by value type, and a datum pair by its unit", {
+  reg <- data.table(
+    station_label = c("Wingfield", "Wingfield", "Keadby", "Keadby"), station_reference = c("R1", "R1", "T1", "T1"),
+    station_uri = c("u/R1", "u/R1", "u/T1", "u/T1"), measure_uri = c("m/i", "m/t", "m/a", "m/b"),
+    parameter = c("rainfall", "rainfall", "level", "level"), qualifier = c("Gauge", "Gauge", "Tidal Level", "Tidal Level"),
+    unit_name = c("mm", "mm", "mAOD", "m"), value_type = c("instantaneous", "total", "instantaneous", "instantaneous"),
+    period = c(900L, 900L, 900L, 900L), fffs_id = c("F1", "F1", "F2", "F2"))
+  r <- rt_prepare_register(reg)
+  expect_equal(anyDuplicated(r$measure_label), 0L)
+  expect_match(r$measure_label[1], "\\(instantaneous\\)"); expect_match(r$measure_label[2], "\\(total\\)")
+  expect_match(r$measure_label[3], "\\(mAOD\\)"); expect_match(r$measure_label[4], "\\(m\\)")
+  expect_false(any(grepl("\\[", r$measure_label)))                  # no URI tail was needed
+})
