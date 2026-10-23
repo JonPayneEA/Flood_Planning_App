@@ -603,7 +603,7 @@ rt_generic_name <- function(x) {
 rt_prepare_register <- function(register) {
   r <- as.data.table(copy(register))
   for (col in c("station_label", "label", "station_reference", "station_uri", "measure_uri", "parameter", "qualifier",
-                "unit_name", "river_name", "ea_area_name", "period", "town", "catchment_name",
+                "unit_name", "value_type", "river_name", "ea_area_name", "period", "town", "catchment_name",
                 "gauge_name", "fffs_id", "wiski_id")) {
     if (!(col %in% names(r))) r[, (col) := NA_character_]
     r[, (col) := as.character(get(col))]
@@ -628,7 +628,8 @@ rt_prepare_register <- function(register) {
   # Where the mapping gives them, the WISKI and FFFS ids go on the label, so a measure can be found by either.
   ids <- paste0(ifelse(nzchar(rt_text(r$wiski_id)), paste0(" \u00b7 WISKI ", rt_text(r$wiski_id)), ""),
                 ifelse(nzchar(rt_text(r$fffs_id)), paste0(" \u00b7 FFFS ", rt_text(r$fffs_id)), ""))
-  r[, measure_label := paste0(rt_disambiguate(base, mkey, list(r$period)), ids)]
+  # Measures that differ only by value type (a rain gauge's instantaneous and total readings) are told apart by it first.
+  r[, measure_label := paste0(rt_disambiguate(base, mkey, list(r$value_type, r$period)), ids)]
   r[]
 }
 
