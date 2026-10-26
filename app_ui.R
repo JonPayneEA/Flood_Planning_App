@@ -917,7 +917,11 @@ make_rain_tab <- function() tags$div(
 
 
 make_hydrometrics_tab <- function() tags$div(
-  class = "p-3",
+  class = "rt-page",
+  tags$h1(class = "app-title", "River levels and flows"),
+  tags$p(class = "app-lead", "Levels, flows and other readings from Environment Agency gauges. Choose a station, then the measures to chart."),
+  tags$h2("Choose a station"),
+  tags$p(class = "app-caption", "Narrow by area, river or parameter, or go straight to a station or FFFS ID."),
   tags$div(
     class = "filter-row",
     selectInput("rt_area",    "EA area",   choices = RT_ALL, width = "230px"),
@@ -926,6 +930,7 @@ make_hydrometrics_tab <- function() tags$div(
     selectInput("rt_station", "Station",   choices = RT_ALL, width = "260px"),
     selectizeInput("rt_fffs", "FFFS ID",   choices = RT_ALL, width = "170px")
   ),
+  tags$h2("What to chart"),
   tags$div(
     class = "filter-row",
     selectizeInput("rt_measures", "Measures (up to 8)", choices = NULL, multiple = TRUE, width = "620px",
@@ -937,10 +942,13 @@ make_hydrometrics_tab <- function() tags$div(
   if (requireNamespace("plotly", quietly = TRUE)) plotly::plotlyOutput("rt_plot", height = "auto")
   else tags$p(class = "text-muted", "The plotly package is not installed on this server, so the chart cannot be drawn."),
   uiOutput("rt_summary"),
-  tags$small(class = "text-muted d-block mt-2",
-             "This uses Environment Agency flood and river level data from the real-time data API (Beta). ",
-             "Times are UTC. The dashed line is where the archive ends and the live tail begins; ",
-             "the shaded band to its right is live and not yet archived.")
+  tags$details(
+    class = "app-details",
+    tags$summary("About these readings"),
+    tags$p("This uses Environment Agency flood and river level data from the real-time data API (Beta). ",
+           "Times are UTC. The dashed line is where the archive ends and the live tail begins; ",
+           "the shaded band to its right is live and not yet archived.")
+  )
 )
 
 
