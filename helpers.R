@@ -1304,6 +1304,22 @@ rain_bars <- function(readings, step = 3600L, max_mm = RAIN_MAX_READING) {
 }
 
 
+# The running total for one gauge over the window, given rain_bars()' bars. Every bin from `from` to `to` is listed, and a bin with no
+# reading is NOT counted as dry: it adds nothing to the total (so the total carries forward) and is flagged `missing`, because
+# a gauge that reported nothing may have had rain. The total is therefore a minimum whenever any bin is missing.
+# Returns a table t, mm (NA where missing), cum, missing.
+rain_cumulative <- function(bars, step = 3600L, from, to) {
+  step <- as.integer(step)
+  first <- floor(as.numeric(from) / step) * step
+  last  <- floor(as.numeric(to) / step) * step
+  grid <- data.table(t = as.POSIXct(seq(first, last, by = step), origin = "1970-01-01", tz = "UTC"))
+  if (!is.null(bars) && nrow(bars) > 0L) grid[, mm := bars$mm[match(as.numeric(t), as.numeric(bars$t))]] else grid[, mm := NA_real_]
+  grid[, missing := is.na(mm)]
+  grid[, cum := cumsum(fifelse(is.na(mm), 0, mm))]
+  grid[]
+}
+
+
 # Adds a gauge to the charted set: unknown keys and keys already there change nothing; when the set is full the oldest goes.
 rain_add_pick <- function(current, key, valid, max = RAIN_MAX_CHARTED) {
   current <- as.character(current)

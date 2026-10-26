@@ -891,3 +891,17 @@ test_that("charted gauges take their colours from the series palette in turn", {
   expect_equal(rain_series_colour(1), "#053D7E"); expect_equal(rain_series_colour(2), "#BE0553")
   expect_equal(rain_series_colour(9), rain_series_colour(1))                      # it wraps
 })
+
+
+test_that("rain_cumulative carries the total across missing intervals and flags them", {
+  t0 <- as.POSIXct("2026-10-26 10:00:00", tz = "UTC")
+  bars <- data.table(t = t0 + c(0, 3600, 3 * 3600), mm = c(1, 2, 4))
+  cu <- rain_cumulative(bars, 3600L, t0, t0 + 4 * 3600)
+  expect_equal(nrow(cu), 5L)
+  expect_equal(cu$cum, c(1, 3, 3, 7, 7))
+  expect_equal(cu$missing, c(FALSE, FALSE, TRUE, FALSE, TRUE))        # an hour with no reading adds nothing and is flagged
+  expect_true(is.na(cu$mm[3]))
+  none <- rain_cumulative(NULL, 3600L, t0, t0 + 2 * 3600)
+  expect_equal(none$cum, c(0, 0, 0)); expect_true(all(none$missing))
+  expect_equal(nrow(rain_cumulative(bars, 900L, t0, t0 + 3600)), 5L)   # quarter-hour grid
+})

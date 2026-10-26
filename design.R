@@ -283,6 +283,16 @@ button.stat-btn .stat-hint { display: block; font-size: 16px; color: var(--gov-l
 @media (max-width: 64em) { .ov-cols { grid-template-columns: 1fr; gap: 0; } }
 @media (max-width: 40.0525em) { .ov-outlook { grid-template-columns: 1fr 1fr; } .ov-grid { gap: var(--sp-4); } }
 
+/* Disclosure: a summary link that opens a panel. Used for secondary filters and notes. */
+.app-details { margin: 0 0 var(--sp-4); }
+.app-details > summary { color: var(--gov-link); text-decoration: underline; cursor: pointer; font-size: 16px; display: inline-block; margin-bottom: var(--sp-2); }
+.app-details > summary:hover { color: var(--gov-link-hover); }
+.app-details[open] > summary { margin-bottom: var(--sp-3); }
+.app-details > :not(summary) { border-left: 5px solid var(--gov-border); padding-left: var(--sp-4); }
+.rain-page .filter-row { margin-bottom: var(--sp-3); }
+.rain-page p.mb-1 { margin-bottom: var(--sp-4) !important; }
+.rain-page .leaflet-container { border: 1px solid var(--gov-border); }
+
 /* Style guide (demonstration mode). */
 .sg-swatches { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin-bottom: var(--sp-6); }
 .sg-swatch { width: 170px; font-size: 16px; }
