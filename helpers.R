@@ -1104,3 +1104,11 @@ outage_success <- function(state, now) {
                  if (state$failures == 1L) "" else "s")
   list(state = outage_new(), log = log)
 }
+
+
+# TRUE for each row whose (risk_x, risk_y) is one of the ticked cells of the risk matrix (cells has columns x and y).
+# No ticked cell keeps nothing. Used so the EA areas on the map and in the list follow the matrix like the FGS polygons do.
+in_selected_cells <- function(risk_x, risk_y, cells) {
+  if (is.null(cells) || nrow(cells) == 0L) return(rep(FALSE, length(risk_x)))
+  paste(risk_x, risk_y) %in% paste(cells$x, cells$y)
+}

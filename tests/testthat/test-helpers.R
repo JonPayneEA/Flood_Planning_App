@@ -737,3 +737,12 @@ test_that("the FFFS ID narrows every Hydrometrics drop-down and the measure list
   expect_equal(rt_options(r, area = "South")$fffs, "All")           # no mapped gauge in the South: only All is offered
   expect_equal(rt_options(r, param = "flow")$fffs, c("All", "F1"))
 })
+
+
+test_that("in_selected_cells keeps the rows whose risk cell is ticked and nothing when none is", {
+  cells <- data.table(x = c(2L, 3L), y = c(4L, 1L))
+  expect_equal(in_selected_cells(c(2L, 3L, 2L, 1L), c(4L, 1L, 1L, 1L), cells), c(TRUE, TRUE, FALSE, FALSE))
+  expect_equal(in_selected_cells(c(2, 3), c(4, 1), cells), c(TRUE, TRUE))                  # numbers from the warehouse match integers
+  expect_equal(in_selected_cells(c(2L, 3L), c(4L, 1L), cells[0]), c(FALSE, FALSE))
+  expect_equal(in_selected_cells(integer(), integer(), cells), logical())
+})

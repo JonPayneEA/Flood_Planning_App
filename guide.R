@@ -194,7 +194,7 @@ guide_products <- function(s) {
       steps = c(
         "Pick a statement and a forecast day. The map draws that day's risk polygons, one for each flood source and risk, coloured by risk level.",
         "The source ticks and the risk matrix decide which polygons are shown. The matrix starts with the Minor impact column unticked.",
-        sprintf("The flood areas are the stored overlaps for that day. An area is shown if its flood source is ticked, its type (Flood Warning Area or Flood Alert Area) is ticked, and its overlap meets the intersection threshold. The slider starts at %s, the pipeline's own rule.",
+        sprintf("The flood areas are the stored overlaps for that day. An area is shown if its flood source is ticked, its type (Flood Warning Area or Flood Alert Area) is ticked, the risk it overlaps sits in a ticked cell of the matrix, and its overlap meets the intersection threshold. The slider starts at %s, the pipeline's own rule.",
                 guide_pct(th$ea_min_pct)),
         "Flood areas are coloured by type, not by risk: magenta for warning areas and blue for alert areas. They read as context beneath the risk polygons. The list is ordered from Red to Green, then by overlap.",
         "The constituencies are those touched on that day, after the same source, matrix and threshold filters.",

@@ -300,10 +300,12 @@ server <- function(input, output, session) {
     req(f)
     
     areas <- fetch_ea_areas_for_statement(f$statement_id, f$day_index)
-    # Three filters: source must be selected, area type must be ticked,
+    # Four filters: source must be selected, area type must be ticked, the risk must sit in a ticked
+    # cell of the matrix (as for the FGS polygons and the constituencies), and the
     # intersection must clear the threshold.
     areas[tolower(source) %in% f$source_codes
           & ea_area_type  %in% f$ea_types
+          & in_selected_cells(risk_x, risk_y, f$selected_cells)
           & clears_threshold(intersection_pct, f$min_intersection)]
   })
   
@@ -328,6 +330,7 @@ server <- function(input, output, session) {
     
     shape <- shape[tolower(shape$source) %in% f$source_codes, ]
     shape <- shape[shape$ea_area_type  %in% f$ea_types,     ]
+    shape <- shape[in_selected_cells(shape$risk_x, shape$risk_y, f$selected_cells), ]
     shape[clears_threshold(shape$intersection_pct, f$min_intersection), ]
   })
   

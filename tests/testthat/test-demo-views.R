@@ -131,6 +131,25 @@ test_that("the map layers and the jump-to-constituency work on demo geometry", {
   expect_equal(demo_srv$warehouse_calls, 0L)
 })
 
+test_that("the EA areas on the map and in the list follow the ticked risk matrix cells", {
+  testServer(demo_srv$server, {
+    do.call(session$setInputs, demo_inputs)
+    all_areas <- ea_areas(); all_shape <- ea_geometry()
+    expect_gt(nrow(all_areas), 0L)
+    cell <- all_areas[1, .(x = risk_x, y = risk_y)]
+    off <- setNames(rep(list(FALSE), 16), grep("^mtx_", names(demo_inputs), value = TRUE))
+    do.call(session$setInputs, off)
+    expect_equal(nrow(ea_areas()), 0L); expect_equal(nrow(ea_geometry()), 0L)             # no cell ticked: nothing shown
+    do.call(session$setInputs, setNames(list(TRUE), paste0("mtx_", cell$x, "_", cell$y)))
+    one <- ea_areas()
+    expect_gt(nrow(one), 0L); expect_lte(nrow(one), nrow(all_areas))
+    expect_true(all(one$risk_x == cell$x & one$risk_y == cell$y))
+    shape <- ea_geometry()
+    expect_gt(nrow(shape), 0L)
+    expect_true(all(shape$risk_x == cell$x & shape$risk_y == cell$y))
+  })
+})
+
 test_that("every other tab renders from the demo data", {
   testServer(demo_srv$server, {
     do.call(session$setInputs, demo_inputs)
