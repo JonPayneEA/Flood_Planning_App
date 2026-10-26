@@ -774,6 +774,7 @@ make_situation_tab <- function() tags$div(
     )
   ),
   tags$h2("Constituencies"),
+  tags$p(class = "app-caption", "Impact and likelihood are for the worst day. Severe, Warnings and Alerts are in force now. Warn areas and Alert areas are the areas the forecast overlaps, where one could be issued."),
   DT::dataTableOutput("situation_table"),
   uiOutput("rank_legend"),
   tags$h2(class = "sit-briefing-h", "MP briefing"),

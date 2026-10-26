@@ -304,6 +304,13 @@ button.stat-btn .stat-hint { display: block; font-size: 16px; color: var(--gov-l
 .cov-page .app-caption { margin-bottom: var(--sp-3); }
 .guide h2 { margin-top: var(--sp-7); }
 
+/* The constituencies table has many columns: tighter cells and headings that wrap, so it fits the page. */
+#situation_table table.dataTable { width: 100% !important; }
+#situation_table table.dataTable th, #situation_table table.dataTable td { padding: 6px 6px; font-size: 14px; line-height: 1.25; }
+#situation_table table.dataTable thead th { white-space: normal; vertical-align: bottom; }
+#situation_table table.dataTable td:first-child { min-width: 9em; }
+#situation_table table.dataTable td:nth-child(5) { white-space: nowrap; }
+
 /* Style guide (demonstration mode). */
 .sg-swatches { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin-bottom: var(--sp-6); }
 .sg-swatch { width: 170px; font-size: 16px; }

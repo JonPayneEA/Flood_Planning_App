@@ -1848,11 +1848,10 @@ server <- function(input, output, session) {
       AlertAreas   = fifelse(is.na(pot_alert_areas),   "n/a", as.character(pot_alert_areas))
     )]
     setnames(tbl, c("d1", "d2", "d3", "d4", "d5"), day_names)
-    setnames(tbl, c("Impact", "Likelihood"), c("Impact (worst day)", "Likelihood (worst day)"))
-    setnames(tbl, c("Severe", "Warnings", "Alerts", "WarnAreas", "AlertAreas"),
-             c("Severe in force", "Warnings in force", "Alerts in force", "Warning areas under forecast", "Alert areas under forecast"))
+    # Short headings so the table fits the page; the export keeps the full names, and the caption above the table explains these.
+    setnames(tbl, c("WarnAreas", "AlertAreas"), c("Warn areas", "Alert areas"))
     if (!is.null(poc_past_id())) {                             # POC-ONLY: in force is not held for past statements
-      for (cn in c("Severe in force", "Warnings in force", "Alerts in force")) tbl[, (cn) := rep("n/a", .N)]
+      for (cn in c("Severe", "Warnings", "Alerts")) tbl[, (cn) := rep("n/a", .N)]
     }
     rank_cols <- c("Worst", day_names)
     labels_js <- jsonlite::toJSON(RANK_LABELS, auto_unbox = FALSE)
@@ -1862,7 +1861,7 @@ server <- function(input, output, session) {
     targets <- match(rank_cols, names(tbl)) - 1L   # columnDefs targets are 0-based
 
     DT::datatable(
-      tbl, rownames = FALSE, selection = "single",
+      tbl, rownames = FALSE, selection = "single", class = "compact stripe hover",
       options = list(pageLength = 25, scrollX = TRUE, dom = "tip", ordering = TRUE,
                      language = list(info = "Showing _START_ to _END_ of _TOTAL_ constituencies",
                                      emptyTable = empty_situation_message(
