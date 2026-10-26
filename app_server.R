@@ -2538,7 +2538,10 @@ server <- function(input, output, session) {
     step <- suppressWarnings(as.integer(input$rain_bars)[1L]); if (is.na(step) || !(step %in% c(900L, 3600L))) step <- 3600L
     cap <- rain_cap()
     bars <- lapply(x$rows$measure_uri, function(u) rain_bars(if (is.null(x$readings)) NULL else x$readings[measure_uri == u], step, cap))
-    c(x, list(step = step, bars = lapply(bars, `[[`, "bars"), ignored = vapply(bars, function(b) as.integer(b$ignored), integer(1L))))
+    mode <- if (identical(input$rain_mode, "cumulative")) "cumulative" else "bars"
+    bars_t <- lapply(bars, `[[`, "bars")
+    cum <- lapply(bars_t, function(b) rain_cumulative(b, step, x$now - 86400, x$now))
+    c(x, list(step = step, mode = mode, bars = bars_t, cum = cum, ignored = vapply(bars, function(b) as.integer(b$ignored), integer(1L))))
   })
 
   output$rain_chart_head <- renderUI({
@@ -2552,7 +2555,12 @@ server <- function(input, output, session) {
         tags$li(tags$span(style = sprintf("display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;background:%s;", rain_series_colour(i))),
                 tags$strong(x$rows$station[i]),
                 if (nrow(b) == 0L) ": no readings in the past 24 hours."
-                else sprintf(": %s in 24 hours, most in one %s %s.%s", rain_mm(sum(b$mm)), unit, rain_mm(max(b$mm)),
+                else if (x$mode == "cumulative") {
+                  cu <- x$cum[[i]]; nm <- sum(cu$missing)
+                  sprintf(": %s in 24 hours%s.%s", rain_mm(max(cu$cum)),
+                          if (nm > 0L) sprintf(" at least, with no reading in %d of %d %s", nm, nrow(cu), if (x$step == 3600L) "hours" else "quarter-hours") else "",
+                          if (x$ignored[i] > 0L) sprintf(" %d impossible reading%s ignored.", x$ignored[i], if (x$ignored[i] == 1L) "" else "s") else "")
+                } else sprintf(": %s in 24 hours, most in one %s %s.%s", rain_mm(sum(b$mm)), unit, rain_mm(max(b$mm)),
                              if (x$ignored[i] > 0L) sprintf(" %d impossible reading%s ignored.", x$ignored[i], if (x$ignored[i] == 1L) "" else "s") else ""))
       }))
   })
@@ -2563,11 +2571,22 @@ server <- function(input, output, session) {
       req(x, !is.null(x$readings))
       start <- x$now - 86400
       fmt <- function(v) format(v, "%Y-%m-%d %H:%M:%S", tz = "UTC")
-      top <- max(1, ceiling(max(vapply(x$bars, function(b) if (nrow(b)) max(b$mm) else 0, numeric(1L))) * 1.15))   # one scale for every gauge
+      cumulative <- identical(x$mode, "cumulative")
+      top <- if (cumulative) max(1, ceiling(max(vapply(x$cum, function(cu) max(cu$cum), numeric(1L))) * 1.1))
+             else max(1, ceiling(max(vapply(x$bars, function(b) if (nrow(b)) max(b$mm) else 0, numeric(1L))) * 1.15))   # one scale for every gauge
       panels <- lapply(seq_len(nrow(x$rows)), function(i) {
-        b <- x$bars[[i]]
+        b <- x$bars[[i]]; cu <- x$cum[[i]]
         p <- plotly::plot_ly()
-        if (nrow(b) > 0L) {
+        if (cumulative && nrow(b) > 0L) {
+          # A step line: the total rises in the interval that had rain and holds otherwise. A cross marks each interval with no
+          # reading, where the line is a minimum rather than a measurement.
+          p <- plotly::add_trace(p, type = "scatter", mode = "lines", x = fmt(cu$t + x$step), y = cu$cum, line = list(shape = "hv", color = rain_series_colour(i), width = 2),
+                                 name = x$rows$station[i], hovertemplate = paste0("%{x|%a %d %b %H:%M} UTC<br>%{y:.1f} mm so far<extra>", x$rows$station[i], "</extra>"))
+          mi <- cu[missing == TRUE]
+          if (nrow(mi) > 0L) p <- plotly::add_trace(p, type = "scatter", mode = "markers", x = fmt(mi$t + x$step / 2), y = mi$cum,
+                                                    marker = list(symbol = "x", size = 7, color = APP_PALETTE$ink_muted), name = "No reading", showlegend = i == 1L,
+                                                    hovertemplate = "%{x|%a %d %b %H:%M} UTC<br>no reading in this interval<extra></extra>")
+        } else if (nrow(b) > 0L) {
           p <- plotly::add_trace(p, type = "bar", x = fmt(b$t), y = b$mm, width = x$step * 1000, offset = 0, name = x$rows$station[i],
                                  marker = list(color = rain_series_colour(i)),
                                  hovertemplate = paste0("%{x|%a %d %b %H:%M} UTC<br>%{y:.1f} mm<extra>", x$rows$station[i], "</extra>"))
@@ -2577,7 +2596,8 @@ server <- function(input, output, session) {
       fig <- plotly::subplot(panels, nrows = length(panels), shareX = TRUE, titleY = TRUE, margin = 0.05)
       app_plot_style(fig, height = 190 * length(panels) + 80, showlegend = TRUE, bargap = 0.04,
                      xaxis = app_plot_axis(range = fmt(c(start, x$now)), type = "date", nticks = 6),
-                     title = list(text = sprintf("Rainfall in each %s, past 24 hours, times in UTC", if (x$step == 3600L) "hour" else "15 minutes"),
+                     title = list(text = if (cumulative) "Running total of rainfall, past 24 hours; a cross marks an interval with no reading, times in UTC"
+                                              else sprintf("Rainfall in each %s, past 24 hours, times in UTC", if (x$step == 3600L) "hour" else "15 minutes"),
                                   x = 0.01, xanchor = "left", font = list(size = 13, color = APP_PALETTE$navy)),
                      margin = list(t = 50, l = 60, r = 20))
     })

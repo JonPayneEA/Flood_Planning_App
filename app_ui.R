@@ -896,6 +896,7 @@ make_rain_tab <- function() tags$div(
       selectizeInput("rain_charted", "Click the map to add a gauge, up to 6", choices = NULL, multiple = TRUE, width = "100%",
                      options = list(maxItems = RAIN_MAX_CHARTED, placeholder = "Click a gauge on the map")),
       tags$div(class = "d-flex flex-wrap align-items-center gap-3 mb-2",
+               radioButtons("rain_mode", NULL, choices = c("Each interval" = "bars", "Running total" = "cumulative"), selected = "bars", inline = TRUE),
                radioButtons("rain_bars", NULL, choices = c("1 hour" = 3600L, "15 minutes" = 900L), selected = 3600L, inline = TRUE),
                actionButton("rain_clear", "Clear", class = "btn-sm btn-outline-secondary")),
       uiOutput("rain_chart_head"),

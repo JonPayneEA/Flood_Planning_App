@@ -173,6 +173,12 @@ test_that("the Rain gauges tab loads on first open, summarises, and takes its fi
     expect_equal(cd$rows$key, ok[1]); expect_equal(length(cd$bars), 1L); expect_gt(nrow(cd$bars[[1]]), 0L); expect_equal(cd$step, 3600L)
     expect_lte(nrow(cd$bars[[1]]), 25L)                                      # 24 hours of hourly bars
     expect_match(txt(output$rain_chart_head), "in 24 hours, most in one hour")
+    session$setInputs(rain_mode = "cumulative")                              # the running total, with missing hours flagged
+    cc <- rain_chart_data()
+    expect_equal(cc$mode, "cumulative"); expect_equal(nrow(cc$cum[[1]]), 25L)
+    expect_equal(max(cc$cum[[1]]$cum), sum(cc$bars[[1]]$mm))                  # the total reaches the sum of the bars
+    expect_match(txt(output$rain_chart_head), "in 24 hours")
+    session$setInputs(rain_mode = "bars")
     click(ok[2]); click(ok[3]); click(ok[2])                                  # a second click on a gauge changes nothing
     expect_equal(rain_picks(), ok[1:3]); expect_equal(nrow(rain_chart_data()$rows), 3L)
     expect_equal(length(rain_chart_data()$bars), 3L)
