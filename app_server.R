@@ -2259,19 +2259,20 @@ server <- function(input, output, session) {
   rt_started <- reactiveVal(FALSE)
   rt_or_all <- function(x) if (is.null(x) || length(x) == 0L || !nzchar(x[1L])) RT_ALL else x[1L]
 
-  rt_sync <- function(reg, area, river, param, stn) {
-    o <- rt_options(reg, area, river, param)
+  rt_sync <- function(reg, area, river, param, stn, fffs = RT_ALL) {
+    o <- rt_options(reg, area, river, param, fffs)
     keep <- function(v, choices) if (v %in% choices) v else RT_ALL
     area  <- keep(area, o$areas);  river <- keep(river, o$rivers)
-    param <- keep(param, o$parameters); stn <- keep(stn, o$stations)
+    param <- keep(param, o$parameters); stn <- keep(stn, o$stations); fffs <- keep(fffs, o$fffs)
     updateSelectInput(session, "rt_area",    choices = o$areas,      selected = area)
     updateSelectInput(session, "rt_river",   choices = o$rivers,     selected = river)
     updateSelectInput(session, "rt_param",   choices = o$parameters, selected = param)
     updateSelectInput(session, "rt_station", choices = o$stations,   selected = stn)
-    rows <- rt_filter_register(reg, area, river, param, stn)
+    updateSelectizeInput(session, "rt_fffs", choices = o$fffs, selected = fffs, server = TRUE)
+    rows <- rt_filter_register(reg, area, river, param, stn, fffs)
     rows <- rows[order(tolower(measure_label))][seq_len(min(.N, 500L))]
-    # A single station: preselect up to four of its measures so the chart appears at once.
-    pick <- if (!identical(stn, RT_ALL)) head(rows$measure_uri, 4L) else character()
+    # A single station or FFFS ID: preselect up to four of its measures so the chart appears at once.
+    pick <- if (!identical(stn, RT_ALL) || !identical(fffs, RT_ALL)) head(rows$measure_uri, 4L) else character()
     updateSelectizeInput(session, "rt_measures", choices = stats::setNames(rows$measure_uri, rows$measure_label),
                          selected = pick, server = TRUE)
   }
@@ -2283,13 +2284,14 @@ server <- function(input, output, session) {
     if (is.null(r)) return()
     reg <- rt_prepare_register(r)
     rt_reg(reg)
-    rt_sync(reg, RT_ALL, RT_ALL, RT_ALL, RT_ALL)
+    rt_sync(reg, RT_ALL, RT_ALL, RT_ALL, RT_ALL, RT_ALL)
   })
 
-  observeEvent(list(input$rt_area, input$rt_river, input$rt_param, input$rt_station), {
+  observeEvent(list(input$rt_area, input$rt_river, input$rt_param, input$rt_station, input$rt_fffs), {
     reg <- rt_reg()
     req(reg)
-    rt_sync(reg, rt_or_all(input$rt_area), rt_or_all(input$rt_river), rt_or_all(input$rt_param), rt_or_all(input$rt_station))
+    rt_sync(reg, rt_or_all(input$rt_area), rt_or_all(input$rt_river), rt_or_all(input$rt_param), rt_or_all(input$rt_station),
+            rt_or_all(input$rt_fffs))
   }, ignoreInit = TRUE)
 
   rt_data <- eventReactive(list(input$rt_measures, input$rt_days, input$rt_refresh, rt_reg()), {

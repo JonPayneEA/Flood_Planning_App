@@ -633,24 +633,27 @@ rt_prepare_register <- function(register) {
   r[]
 }
 
-rt_filter_register <- function(r, area = RT_ALL, river = RT_ALL, param = RT_ALL, stn = RT_ALL) {
+rt_filter_register <- function(r, area = RT_ALL, river = RT_ALL, param = RT_ALL, stn = RT_ALL, fffs = RT_ALL) {
   if (!identical(area, RT_ALL))  r <- r[r$ea_area_name %in% area]
   if (!identical(river, RT_ALL)) r <- r[r$river_name %in% river]
   if (!identical(param, RT_ALL)) r <- r[r$parameter %in% param]
   if (!identical(stn, RT_ALL))   r <- r[r$station %in% stn]
+  if (!identical(fffs, RT_ALL))  r <- r[r$fffs_id %in% fffs]
   r
 }
 
 rt_values <- function(r, column) c(RT_ALL, sort(unique(as.character(stats::na.omit(r[[column]])))))
 
 # The choices for each drop-down, each narrowed by the other choices, so a selection
-# can never lead to an empty list. Stations are narrowed by all three.
-rt_options <- function(r, area = RT_ALL, river = RT_ALL, param = RT_ALL) {
+# can never lead to an empty list. Stations are narrowed by all of them. The FFFS ids (the mapping's key to the
+# thresholds) are narrowed by area, river and parameter, and every other drop-down is narrowed by a chosen FFFS id.
+rt_options <- function(r, area = RT_ALL, river = RT_ALL, param = RT_ALL, fffs = RT_ALL) {
   list(
-    areas      = rt_values(rt_filter_register(r, river = river, param = param), "ea_area_name"),
-    rivers     = rt_values(rt_filter_register(r, area = area, param = param),    "river_name"),
-    parameters = rt_values(rt_filter_register(r, area = area, river = river),    "parameter"),
-    stations   = rt_values(rt_filter_register(r, area = area, river = river, param = param), "station"))
+    areas      = rt_values(rt_filter_register(r, river = river, param = param, fffs = fffs), "ea_area_name"),
+    rivers     = rt_values(rt_filter_register(r, area = area, param = param, fffs = fffs),    "river_name"),
+    parameters = rt_values(rt_filter_register(r, area = area, river = river, fffs = fffs),    "parameter"),
+    stations   = rt_values(rt_filter_register(r, area = area, river = river, param = param, fffs = fffs), "station"),
+    fffs       = rt_values(rt_filter_register(r, area = area, river = river, param = param), "fffs_id"))
 }
 
 # Midnight UTC at the end of the last day held in the archive, or NULL when nothing is archived.

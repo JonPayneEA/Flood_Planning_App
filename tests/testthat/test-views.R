@@ -606,6 +606,23 @@ test_that("the Hydrometrics tab loads the register on first open and fetches rea
 })
 
 
+
+test_that("choosing an FFFS ID in Hydrometrics re-syncs the drop-downs without error, and an unknown one falls back to All", {
+  reg <- function() data.table(station_label = c("Aldwyn", "Aldwyn", "Brenn"), station_reference = c("S1", "S1", "S2"),
+                               station_uri = c("u/S1", "u/S1", "u/S2"), measure_uri = c("m/1", "m/2", "m/3"),
+                               parameter = c("level", "flow", "level"), unit_name = c("mASD", "m3/s", "mASD"), river_name = c("Aldwyn", "Aldwyn", "Brenn"),
+                               ea_area_name = "North", fffs_id = c("F1", "F1", "F2"))
+  env <- make_server_env(list(fetch_rt_register = reg, fetch_rt_boundary = function() NULL))
+  testServer(env$server, {
+    do.call(session$setInputs, base_inputs)
+    session$setInputs(main_tabs = "Hydrometrics")
+    expect_equal(rt_options(rt_reg(), fffs = "F1")$stations, c("All", "Aldwyn"))
+    expect_no_error(session$setInputs(rt_fffs = "F1"))
+    expect_no_error(session$setInputs(rt_fffs = "NOPE"))
+    expect_no_error(session$setInputs(rt_fffs = ""))
+  })
+})
+
 test_that("ticking Detailed lists each alert and warning with its date and time", {
   lk <- function() data.table(ea_area_code = "a", constituency_id = "E14000001", constituency_name = "Alpha",
                               constituency_overlap_pct = 1, mp_name = "A MP", mp_party = "p", mp_email = "e", mp_phone = "t")
