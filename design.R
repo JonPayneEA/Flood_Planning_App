@@ -239,8 +239,18 @@ div.stat-card .stat-label { font-size: 16px; text-transform: none; letter-spacin
 .empty-state { border: 0; color: var(--gov-secondary); }
 .source-info-label, .changes-strip .chg-group td, .legend-row { text-transform: none; letter-spacing: 0; font-size: 16px; }
 .shiny-sidebar { background: var(--gov-grey); }
-.nation-strip { padding: 0 0 var(--sp-3); }
-.nation-note { font-size: 16px; color: var(--gov-secondary); }
+/* The nation filter sits in the masthead: a label and a compact control on one line. */
+.masthead-right { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-2); }
+.masthead-right .masthead-meta { justify-content: flex-end; gap: var(--sp-2); }
+.masthead-right .masthead-meta .asof, .masthead-right .masthead-meta .asof * { font-size: 14px; }
+@media (min-width: 64em) { .masthead-right .masthead-meta { flex-wrap: nowrap; } .masthead-right .btn, .masthead-right .health-badge { white-space: nowrap; } }
+@media (max-width: 90em) { .masthead-sub { display: none; } }
+@media (min-width: 64em) { .app-masthead .masthead-inner { flex-wrap: nowrap; } .masthead-brand { flex: 0 0 auto; } }
+@media (max-width: 40.0525em) { .masthead-right { align-items: flex-start; flex-basis: 100%; } }
+.masthead-filter .nation-strip { display: flex; align-items: center; gap: var(--sp-3); padding: 0; flex-wrap: wrap; }
+.masthead-filter .form-group { display: flex; align-items: center; gap: var(--sp-3); margin: 0; }
+.masthead-filter label { color: #FFFFFF; margin: 0; white-space: nowrap; font-size: 16px; }
+.masthead-filter .selectize-input { min-height: 36px; padding-top: 4px; padding-bottom: 4px; }
 .filter-row { margin-bottom: var(--sp-4); }
 .health-badge { border-radius: 0; font-size: 16px; }
 
@@ -342,18 +352,22 @@ app_masthead <- function() {
              tags$div(tags$p(class = "masthead-name", "Flood ", tags$span(class = "hl", "Intelligence"), " Tool"),
                       tags$div(class = "masthead-sub", "Flood Guidance Statement: forecast, constituencies and flood areas"))),
       tags$div(
-        class = "masthead-meta",
-        uiOutput("data_asof"),
-        tags$button(
-          type = "button", id = "copy_link", class = "btn btn-sm btn-outline-secondary",
-          title = "Copy a link to this exact view",
-          onclick = paste0(
-            "var b=this,t=b.innerHTML;",
-            "if(navigator.clipboard){navigator.clipboard.writeText(window.location.href).then(function(){",
-            "b.textContent='Copied';setTimeout(function(){b.innerHTML=t;},1500);});}",
-            "else{window.prompt('Copy this link',window.location.href);}"),
-          icon("link"), " Copy link"),
-        uiOutput("health_badge"))
+        class = "masthead-right",
+        tags$div(class = "masthead-filter", make_nation_strip()),
+        tags$div(
+          class = "masthead-meta",
+          uiOutput("data_asof"),
+          tags$button(
+            type = "button", id = "copy_link", class = "btn btn-sm btn-outline-secondary",
+            title = "Copy a link to this exact view",
+            onclick = paste0(
+              "var b=this,t=b.innerHTML;",
+              "if(navigator.clipboard){navigator.clipboard.writeText(window.location.href).then(function(){",
+              "b.textContent='Copied';setTimeout(function(){b.innerHTML=t;},1500);});}",
+              "else{window.prompt('Copy this link',window.location.href);}"),
+            icon("link"), " Copy link"),
+          uiOutput("health_badge"))
+      )
     )
   )
 }

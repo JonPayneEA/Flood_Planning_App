@@ -729,10 +729,11 @@ make_right_panel <- function() tags$div(
 # clearing the box shows all four.
 make_nation_strip <- function() tags$div(
   class = "nation-strip",
+  title = "Wales, Scotland and Northern Ireland are included in the data. Add them here to see constituencies the forecast reaches there.",
   selectizeInput("nations", "Constituencies in",
                  choices  = NATIONS, selected = DEFAULT_NATIONS, multiple = TRUE,
-                 options  = list(placeholder = "All four nations"), width = "380px"),
-  tags$span(class = "nation-note",
+                 options  = list(placeholder = "All four nations"), width = "320px"),
+  tags$span(class = "visually-hidden",
             "Wales, Scotland and Northern Ireland are included in the data. Add them here to see constituencies the forecast reaches there.")
 )
 
@@ -1086,7 +1087,6 @@ ui <- function(request) {
 
     tags$main(
       id = "main-content", class = "app-container app-main",
-      make_nation_strip(),
       do.call(tabsetPanel, c(list(id = "main_tabs"), Filter(Negate(is.null), tabs)))
     ),
     app_footer()
