@@ -297,6 +297,13 @@ button.stat-btn .stat-hint { display: block; font-size: 16px; color: var(--gov-l
 .rt-page .filter-row { margin-bottom: var(--sp-3); }
 .rt-page p.text-muted.mb-0 { margin-top: var(--sp-3); }
 
+/* Pages with several tables: a heading and space between them, in place of the old horizontal rules. */
+.sit-briefing-h { margin-top: var(--sp-8); }
+.sit-page > h2, .wh-page > h2, .cov-page > h2 { margin-top: var(--sp-6); margin-bottom: var(--sp-2); }
+.sit-page .filter-row, .wh-page .filter-row, .cov-page .filter-row, .exp-page .row { margin-bottom: var(--sp-3); }
+.cov-page .app-caption { margin-bottom: var(--sp-3); }
+.guide h2 { margin-top: var(--sp-7); }
+
 /* Style guide (demonstration mode). */
 .sg-swatches { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin-bottom: var(--sp-6); }
 .sg-swatch { width: 170px; font-size: 16px; }
