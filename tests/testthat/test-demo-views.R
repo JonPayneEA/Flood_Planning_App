@@ -173,9 +173,13 @@ test_that("the Rain gauges tab loads on first open, summarises, and takes its fi
     for (k in ok[4:8]) click(k)                                               # the seventh and eighth drop the oldest
     expect_equal(length(rain_picks()), RAIN_MAX_CHARTED); expect_false(ok[1] %in% rain_picks()); expect_true(ok[8] %in% rain_picks())
     click("no-such-gauge"); expect_false("no-such-gauge" %in% rain_picks())
-    session$setInputs(rain_charted = rain_picks()[2:3])                       # removing gauges from the box un-charts them
+    session$setInputs(rain_charted = rain_picks()); session$elapse(600)       # the box repeating what was pushed to it: no change
+    expect_equal(length(rain_picks()), RAIN_MAX_CHARTED)
+    session$setInputs(rain_charted = rain_picks()[2:3]); session$elapse(600)  # removing gauges from the box un-charts them
     expect_equal(length(rain_picks()), 2L)
-    session$setInputs(rain_charted = c(rain_picks()[1], "bogus")); expect_equal(length(rain_picks()), 1L)
+    session$setInputs(rain_charted = NULL); session$setInputs(rain_charted = rain_picks()); session$elapse(600)   # a blank then the value back, as a server-side box sends
+    expect_equal(length(rain_picks()), 2L)                                    # is the echo of an update, not the user clearing it
+    session$setInputs(rain_charted = c(rain_picks()[1], "bogus")); session$elapse(600); expect_equal(length(rain_picks()), 1L)
     session$setInputs(rain_clear = 1); expect_equal(length(rain_picks()), 0L); expect_null(rain_chart_data())
     session$setInputs(rain_find = ok[5]); expect_equal(rain_picks(), ok[5])    # finding a gauge charts it too
     expect_no_error(session$setInputs(rain_find = rain_raw()$key[1]))
