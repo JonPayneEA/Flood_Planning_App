@@ -1143,8 +1143,8 @@ server <- function(input, output, session) {
       class = "ov-headline", style = paste0("border-left-color:", colour, ";"),
       tags$div(class = "ov-kicker",
                sprintf("Flood Guidance Statement #%s, issued %s", d$stmt$statement_id, fmt_statement_time(d$stmt$issued_at, "%Y-%m-%d %H:%M"))),
-      tags$div(class = "ov-text", field_or_dash(d$stmt$headline)),
-      tags$div(class = "mt-2", "Highest forecast risk in any constituency: ", rank_chip(worst))
+      tags$p(class = "ov-text", field_or_dash(d$stmt$headline)),
+      tags$div(class = "ov-risk", "Highest forecast risk in any constituency: ", rank_chip(worst))
     )
   })
 
@@ -1165,6 +1165,25 @@ server <- function(input, output, session) {
       card(sum(d$fgs_escalated, na.rm = TRUE), "Escalated since the last statement", sub = "any rise, on any day or source"),
       card(sum(d$has_active_warning, na.rm = TRUE), "Constituencies with a warning or alert in force"),
       card(n_draft, "MP briefings awaiting review", sub = if (DEMO_MODE && n_done > 0L) sprintf("%d actioned in this demo", n_done)))
+  })
+
+  output$ov_inforce <- renderUI({
+    d <- ov_data()$sit
+    if (is.null(d)) return(NULL)
+    n <- function(x) sum(x > 0L, na.rm = TRUE)
+    sev <- n(d$severe_warnings); wrn <- n(d$warnings); alt <- n(d$alerts)
+    card <- function(num, label, sub = NULL, cls = "") {
+      tags$div(class = paste("stat-card", cls),
+               tags$div(class = "stat-num", num), tags$div(class = "stat-label", label),
+               if (!is.null(sub)) tags$div(class = "demo-note", sub))
+    }
+    tagList(
+      tags$p(class = "app-caption", "Constituencies with at least one of each in force now. A warning that crosses several constituencies is counted in each."),
+      tags$div(class = "ov-grid ov-inforce",
+        card(sev, "with a severe flood warning", sprintf("%d severe warning%s across them", sum(d$severe_warnings, na.rm = TRUE), if (sum(d$severe_warnings, na.rm = TRUE) == 1L) "" else "s"), "sev"),
+        card(wrn, "with a flood warning",        sprintf("%d warning%s across them", sum(d$warnings, na.rm = TRUE), if (sum(d$warnings, na.rm = TRUE) == 1L) "" else "s"), "warn"),
+        card(alt, "with a flood alert",          sprintf("%d alert%s across them", sum(d$alerts, na.rm = TRUE), if (sum(d$alerts, na.rm = TRUE) == 1L) "" else "s"), "alert"))
+    )
   })
 
   output$ov_outlook <- renderUI({
@@ -1196,7 +1215,7 @@ server <- function(input, output, session) {
                  if (r$warnings > 0L) sprintf("%d warning%s", r$warnings, if (r$warnings > 1L) "s" else ""),
                  if (r$alerts > 0L) sprintf("%d alert%s", r$alerts, if (r$alerts > 1L) "s" else ""))
       tags$tr(class = "clickable", onclick = goto_js(r$constituency_id),
-        tags$td(tags$strong(r$constituency_name), tags$br(),
+        tags$td(tags$a(href = "#", onclick = "return false;", tags$strong(r$constituency_name)), tags$br(),
                 tags$span(class = "demo-note", if (is.na(r$mp_name)) "Seat vacant" else r$mp_name)),
         tags$td(rank_chip(r$fgs_worst_rank), tags$br(),
                 tags$span(class = "demo-note", format(as.Date(r$fgs_worst_date), "%a %d %b"))),
@@ -1230,7 +1249,7 @@ server <- function(input, output, session) {
     rows <- lapply(seq_len(nrow(show)), function(i) {
       r <- show[i]
       tags$tr(class = "clickable", onclick = goto_js(r$constituency_id),
-        tags$td(r$constituency_name),
+        tags$td(tags$a(href = "#", onclick = "return false;", r$constituency_name)),
         tags$td(rank_chip(r$previous_rank), HTML(" &rarr; "), rank_chip(r$new_rank)),
         tags$td(class = "demo-note", format(as.Date(r$forecast_date), "%a %d")))
     })
@@ -1487,7 +1506,7 @@ server <- function(input, output, session) {
     row_html <- function(r) {
       tags$tr(
         class = "chg-row", onclick = goto_js(r$constituency_id),
-        tags$td(r$constituency_name),
+        tags$td(tags$a(href = "#", onclick = "return false;", r$constituency_name)),
         tags$td(rank_chip(r$previous_rank), HTML(" &rarr; "), rank_chip(r$new_rank)),
         tags$td(format(as.Date(r$forecast_date), "%a %d %b"), " ", tags$span(class = "text-muted", r$source)),
         tags$td(if (r$n_cells > 1L) tags$span(class = "chg-more", sprintf("+%d more", r$n_cells - 1L)))

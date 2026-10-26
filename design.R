@@ -248,6 +248,24 @@ div.stat-card .stat-label { font-size: 16px; text-transform: none; letter-spacin
 .irs--shiny .irs-bar, .irs--shiny .irs-handle, .irs--shiny .irs-single, .irs--shiny .irs-from, .irs--shiny .irs-to { background: {{navy}}; border-color: {{navy}}; }
 .form-check-input:checked { background-color: {{navy}}; border-color: {{navy}}; }
 
+/* ===== Overview =========================================================== */
+.ov-page { max-width: 100%; }
+.ov-headline .ov-text { font-size: 24px; line-height: 1.25; font-weight: 700; margin: var(--sp-1) 0 var(--sp-3); }
+.ov-headline .ov-risk { font-size: 19px; }
+.ov-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--sp-6); margin-bottom: var(--sp-8); }
+.ov-section { margin-bottom: var(--sp-8); }
+.ov-section > h2 { margin-bottom: var(--sp-2); }
+.ov-outlook { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--sp-4); }
+.ov-day { background: transparent; border: 0; border-top: 2px solid var(--gov-text); border-radius: 0; padding: var(--sp-2) 0 0; text-align: left; }
+.ov-day .d { font-size: 16px; font-weight: 700; color: var(--gov-text); margin-bottom: var(--sp-2); }
+.ov-day .n { font-size: 16px; color: var(--gov-secondary); }
+.ov-cols { display: grid; grid-template-columns: 3fr 2fr; gap: var(--sp-8); }
+.ov-table { width: 100%; }
+.ov-table tr.clickable:hover { background: var(--gov-grey); }
+.ov-foot { font-size: 16px; color: var(--gov-secondary); margin-top: var(--sp-3); }
+@media (max-width: 64em) { .ov-cols { grid-template-columns: 1fr; gap: 0; } }
+@media (max-width: 40.0525em) { .ov-outlook { grid-template-columns: 1fr 1fr; } .ov-grid { gap: var(--sp-4); } }
+
 /* Style guide (demonstration mode). */
 .sg-swatches { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin-bottom: var(--sp-6); }
 .sg-swatch { width: 170px; font-size: 16px; }
@@ -374,7 +392,7 @@ app_footer <- function() {
       tags$p(class = "licence",
              "All content is available under the ",
              tags$a(href = "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/", "Open Government Licence v3.0"),
-             ", except where otherwise stated. Flood Guidance Statement text and risk areas are from the Met Office and the Environment Agency's Flood Forecasting Centre. © Crown copyright.")
+             ", except where otherwise stated. Flood Guidance Statement text and risk areas are from the Met Office and the Environment Agency's Flood Forecasting Centre. ", HTML("&copy;"), " Crown copyright.")
     )
   )
 }
