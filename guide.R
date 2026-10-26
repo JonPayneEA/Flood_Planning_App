@@ -48,12 +48,12 @@ GUIDE_TABLES <- data.frame(
             "ea_area_constituency_lookup", "mp_contact_details",
             "fgs_constituency_changes", "fgs_changes_log", "constituency_flood_situation", "mp_briefing_drafts",
             "fgs_constituency_exposure", "pipeline_health", "ea_warning_episodes",
-            "ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_readings_bronze", "ea_warning_fgs_coverage", "ea_rt_measures_mapped"),
-  notebook = c("01", "01", "07", "07", "03", "03", "05", "06", "04", "18", "18", "19", "20", "21", "22", "25", "09", "23", "10", "26", "16"),
+            "ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_readings_bronze", "ea_warning_fgs_coverage", "ea_rt_measures_mapped", "ea_rt_latest"),
+  notebook = c("01", "01", "07", "07", "03", "03", "05", "06", "04", "18", "18", "19", "20", "21", "22", "25", "09", "23", "10", "26", "16", "23"),
   refresh = c("Each FGS issue or amendment", "Each FGS issue or amendment", "Each FGS issue", "Each FGS issue",
               "Weekly", "Weekly", "Quarterly, or after an election", "Weekly and quarterly", "Weekly",
               "Every poll", "Every poll", "Every poll", "Every poll", "Daily", "Every poll", "Every poll",
-              "Weekly", "Every 15 minutes", "Daily", "Daily", "When the mapping file changes"),
+              "Weekly", "Every 15 minutes", "Daily", "Daily", "When the mapping file changes", "Every 15 minutes"),
   holds = c("One row per statement: the headline and the forecast text.",
             "One row per risk polygon, flood source and day, with impact, likelihood and risk level.",
             "Each FGS shape that overlaps an EA flood warning or alert area.",
@@ -74,7 +74,8 @@ GUIDE_TABLES <- data.frame(
             "Real-time readings, the daily archive and the live tail joined as one series.",
             "The daily archive of readings. Its last day marks where the live tail begins.",
             "Each alert and warning, and whether and when an FGS polygon covered it.",
-            "The measure register with each measure's real gauge name, FFFS id and WISKI id, where the telemetry mapping matched it. Optional."),
+            "The measure register with each measure's real gauge name, FFFS id and WISKI id, where the telemetry mapping matched it. Optional.",
+            "The newest reading of each measure, from the live tail."),
   stringsAsFactors = FALSE
 )
 
@@ -390,6 +391,28 @@ guide_products <- function(s) {
       limits = c(
         "These are readings as the real-time API supplies them, unchecked. They are not quality-controlled and are not a record of flooding.",
         "Only the first 500 measures matching the filters are offered. Narrow by river or station to find the rest.",
+        "Uses Environment Agency flood and river level data from the real-time data API (Beta), under the Open Government Licence."
+      )
+    ),
+    list(
+      id = "rain-gauges", title = "Rain gauges", where = "Rain gauges",
+      answers = "How much rain has each gauge caught in the last hour, 12 hours and 24 hours, and where is it falling?",
+      tables = c("ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_latest", "ea_rt_measures_mapped"),
+      steps = c(
+        "One query returns every rainfall measure that has a position, its newest reading, and its rainfall over the past 1, 12 and 24 hours. The totals add up the readings in each window.",
+        "A gauge can report both 15-minute totals and instantaneous readings. It is drawn once, on its totals.",
+        "Each gauge is a circle coloured by its total for the window you choose, in six bands from the palest (almost nothing) to the darkest (the heaviest). The legend gives the bands in millimetres, which differ by window because an hour's rain is smaller than a day's.",
+        "Click a gauge for its name, its station reference and FFFS and WISKI ids where the telemetry mapping holds them, its latest reading and when it was taken, the three totals, and how many of the expected readings it reported in 24 hours. Use Find a gauge to fly to one by name, station or FFFS ID."
+      ),
+      read = c(
+        "A grey gauge has had no reading for three hours. Its last reading is in the popup, but it is not counted as dry.",
+        "\"No readings\" in a total means the gauge sent nothing in that window. It is not the same as 0.0 mm, which means it reported and caught nothing.",
+        "A total over fewer readings than expected is probably low. The line at the foot of the popup says how many arrived.",
+        "Times are UTC. Not tied to the forecast: the statement and day pickers and the Nations filter do not apply."
+      ),
+      limits = c(
+        "These are readings as the real-time API supplies them, unchecked. They are not quality-controlled and are not a record of rainfall.",
+        "Only gauges with a position in the register appear.",
         "Uses Environment Agency flood and river level data from the real-time data API (Beta), under the Open Government Licence."
       )
     ),

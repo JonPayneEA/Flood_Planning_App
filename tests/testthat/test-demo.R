@@ -42,6 +42,10 @@ test_that("no demo fetcher reaches for the warehouse", {
     wh <- demo_env$fetch_warning_history()
     expect_true(nrow(wh) > 0L && all(c("constituency_id", "ea_area_name", "issued_date", "n_issued", "n_severe") %in% names(wh)))
     expect_no_error(demo_env$fetch_changes(4812L))
+    rg <- demo_env$fetch_rain_gauges()
+    expect_true(all(c("measure_uri", "lat", "long", "mm_1h", "mm_12h", "mm_24h", "last_time", "value_type", "fffs_id") %in% names(rg)))
+    prepared <- rain_prepare(rg)
+    expect_equal(nrow(prepared), 24L); expect_true(any(prepared$stale)); expect_true(any(!prepared$stale & prepared$mm_24h > 5, na.rm = TRUE))
     for (d in 1:5) {
       expect_no_error(demo_env$fetch_risk_polygons(4812L, d))
       expect_no_error(demo_env$fetch_ea_areas_for_statement(4812L, d))

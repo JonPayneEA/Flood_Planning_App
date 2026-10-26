@@ -720,3 +720,62 @@ test_that("a gauge's instantaneous and total measures are told apart by value ty
   expect_match(r$measure_label[3], "\\(mAOD\\)"); expect_match(r$measure_label[4], "\\(m\\)")
   expect_false(any(grepl("\\[", r$measure_label)))                  # no URI tail was needed
 })
+
+
+# ---- Rain gauges --------------------------------------------------------------------
+
+rain_fake <- function(now = as.POSIXct("2026-10-23 12:00:00", tz = "UTC")) data.table(
+  measure_uri = c("m/a-i", "m/a-t", "m/b-t", "m/c-t", "m/d-t"), station_uri = c("u/A", "u/A", "u/B", "u/C", "u/D"),
+  station_reference = c("A", "A", "B", "C", "D"), station_label = c("Aldwyn RG", "Aldwyn RG", "Rainfall station", "Cardell", "Dunmere"),
+  ea_area_name = c("North", "North", "North", "South", "South"), lat = c(53, 53, 52.5, 51.5, 51.2), long = c(-2, -2, -1.5, -1, -0.5),
+  unit_name = "mm", value_type = c("instantaneous", "total", "total", "total", "total"), period = "900", parameter = "rainfall",
+  gauge_name = c(NA, NA, "Hexton RG", NA, NA), fffs_id = c("F1", "F1", "F2", NA, NA), wiski_id = NA_character_,
+  mm_1h = c(1, 0.4, 0, 0, NA), mm_12h = c(5, 4.2, 0, 0, NA), mm_24h = c(9, 8.1, 0, 0.1, NA), n_24h = c(96, 96, 96, 90, NA),
+  last_time = now - c(600, 600, 300, 7200, 86400), last_value = c(0.2, 0.1, 0, 0, 0.3))
+
+test_that("a gauge with two measures is drawn once, on its totals, and takes its mapped name", {
+  now <- as.POSIXct("2026-10-23 12:00:00", tz = "UTC")
+  r <- rain_prepare(rain_fake(now), now)
+  expect_equal(nrow(r), 4L)
+  a <- r[station_reference == "A"]
+  expect_equal(a$measure_uri, "m/a-t"); expect_equal(a$mm_24h, 8.1)
+  expect_equal(r[station_reference == "B"]$station, "Hexton RG")           # "Rainfall station" is replaced by the mapped name
+  expect_equal(r[station_reference == "C"]$stale, FALSE)                   # two hours: still recent
+  expect_equal(r[station_reference == "D"]$stale, TRUE)                    # a day old
+  expect_equal(r[station_reference == "A"]$n_expected, 96)
+  expect_equal(nrow(rain_prepare(NULL)), 0L)
+})
+
+test_that("rainfall is banded by window, and a stale gauge is grey whatever it last read", {
+  expect_equal(rain_band(c(0, 0.2, 4.9, 5, 39, 40, NA), "mm_24h"), c(1L, 2L, 2L, 3L, 5L, 6L, NA))
+  expect_equal(rain_band(0.5, "mm_1h"), 3L); expect_equal(rain_band(0.5, "mm_12h"), 2L)
+  expect_length(rain_band_labels("mm_24h"), 6L); expect_equal(rain_band_labels("mm_1h")[1:2], c("Under 0.1 mm", "0.1 to 0.5 mm"))
+  now <- as.POSIXct("2026-10-23 12:00:00", tz = "UTC")
+  r <- rain_prepare(rain_fake(now), now)
+  f <- rain_fill(r, "mm_24h")
+  expect_equal(f[r$station_reference == "D"], RAIN_STALE_COLOUR)
+  expect_equal(f[r$station_reference == "A"], RAIN_COLOURS[3L])            # 8.1 mm is the 5 to 10 band
+})
+
+test_that("the popup gives the latest reading and all three totals, and escapes names", {
+  now <- as.POSIXct("2026-10-23 12:00:00", tz = "UTC")
+  d <- rain_fake(now); d[station_reference == "A", station_label := "Ald<b>wyn"]
+  r <- rain_prepare(d, now)
+  p <- rain_popup(r[station_reference == "A"])
+  expect_match(p, "Past 1 hour: 0.4 mm"); expect_match(p, "Past 12 hours: 4.2 mm"); expect_match(p, "Past 24 hours: 8.1 mm")
+  expect_match(p, "Latest: 0.1 mm at Fri 23 Oct 11:50 UTC \\(10 min ago\\)"); expect_match(p, "FFFS F1"); expect_match(p, "96 of 96 readings")
+  expect_false(grepl("<b>wyn", p, fixed = TRUE)); expect_match(p, "Ald&lt;b&gt;wyn")
+  q <- rain_popup(r[station_reference == "D"])
+  expect_match(q, "No recent reading"); expect_match(q, "Past 24 hours: no readings"); expect_match(q, "0 of 96 readings")
+  expect_equal(rain_age_text(c(5, 120, 4000, NA)), c("5 min ago", "2.0 h ago", "3 days ago", ""))
+})
+
+test_that("the area and stale filters and the summary work", {
+  now <- as.POSIXct("2026-10-23 12:00:00", tz = "UTC")
+  r <- rain_prepare(rain_fake(now), now)
+  expect_equal(nrow(rain_filter(r, "South")), 2L); expect_equal(nrow(rain_filter(r, RT_ALL, TRUE)), 3L)
+  s <- rain_summary(r, "mm_24h")
+  expect_equal(s$n, 4L); expect_equal(s$recent, 3L); expect_equal(s$wet, 2L)          # A (8.1) and C (0.1) had rain; B was dry; D is stale
+  expect_equal(s$wettest$name, "Aldwyn RG"); expect_equal(s$wettest$mm, 8.1)
+  expect_equal(rain_summary(r[0], "mm_24h")$n, 0L)
+})

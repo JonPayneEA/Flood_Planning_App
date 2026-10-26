@@ -23,6 +23,12 @@ Tabs:
   1,500 points per measure).
   Needs the `plotly` R package. Where FGS_Notebooks job 16 has built `ea_rt_measures_mapped`,
   rain gauges show their real names and every label carries the WISKI and FFFS ids.
+- **Rain gauges**: a map of the Environment Agency's rain gauges, each coloured by its rainfall over the
+  past 1, 12 or 24 hours. Click a gauge for its latest reading, the three totals and how many of the expected
+  readings arrived. A grey gauge has had no reading for three hours. Find a gauge by name, station or FFFS ID.
+  A gauge that reports both 15-minute totals and instantaneous readings is drawn once, on its totals. Reads
+  `ea_rt_measure_register`, `ea_rt_readings_all` and `ea_rt_latest` (notebooks 9 and 23), and
+  `ea_rt_measures_mapped` for names and ids where notebook 16 has built it.
 - **Warning history**: for each constituency, how many flood alerts and flood
   warnings have been issued for areas inside it, with a period slider and a
   breakdown by area.
@@ -489,6 +495,7 @@ Pipeline products (FGS_Notebooks jobs 18 to 22), all plain tables:
 | `ea_warning_episodes` | Warning history tab: alerts and warnings issued per constituency, from notebook 25. |
 | `ea_warning_fgs_coverage` | Warnings vs FGS tab: each alert and warning, and whether and when an FGS polygon covered it. |
 | `ea_rt_measure_register`, `ea_rt_readings_all`, `ea_rt_readings_bronze` | Hydrometrics tab: the gauges, their readings (archive and live tail), and where the archive ends. |
+| `ea_rt_latest` | Rain gauges tab: the newest reading of each measure (notebook 23). |
 | `ea_rt_measures_mapped` | Hydrometrics tab, optional: the register with each measure's real gauge name, FFFS id and WISKI id (FGS_Notebooks job 16). Without it the plain register is used. |
 
 Each product is fetched defensively. If a table is missing or unreadable the

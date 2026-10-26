@@ -157,6 +157,7 @@ TBL_HEALTH    <- paste(CAT, SCH, "pipeline_health",             sep = ".")  # 22
 TBL_RT_REGISTER <- paste(CAT, SCH, "ea_rt_measure_register",  sep = ".")  # 09 (what each gauge measures)
 TBL_RT_MAPPED   <- paste(CAT, SCH, "ea_rt_measures_mapped",    sep = ".")  # 16 (the register with gauge names, FFFS and WISKI ids; optional)
 TBL_RT_ALL      <- paste(CAT, SCH, "ea_rt_readings_all",      sep = ".")  # 23 (archive and live tail as one series)
+TBL_RT_LATEST   <- paste(CAT, SCH, "ea_rt_latest",            sep = ".")  # 23 (the newest reading of each measure)
 TBL_RT_BRONZE   <- paste(CAT, SCH, "ea_rt_readings_bronze",   sep = ".")  # 10 (the archive; its last day marks where live begins)
 TBL_WARNING_FGS <- paste(CAT, SCH, "ea_warning_fgs_coverage", sep = ".")  # 26 (each warning, and whether and when an FGS polygon covered it)
 TBL_WARNING_EPISODES <- paste(CAT, SCH, "ea_warning_episodes",      sep = ".")  # 25 (each alert or warning from issue to withdrawal)
@@ -322,3 +323,4 @@ RISK_LEVEL_BY_COLOUR <- c(Green = "Very Low", Yellow = "Low", Amber = "Medium", 
 # 0 means nothing flagged. Colours reuse the FGS band palette.
 RANK_LABELS <- c("None", "Very Low", "Low", "Medium", "High")
 RANK_HEX    <- c("#e9ecef", "#4f9d4f", "#f0d040", "#e08020", "#b02020")
+

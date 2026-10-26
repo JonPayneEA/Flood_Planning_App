@@ -854,6 +854,34 @@ make_coverage_tab <- function() tags$div(
 # the shaded band is the live tail that is not yet archived.
 # -----------------------------------------------------------------------------
 
+# -----------------------------------------------------------------------------
+# Rain gauges tab.
+#
+# A map of the Environment Agency's rain gauges. Each is coloured by its rainfall over the past 1, 12 or 24 hours;
+# click one for its name, ids, latest reading and all three totals. A gauge with no recent reading is grey.
+# -----------------------------------------------------------------------------
+
+make_rain_tab <- function() tags$div(
+  class = "p-3",
+  tags$div(
+    class = "filter-row",
+    selectInput("rain_area",   "EA area",   choices = RT_ALL, width = "230px"),
+    selectInput("rain_metric", "Colour by", choices = RAIN_METRICS, selected = "mm_24h", width = "170px"),
+    selectizeInput("rain_find", "Find a gauge", choices = NULL, width = "320px",
+                   options = list(placeholder = "Name, station or FFFS ID")),
+    checkboxInput("rain_hide_stale", sprintf("Hide gauges with no reading for %d hours", RAIN_STALE_HOURS), value = FALSE),
+    actionButton("rain_refresh", "Refresh", icon = icon("rotate"), class = "btn-sm btn-outline-secondary")
+  ),
+  uiOutput("rain_message"),
+  uiOutput("rain_summary"),
+  leaflet::leafletOutput("rain_map", height = "68vh"),
+  tags$small(class = "text-muted d-block mt-2",
+             "This uses Environment Agency flood and river level data from the real-time data API (Beta). ",
+             "Totals add up the readings in the window; times are UTC. Where a gauge reports both 15-minute totals and ",
+             "instantaneous readings, the totals are used. These are readings as supplied, not quality-controlled.")
+)
+
+
 make_hydrometrics_tab <- function() tags$div(
   class = "p-3",
   tags$div(
@@ -1009,6 +1037,7 @@ ui <- function(request) {
     tabPanel("Warning history",        make_warning_history_tab()),
     tabPanel("Warnings vs FGS",        make_coverage_tab()),
     tabPanel("Hydrometrics",           make_hydrometrics_tab()),
+    tabPanel("Rain gauges",            make_rain_tab()),
     if (DEMO_MODE) tabPanel("MP audit log", make_audit_tab()),
     tabPanel("Guide", make_guide_tab()),
 

@@ -2317,6 +2317,105 @@ server <- function(input, output, session) {
     list(readings = readings, chosen = reg[measure_uri %in% uris], days = days, boundary = boundary, now = now)
   }, ignoreNULL = FALSE)
 
+  # ---------------------------------------------------------------------------
+  # Rain gauges tab.
+  #
+  # Loaded when the tab is first opened and again on Refresh: one query returns every rainfall measure with its
+  # position, newest reading and 1, 12 and 24 hour totals. rain_prepare() keeps one measure per gauge. The map skeleton
+  # is drawn once and the circle markers are redrawn through a proxy when a filter changes.
+  # ---------------------------------------------------------------------------
+
+  rain_raw     <- reactiveVal(NULL)
+  rain_started <- reactiveVal(FALSE)
+
+  rain_load <- function() {
+    d <- safe_fetch(fetch_rain_gauges)
+    if (is.null(d)) { rain_raw(NULL); return(invisible(NULL)) }
+    r <- rain_prepare(d)
+    rain_raw(r)
+    updateSelectInput(session, "rain_area", choices = rt_values(r, "ea_area_name"), selected = RT_ALL)
+    labels <- paste0(r$station, ifelse(nzchar(rt_text(r$fffs_id)), paste0(" \u00b7 FFFS ", rt_text(r$fffs_id)), ""),
+                     " \u00b7 ", rt_text(r$station_reference))
+    ord <- order(tolower(labels))
+    updateSelectizeInput(session, "rain_find", choices = stats::setNames(r$key[ord], labels[ord]), selected = character(), server = TRUE)
+    invisible(r)
+  }
+
+  observeEvent(input$main_tabs, {
+    if (!identical(input$main_tabs, "Rain gauges") || rain_started()) return()
+    rain_started(TRUE)
+    rain_load()
+  })
+  observeEvent(input$rain_refresh, { if (rain_started()) rain_load() }, ignoreInit = TRUE)
+
+  rain_metric <- reactive({ m <- input$rain_metric; if (is.null(m) || !(m %in% RAIN_METRICS)) "mm_24h" else m })
+
+  rain_view <- reactive({
+    r <- rain_raw()
+    if (is.null(r) || nrow(r) == 0L) return(NULL)
+    rain_filter(r, rt_or_all(input$rain_area), isTRUE(input$rain_hide_stale))
+  })
+
+  output$rain_message <- renderUI({
+    if (!is.null(rain_raw())) return(NULL)
+    gap <- intersect(c("ea_rt_latest", "ea_rt_readings_all", "ea_rt_measure_register"), names(data_gaps()))
+    tags$p(class = "text-muted",
+           if (length(gap)) gap_text(gap[1L], "Rain gauges")
+           else if (rain_started()) "The rain gauge readings could not be loaded." else "Loading the rain gauges.")
+  })
+
+  output$rain_summary <- renderUI({
+    r <- rain_view()
+    if (is.null(r)) return(NULL)
+    m <- rain_metric(); s <- rain_summary(r, m)
+    window <- tolower(names(RAIN_METRICS)[RAIN_METRICS == m])
+    tags$p(class = "text-muted mb-1",
+           sprintf("%s gauges shown. %s reported in the last %d hours and %s of those had rain in the %s.%s%s",
+                   format(s$n, big.mark = ","), format(s$recent, big.mark = ","), RAIN_STALE_HOURS, format(s$wet, big.mark = ","), window,
+                   if (is.null(s$wettest)) "" else sprintf(" Wettest: %s, %s.", s$wettest$name, rain_mm(s$wettest$mm)),
+                   if (is.null(s$newest)) "" else sprintf(" Newest reading %s UTC.", format(s$newest, "%a %d %b %H:%M", tz = "UTC"))))
+  })
+
+  output$rain_map <- leaflet::renderLeaflet({
+    m <- leaflet::leaflet()
+    m <- leaflet::addProviderTiles(m, leaflet::providers$CartoDB.Positron, group = "Light")
+    m <- leaflet::addProviderTiles(m, leaflet::providers$OpenStreetMap,    group = "Street")
+    m <- leaflet::addLayersControl(m, baseGroups = c("Light", "Street"),
+                                   options = leaflet::layersControlOptions(collapsed = TRUE), position = "topright")
+    leaflet::setView(m, lng = -2.0, lat = 53.0, zoom = 6)
+  })
+
+  observe({
+    d <- rain_view()
+    m <- rain_metric()
+    proxy <- leaflet::leafletProxy("rain_map")
+    proxy <- leaflet::clearGroup(proxy, "rain")
+    proxy <- leaflet::removeControl(proxy, "rain_legend")
+    if (is.null(d) || nrow(d) == 0L) return()
+    band <- rain_band(d[[m]], m)
+    radius <- ifelse(d$stale | is.na(band), 4, 4 + 1.3 * (band - 1))
+    proxy <- leaflet::addCircleMarkers(
+      proxy, lng = d$long, lat = d$lat, group = "rain", layerId = d$key, radius = radius,
+      color = "#243B53", weight = 1, opacity = 0.9, fillColor = rain_fill(d, m), fillOpacity = 0.85,
+      popup = rain_popup(d), label = paste0(d$station, ": ", rain_mm(d[[m]])))
+    leaflet::addLegend(proxy, position = "bottomright", layerId = "rain_legend", opacity = 0.9,
+                       colors = c(RAIN_COLOURS, RAIN_STALE_COLOUR),
+                       labels = c(rain_band_labels(m), sprintf("No reading for %d hours", RAIN_STALE_HOURS)),
+                       title = names(RAIN_METRICS)[RAIN_METRICS == m])
+  })
+
+  # Find a gauge: fly to it and open its popup, whether or not the filters would draw it.
+  observeEvent(input$rain_find, {
+    r <- rain_raw()
+    if (is.null(r) || !nzchar(rt_text(input$rain_find))) return()
+    row <- r[r$key == input$rain_find]
+    if (nrow(row) != 1L) return()
+    proxy <- leaflet::leafletProxy("rain_map")
+    proxy <- leaflet::clearPopups(proxy)
+    proxy <- leaflet::setView(proxy, lng = row$long, lat = row$lat, zoom = 12)
+    leaflet::addPopups(proxy, lng = row$long, lat = row$lat, popup = rain_popup(row))
+  }, ignoreInit = TRUE)
+
   output$rt_message <- renderUI({
     m <- rt_data()$message
     if (is.null(m)) NULL else tags$p(class = "text-muted", m)

@@ -131,6 +131,27 @@ test_that("the map layers and the jump-to-constituency work on demo geometry", {
   expect_equal(demo_srv$warehouse_calls, 0L)
 })
 
+test_that("the Rain gauges tab loads on first open, summarises, and takes its filters and a find", {
+  testServer(demo_srv$server, {
+    do.call(session$setInputs, demo_inputs)
+    expect_null(rain_raw())                                                  # nothing is fetched until the tab is opened
+    session$setInputs(main_tabs = "Rain gauges")
+    expect_equal(nrow(rain_raw()), 24L)
+    expect_match(txt(output$rain_summary), "24 gauges shown")
+    expect_null(output$rain_message)
+    session$setInputs(rain_metric = "mm_1h"); expect_equal(rain_metric(), "mm_1h")
+    session$setInputs(rain_metric = "nonsense"); expect_equal(rain_metric(), "mm_24h")      # an unknown window falls back
+    session$setInputs(rain_area = "Demo North")
+    expect_true(all(rain_view()$ea_area_name == "Demo North"))
+    session$setInputs(rain_area = "All", rain_hide_stale = TRUE)
+    expect_lt(nrow(rain_view()), 24L)
+    expect_no_error(session$setInputs(rain_find = rain_raw()$key[1]))
+    expect_no_error(session$setInputs(rain_find = "no-such-gauge"))
+    expect_no_error(session$setInputs(rain_refresh = 1))
+  })
+  expect_equal(demo_srv$warehouse_calls, 0L)
+})
+
 test_that("every other tab renders from the demo data", {
   testServer(demo_srv$server, {
     do.call(session$setInputs, demo_inputs)
