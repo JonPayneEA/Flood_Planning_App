@@ -2262,7 +2262,15 @@ server <- function(input, output, session) {
   rt_started <- reactiveVal(FALSE)
   rt_or_all <- function(x) if (is.null(x) || length(x) == 0L || !nzchar(x[1L])) RT_ALL else x[1L]
 
+  # What was last pushed to the FFFS box. A server-side selectize clears its options when it is updated, which sends the
+  # observer below a blank and then the value back; pushing only when something changed, and debouncing the box, stops that
+  # echo being read as the user changing the choice (which flickered the box and never settled).
+  rt_state <- new.env()
+  rt_state$fffs_choices <- NULL; rt_state$fffs_selected <- NULL; rt_state$syncs <- 0L
+  rt_fffs_in <- debounce(reactive(input$rt_fffs), 400)
+
   rt_sync <- function(reg, area, river, param, stn, fffs = RT_ALL) {
+    rt_state$syncs <- rt_state$syncs + 1L
     o <- rt_options(reg, area, river, param, fffs)
     keep <- function(v, choices) if (v %in% choices) v else RT_ALL
     area  <- keep(area, o$areas);  river <- keep(river, o$rivers)
@@ -2271,7 +2279,10 @@ server <- function(input, output, session) {
     updateSelectInput(session, "rt_river",   choices = o$rivers,     selected = river)
     updateSelectInput(session, "rt_param",   choices = o$parameters, selected = param)
     updateSelectInput(session, "rt_station", choices = o$stations,   selected = stn)
-    updateSelectizeInput(session, "rt_fffs", choices = o$fffs, selected = fffs, server = TRUE)
+    if (!identical(o$fffs, rt_state$fffs_choices) || !identical(fffs, rt_state$fffs_selected)) {
+      rt_state$fffs_choices <- o$fffs; rt_state$fffs_selected <- fffs
+      updateSelectizeInput(session, "rt_fffs", choices = o$fffs, selected = fffs, server = TRUE)
+    }
     rows <- rt_filter_register(reg, area, river, param, stn, fffs)
     rows <- rows[order(tolower(measure_label))][seq_len(min(.N, 500L))]
     # A single station or FFFS ID: preselect up to four of its measures so the chart appears at once.
@@ -2290,11 +2301,11 @@ server <- function(input, output, session) {
     rt_sync(reg, RT_ALL, RT_ALL, RT_ALL, RT_ALL, RT_ALL)
   })
 
-  observeEvent(list(input$rt_area, input$rt_river, input$rt_param, input$rt_station, input$rt_fffs), {
+  observeEvent(list(input$rt_area, input$rt_river, input$rt_param, input$rt_station, rt_fffs_in()), {
     reg <- rt_reg()
     req(reg)
     rt_sync(reg, rt_or_all(input$rt_area), rt_or_all(input$rt_river), rt_or_all(input$rt_param), rt_or_all(input$rt_station),
-            rt_or_all(input$rt_fffs))
+            rt_or_all(rt_fffs_in()))
   }, ignoreInit = TRUE)
 
   rt_data <- eventReactive(list(input$rt_measures, input$rt_days, input$rt_refresh, rt_reg()), {
@@ -2352,6 +2363,7 @@ server <- function(input, output, session) {
     ord <- order(tolower(labels))
     updateSelectizeInput(session, "rain_find", choices = stats::setNames(rp$key[ord], labels[ord]), selected = character(), server = TRUE)
     rain_choices(stats::setNames(rp$key[ord], labels[ord]))
+    rain_state$pushed <- character()
     updateSelectizeInput(session, "rain_charted", choices = rain_choices(), selected = character(), server = TRUE)
     rain_picks(character())
     invisible(r)
@@ -2433,10 +2445,15 @@ server <- function(input, output, session) {
   # At most RAIN_MAX_CHARTED; adding one more drops the oldest. rain_add_pick() holds the rule.
   rain_picks <- reactiveVal(character())
   rain_choices <- reactiveVal(character())          # the labelled keys the box offers; a server-side box needs them to set a selection
+  rain_state <- new.env(); rain_state$pushed <- character()   # what the box holds, so its echo is not read as the user removing gauges
+  rain_charted_in <- debounce(reactive(input$rain_charted), 400)
   rain_set_picks <- function(keys) {
     keys <- as.character(keys)
     if (!identical(keys, rain_picks())) rain_picks(keys)
-    updateSelectizeInput(session, "rain_charted", choices = isolate(rain_choices()), selected = keys, server = TRUE)
+    if (!identical(keys, rain_state$pushed)) {
+      rain_state$pushed <- keys
+      updateSelectizeInput(session, "rain_charted", choices = isolate(rain_choices()), selected = keys, server = TRUE)
+    }
   }
   rain_valid_keys <- function() { r <- rain_raw(); if (is.null(r)) character() else r$key[r$placed] }
 
@@ -2446,10 +2463,13 @@ server <- function(input, output, session) {
     rain_set_picks(rain_add_pick(rain_picks(), as.character(id), rain_valid_keys()))
   })
   # Removing a gauge from the box un-charts it. An unknown key is dropped.
-  observeEvent(input$rain_charted, {
-    keys <- input$rain_charted
+  observeEvent(rain_charted_in(), {
+    keys <- rain_charted_in()
     keys <- if (is.null(keys)) character() else keys[keys %in% rain_valid_keys()]
-    if (!identical(keys, rain_picks())) rain_picks(head(keys, RAIN_MAX_CHARTED))
+    if (identical(keys, rain_state$pushed)) return()                    # the box repeating what was pushed to it
+    keys <- head(keys, RAIN_MAX_CHARTED)
+    rain_state$pushed <- keys
+    if (!identical(keys, rain_picks())) rain_picks(keys)
   }, ignoreNULL = FALSE, ignoreInit = TRUE)
   observeEvent(input$rain_clear, rain_set_picks(character()), ignoreInit = TRUE)
 

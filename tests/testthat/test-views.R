@@ -597,6 +597,14 @@ test_that("the Hydrometrics tab loads the register on first open and fetches rea
     expect_equal(asked$n, 0L)                                                # nothing fetched until measures are chosen
     session$setInputs(rt_measures = c("m/1", "m/2"), rt_days = 3L, rt_refresh = 0)
     expect_equal(asked$uris, c("m/1", "m/2"))
+    # The FFFS box is server-side: updating it sends back a blank and then the value. That echo must not set off more syncs.
+    n0 <- rt_state$syncs
+    session$setInputs(rt_fffs = ""); session$setInputs(rt_fffs = "All"); session$elapse(600)
+    session$setInputs(rt_fffs = ""); session$setInputs(rt_fffs = "All"); session$elapse(600)
+    expect_lte(rt_state$syncs - n0, 2L)                                       # one per settled change, never a runaway
+    n1 <- rt_state$syncs
+    session$elapse(5000)
+    expect_equal(rt_state$syncs, n1)                                          # and nothing more once it is quiet
     expect_match(html_of(output$rt_summary), "2 readings")
     session$setInputs(rt_days = "0")                                          # all available: sized from the earliest reading
     expect_equal(asked$days, 400L)
