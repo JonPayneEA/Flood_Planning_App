@@ -293,6 +293,10 @@ button.stat-btn .stat-hint { display: block; font-size: 16px; color: var(--gov-l
 .rain-page p.mb-1 { margin-bottom: var(--sp-4) !important; }
 .rain-page .leaflet-container { border: 1px solid var(--gov-border); }
 
+.rt-page > h2 { margin-top: var(--sp-6); margin-bottom: var(--sp-1); }
+.rt-page .filter-row { margin-bottom: var(--sp-3); }
+.rt-page p.text-muted.mb-0 { margin-top: var(--sp-3); }
+
 /* Style guide (demonstration mode). */
 .sg-swatches { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin-bottom: var(--sp-6); }
 .sg-swatch { width: 170px; font-size: 16px; }
