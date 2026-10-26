@@ -185,6 +185,12 @@ test_that("the rain gauge query reads the mapped view, falls back to the registe
   expect_match(q, "reading_date >= date_sub\\(current_date\\(\\), 1\\)")             # prunes the partitions
   expect_equal(lengths(regmatches(q, gregexpr("BETWEEN 0 AND 100", q))), 4L)                   # every total leaves out an impossible reading
   expect_match(q, "COUNT\\(CASE WHEN r.value < 0 OR r.value > 100 THEN 1 END\\) AS n_bad")
+  seen <- character()                                                         # the limit comes from the browser: a number, held to 1..1000
+  d$db_query <- function(sql) { seen <<- c(seen, gsub("\\s+", " ", sql)); data.table() }
+  d$fetch_rain_gauges(250); d$fetch_rain_gauges("5000"); d$fetch_rain_gauges("1; DROP TABLE x"); d$fetch_rain_gauges(0)
+  expect_match(seen[1], "BETWEEN 0 AND 250"); expect_match(seen[2], "BETWEEN 0 AND 1000")
+  expect_match(seen[3], "BETWEEN 0 AND 100"); expect_match(seen[4], "BETWEEN 0 AND 1 ")
+  expect_false(any(grepl(";", seen, fixed = TRUE)))
   d$db_query <- function(sql) stop("[TABLE_OR_VIEW_NOT_FOUND] table or view `cat`.`sch`.`ea_rt_latest` cannot be found")
   expect_error(d$fetch_rain_gauges(), "ea_rt_latest")                         # a missing latest table is a gap, not a fallback
 })

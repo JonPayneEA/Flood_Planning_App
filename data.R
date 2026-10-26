@@ -862,11 +862,15 @@ rain_gauges_sql <- function(src, mapped, max_mm = 100) sprintf("
   if (mapped) "gauge_name, fffs_id, wiski_id" else "CAST(NULL AS STRING) AS gauge_name, CAST(NULL AS STRING) AS fffs_id, CAST(NULL AS STRING) AS wiski_id",
   src, max_mm, max_mm, max_mm, max_mm, max_mm, TBL_RT_ALL, TBL_RT_LATEST)
 
-fetch_rain_gauges <- function() {
-  tryCatch(db_query(rain_gauges_sql(TBL_RT_MAPPED, TRUE)), error = function(e) {
+# max_mm comes from the browser, so it is held to a number between 1 and 1000 before it reaches the SQL.
+fetch_rain_gauges <- function(max_mm = 100) {
+  max_mm <- suppressWarnings(as.numeric(max_mm)[1L])
+  if (is.na(max_mm) || !is.finite(max_mm)) max_mm <- 100
+  max_mm <- min(max(max_mm, 1), 1000)
+  tryCatch(db_query(rain_gauges_sql(TBL_RT_MAPPED, TRUE, max_mm)), error = function(e) {
     info <- missing_table_info(conditionMessage(e))
     if (is.null(info) || !grepl("ea_rt_measures_mapped", info$table, fixed = TRUE)) stop(e)
-    db_query(rain_gauges_sql(TBL_RT_REGISTER, FALSE))
+    db_query(rain_gauges_sql(TBL_RT_REGISTER, FALSE, max_mm))
   })
 }
 

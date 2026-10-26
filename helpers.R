@@ -561,6 +561,8 @@ RAIN_COLOURS      <- c("#DCE9F7", "#B3D1EE", "#7FB1E3", "#3F8BD3", "#1B5FA8", "#
 RAIN_STALE_COLOUR <- "#9AA5B1"
 RAIN_STALE_HOURS  <- 3
 RAIN_MAX_READING  <- 100     # mm in one reading; more (or below zero) is an error. The query leaves these out of the totals (data.R)
+# A window total above this is not believed: no UK gauge has recorded more than about 280 mm in a day or 100 mm in an hour.
+RAIN_SUSPECT_TOTALS <- c(mm_1h = 80, mm_12h = 200, mm_24h = 300)
 
 # How far back the chart can look. 0 means everything held for the chosen measures.
 RT_WINDOWS <- c("1 day" = 1L, "3 days" = 3L, "7 days" = 7L, "14 days" = 14L, "30 days" = 30L, "90 days" = 90L,
@@ -1159,7 +1161,7 @@ rain_band_labels <- function(metric) {
   c(sprintf("Under %s mm", b[1L]), sprintf("%s to %s mm", b[-length(b)], b[-1L]), sprintf("%s mm or more", b[length(b)]))
 }
 
-rain_prepare <- function(d, now = Sys.time()) {
+rain_prepare <- function(d, now = Sys.time(), max_mm = RAIN_MAX_READING) {
   if (is.null(d) || nrow(d) == 0L) return(data.table())
   r <- rt_prepare_register(d)
   for (col in c("lat", "long", "mm_1h", "mm_12h", "mm_24h", "n_24h", "n_bad", "last_value")) {
@@ -1170,7 +1172,7 @@ rain_prepare <- function(d, now = Sys.time()) {
   r[, last_time := as.POSIXct(last_time, tz = "UTC")]
   # A newest reading that cannot be rain is kept for the popup but not shown as a value.
   r[, last_raw := last_value]
-  r[, last_bad := !is.na(last_value) & (last_value < 0 | last_value > RAIN_MAX_READING)]
+  r[, last_bad := !is.na(last_value) & (last_value < 0 | last_value > max_mm)]
   r[last_bad == TRUE, last_value := NA_real_]
   rank <- c(total = 1L, instantaneous = 2L)
   r[, vt_rank := { v <- unname(rank[tolower(rt_text(value_type))]); v[is.na(v)] <- 3L; v }]
@@ -1182,7 +1184,28 @@ rain_prepare <- function(d, now = Sys.time()) {
   r[, stale := is.na(age_min) | age_min > RAIN_STALE_HOURS * 60]
   p <- suppressWarnings(as.numeric(r$period))
   r[, n_expected := ifelse(is.na(p) | p <= 0, 96, round(86400 / p))]
+  r[, max_mm := max_mm]
   r[]
+}
+
+# TRUE for a gauge whose values cannot be trusted over this window: it sent impossible readings (left out of its totals),
+# or its total for the window is above RAIN_SUSPECT_TOTALS. A suspect gauge is outlined, not counted in the wettest, and
+# can be hidden.
+rain_suspect <- function(r, metric) {
+  if (nrow(r) == 0L) return(logical())
+  v <- r[[metric]]
+  (!is.na(r$n_bad) & r$n_bad > 0) | (!is.na(v) & v > RAIN_SUSPECT_TOTALS[[metric]]) | (r$last_bad %in% TRUE)
+}
+
+# The reasons, for the popup, as one line per gauge ("" for a gauge with none).
+rain_suspect_text <- function(r) {
+  big <- vapply(names(RAIN_SUSPECT_TOTALS), function(m) {
+    v <- r[[m]]; ifelse(!is.na(v) & v > RAIN_SUSPECT_TOTALS[[m]],
+      sprintf("the %s total (%s) is above %s mm", tolower(names(RAIN_METRICS)[RAIN_METRICS == m]), rain_mm(v), RAIN_SUSPECT_TOTALS[[m]]), "")
+  }, character(nrow(r)))
+  if (nrow(r) == 1L) big <- matrix(big, nrow = 1L)
+  why <- apply(big, 1L, function(x) paste(x[nzchar(x)], collapse = "; "))
+  ifelse(nzchar(why), paste0("<br><em>Suspect: ", why, ".</em>"), "")
 }
 
 rain_fill <- function(r, metric) {
@@ -1211,23 +1234,26 @@ rain_popup <- function(r) {
          "Past 24 hours: ", rain_mm(r$mm_24h), "<br>",
          "<small>", as.character(n24), " of ", r$n_expected, " readings in 24 hours", kind, "</small>",
          ifelse(nbad > 0, paste0("<br><em>", as.character(nbad), if_else_s(nbad, " reading was", " readings were"),
-                                 " ignored as impossible (below zero or over ", RAIN_MAX_READING, " mm).</em>"), ""))
+                                 " ignored as impossible (below zero or over ", r$max_mm, " mm).</em>"), ""),
+         rain_suspect_text(r))
 }
 
-rain_filter <- function(r, area = RT_ALL, hide_stale = FALSE) {
+rain_filter <- function(r, area = RT_ALL, hide_stale = FALSE, hide_suspect = FALSE, metric = "mm_24h") {
   if (nrow(r) == 0L) return(r)
   if (!identical(area, RT_ALL)) r <- r[r$ea_area_name %in% area]
   if (isTRUE(hide_stale)) r <- r[!r$stale]
+  if (isTRUE(hide_suspect) && nrow(r) > 0L) r <- r[!rain_suspect(r, metric)]
   r
 }
 
 # The facts above the map: gauges drawn, how many reported recently, how many had rain in the window, the wettest.
 rain_summary <- function(r, metric) {
-  if (nrow(r) == 0L) return(list(n = 0L, recent = 0L, wet = 0L, wettest = NULL, newest = NULL))
-  ok <- !r$stale
+  if (nrow(r) == 0L) return(list(n = 0L, recent = 0L, wet = 0L, suspect = 0L, wettest = NULL, newest = NULL))
+  sus <- rain_suspect(r, metric)
+  ok <- !r$stale & !sus                                    # a suspect gauge is not counted as wet or wettest
   v <- r[[metric]]
   top <- if (any(ok & !is.na(v))) which.max(ifelse(ok & !is.na(v), v, -Inf)) else NA_integer_
-  list(n = nrow(r), recent = sum(ok), wet = sum(ok & !is.na(v) & v > 0),
+  list(n = nrow(r), recent = sum(!r$stale), wet = sum(ok & !is.na(v) & v > 0), suspect = sum(sus),
        wettest = if (is.na(top)) NULL else list(name = r$station[top], mm = v[top]),
        newest = if (all(is.na(r$last_time))) NULL else max(r$last_time, na.rm = TRUE))
 }
@@ -1242,13 +1268,13 @@ in_selected_cells <- function(risk_x, risk_y, cells) {
 
 
 # The bars of the Rain gauges chart: one gauge's readings (date_time, value) summed into step-second buckets (900 for 15
-# minutes, 3600 for an hour), each bucket labelled by its start. A reading below zero or over RAIN_MAX_READING is left
+# minutes, 3600 for an hour), each bucket labelled by its start. A reading below zero or over max_mm is left
 # out and counted, as in the totals. Returns list(bars = data.table(t, mm), ignored = n).
-rain_bars <- function(readings, step = 3600L) {
+rain_bars <- function(readings, step = 3600L, max_mm = RAIN_MAX_READING) {
   empty <- data.table(t = as.POSIXct(character(), tz = "UTC"), mm = numeric())
   if (is.null(readings) || nrow(readings) == 0L) return(list(bars = empty, ignored = 0L))
   d <- as.data.table(readings)[!is.na(date_time) & !is.na(value)]
-  bad <- d$value < 0 | d$value > RAIN_MAX_READING
+  bad <- d$value < 0 | d$value > max_mm
   d <- d[!bad]
   if (nrow(d) == 0L) return(list(bars = empty, ignored = sum(bad)))
   step <- as.integer(step)

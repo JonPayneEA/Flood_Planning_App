@@ -831,3 +831,28 @@ test_that("rain bars sum the readings into hours or quarter hours and leave out 
   expect_equal(nrow(q$bars), 5L); expect_equal(q$bars$mm, c(0.2, 0.4, 0, 0.1, 1))
   expect_equal(nrow(rain_bars(NULL)$bars), 0L); expect_equal(rain_bars(rd[value > 1000])$ignored, 1L)
 })
+
+
+test_that("a gauge is suspect when it sent impossible readings or its total is too large to believe, and is kept out of the wettest", {
+  now <- as.POSIXct("2026-10-23 12:00:00", tz = "UTC")
+  d <- rain_fake(now)
+  d[station_reference == "C", mm_24h := 412.5]                  # no bad reading, but 412 mm in a day is not believable
+  r <- rain_prepare(d, now)
+  sus <- rain_suspect(r, "mm_24h")
+  expect_equal(sus[r$station_reference == "A"], FALSE)
+  expect_equal(sus[r$station_reference == "B"], TRUE)           # n_bad is 3
+  expect_equal(sus[r$station_reference == "C"], TRUE)           # over the 300 mm limit
+  expect_equal(rain_suspect(r, "mm_1h")[r$station_reference == "C"], FALSE)   # the limit is per window; C's hour is fine
+  expect_equal(rain_suspect_text(r[station_reference == "C"]), "<br><em>Suspect: the past 24 hours total (412.5 mm) is above 300 mm.</em>")
+  expect_equal(rain_suspect_text(r[station_reference == "A"]), "")
+  expect_match(rain_popup(r[station_reference == "C"]), "Suspect: the past 24 hours total")
+  expect_equal(nrow(rain_filter(r, RT_ALL, FALSE, TRUE, "mm_24h")), 2L)       # B and C are hidden
+  expect_equal(nrow(rain_filter(r, RT_ALL, FALSE, FALSE, "mm_24h")), 4L)
+  s <- rain_summary(r, "mm_24h")
+  expect_equal(s$suspect, 2L); expect_equal(s$wettest$name, "Aldwyn RG"); expect_equal(s$wet, 1L)   # C is not counted as the wettest
+  # The limit is the caller's: a lower one marks a reading impossible that the default would not.
+  expect_true(rain_prepare(transform(rain_fake(now), last_value = 60), now, max_mm = 50)$last_bad[1])
+  expect_false(rain_prepare(transform(rain_fake(now), last_value = 60), now)$last_bad[1])
+  expect_equal(rain_bars(data.table(date_time = now - c(600, 1200), value = c(60, 1)), 3600L, max_mm = 50)$ignored, 1L)
+  expect_match(rain_popup(rain_prepare(transform(rain_fake(now), n_bad = 2), now, max_mm = 50)[1]), "over 50 mm")
+})

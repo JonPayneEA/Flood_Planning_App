@@ -871,6 +871,8 @@ make_rain_tab <- function() tags$div(
     selectizeInput("rain_find", "Find a gauge", choices = NULL, width = "320px",
                    options = list(placeholder = "Name, station or FFFS ID")),
     checkboxInput("rain_hide_stale", sprintf("Hide gauges with no reading for %d hours", RAIN_STALE_HOURS), value = FALSE),
+    numericInput("rain_max_reading", "Ignore single readings above (mm)", value = RAIN_MAX_READING, min = 1, max = 1000, step = 5, width = "200px"),
+    checkboxInput("rain_hide_suspect", "Hide gauges with suspect values", value = FALSE),
     actionButton("rain_refresh", "Refresh", icon = icon("rotate"), class = "btn-sm btn-outline-secondary")
   ),
   uiOutput("rain_message"),
@@ -887,7 +889,9 @@ make_rain_tab <- function() tags$div(
   tags$small(class = "text-muted d-block mt-2",
              "This uses Environment Agency flood and river level data from the real-time data API (Beta). ",
              "Totals add up the readings in the window; times are UTC. Where a gauge reports both 15-minute totals and ",
-             "instantaneous readings, the totals are used. These are readings as supplied, not quality-controlled.")
+             "instantaneous readings, the totals are used. A single reading below zero or above the limit is left out of the totals. ",
+             "A gauge with such readings, or a total too large to believe, has a dashed outline and is suspect. ",
+             "These are readings as supplied, not quality-controlled.")
 )
 
 

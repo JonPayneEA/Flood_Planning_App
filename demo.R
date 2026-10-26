@@ -735,12 +735,13 @@ demo_rain_gauges <- function() {
   g[5L, `:=`(n_bad = 2L, n_24h = 94L, last_value = 19999999)]                  # a gauge that sent impossible readings, left out of its totals
   g[22L, `:=`(last_time = now - 3600 * 30, mm_1h = NA_real_, mm_12h = NA_real_, mm_24h = NA_real_, n_24h = NA_integer_, n_bad = NA_integer_, last_value = 0)]   # silent for 30 hours
   g[23L, `:=`(last_time = as.POSIXct(NA), mm_1h = NA_real_, mm_12h = NA_real_, mm_24h = NA_real_, n_24h = NA_integer_, n_bad = NA_integer_, last_value = NA_real_)]  # no reading at all
+  g[7L, `:=`(mm_24h = 412.5, mm_12h = 380.2, mm_1h = 96)]                       # a total too large to believe, with no single bad reading
   inst <- copy(g[2:4])                                                          # the same stations also report instantaneous readings
   inst[, `:=`(measure_uri = sub("-t-", "-i-", measure_uri), value_type = "instantaneous", mm_24h = mm_24h * 1.1)]
   rbind(g, inst)
 }
 
-fetch_rain_gauges <- function() copy(demo_rain_gauges())
+fetch_rain_gauges <- function(max_mm = 100) copy(demo_rain_gauges())
 
 fetch_rt_register <- function() copy(demo_rt_register())
 

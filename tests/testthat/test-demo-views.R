@@ -145,6 +145,16 @@ test_that("the Rain gauges tab loads on first open, summarises, and takes its fi
     expect_true(all(rain_view()$ea_area_name == "Demo North"))
     session$setInputs(rain_area = "All", rain_hide_stale = TRUE)
     expect_lt(nrow(rain_view()), 24L)
+    session$setInputs(rain_hide_stale = FALSE)
+    n_all <- nrow(rain_view())
+    session$setInputs(rain_hide_suspect = TRUE)
+    expect_equal(nrow(rain_view()), n_all - 2L)                                # the two suspect demo gauges are hidden
+    expect_match(txt(output$rain_summary), "gauges shown")
+    session$setInputs(rain_hide_suspect = FALSE)
+    expect_equal(rain_cap(), 100)
+    session$setInputs(rain_max_reading = 250); expect_equal(rain_cap(), 250)
+    session$setInputs(rain_max_reading = 99999); expect_equal(rain_cap(), 1000)    # held to a sensible range
+    session$setInputs(rain_max_reading = NA); expect_equal(rain_cap(), 100)
     expect_null(rain_chart_data())                                           # nothing is charted until a gauge is picked
     expect_match(txt(output$rain_chart_head), "Click a gauge")
     picked <- rain_raw()[stale == FALSE]$key[1]

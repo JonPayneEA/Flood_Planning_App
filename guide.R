@@ -414,7 +414,8 @@ guide_products <- function(s) {
       limits = c(
         "These are readings as the real-time API supplies them, unchecked. They are not quality-controlled and are not a record of rainfall.",
         "Only gauges with a position in the register appear.",
-        "A single reading below zero or over 100 mm cannot be rain. It is left out of every total, and the popup says how many were ignored. The cap is a guard against faulty data, not a quality control of the gauge.",
+        "A single reading below zero or over the limit cannot be rain. The limit starts at 100 mm and you can change it in the box above the map. Readings over it are left out of every total, and the popup says how many were ignored.",
+        "A gauge is suspect when it sent such readings, or when its total is more than any UK gauge has recorded (over 80 mm in an hour, 200 mm in 12 hours or 300 mm in 24 hours). A suspect gauge has a dashed outline, its popup says why, it is not counted as the wettest or as having rain, and a tick box hides it. This is a guard against faulty data, not a quality control of the gauge.",
         "Uses Environment Agency flood and river level data from the real-time data API (Beta), under the Open Government Licence."
       )
     ),
