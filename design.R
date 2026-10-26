@@ -263,6 +263,13 @@ div.stat-card .stat-label { font-size: 16px; text-transform: none; letter-spacin
 .ov-headline .ov-text { font-size: 24px; line-height: 1.25; font-weight: 700; margin: var(--sp-1) 0 var(--sp-3); }
 .ov-headline .ov-risk { font-size: 19px; }
 .ov-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--sp-6); margin-bottom: var(--sp-8); }
+button.stat-btn { display: block; width: 100%; font: inherit; color: inherit; cursor: pointer; text-align: left; background: transparent; border: 0; border-top: 5px solid {{navy}}; padding: var(--sp-3) 0 var(--sp-2); }
+button.stat-btn:hover { background: var(--gov-grey); }
+button.stat-btn.open { background: var(--gov-grey); }
+button.stat-btn .stat-num { display: block; font-size: 36px; font-weight: 700; line-height: 1.1; }
+button.stat-btn .stat-label { display: block; font-size: 16px; color: var(--gov-secondary); margin-top: var(--sp-1); }
+button.stat-btn .stat-hint { display: block; font-size: 16px; color: var(--gov-link); text-decoration: underline; margin-top: var(--sp-1); }
+.ov-inforce-list { margin-top: var(--sp-4); overflow-x: auto; }
 .ov-section { margin-bottom: var(--sp-8); }
 .ov-section > h2 { margin-bottom: var(--sp-2); }
 .ov-outlook { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--sp-4); }
