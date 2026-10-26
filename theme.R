@@ -112,6 +112,43 @@ app_logo <- function() {
 
 
 # -----------------------------------------------------------------------------
+# Warning icons
+#
+# warning_icon(level) is the symbol for a flood alert, a flood warning or a severe flood warning (level "alert", "warning" or
+# "severe"), shown beside the counts and lists. To use the Environment Agency's own artwork, put the files in www/icons/ named
+# flood-alert, flood-warning and severe-flood-warning, as .svg or .png: they replace the drawing. Until they are there a plain
+# house with one, two or three waves is drawn, in the app's own alert, warning and severe colours (not the official artwork).
+# The icon is decoration: the count and its label beside it carry the meaning, so it is hidden from screen readers.
+# -----------------------------------------------------------------------------
+
+APP_SEVERE_HEX <- "#6B0233"
+WARNING_ICON_FILES <- c(alert = "flood-alert", warning = "flood-warning", severe = "severe-flood-warning")
+
+warning_icon <- function(level = c("alert", "warning", "severe")) {
+  level <- match.arg(level)
+  stem <- WARNING_ICON_FILES[[level]]
+  for (ext in c("svg", "png")) {
+    f <- paste0(stem, ".", ext)
+    if (file.exists(file.path("www", "icons", f))) {
+      return(htmltools::tags$img(src = file.path("icons", f), alt = "", `aria-hidden` = "true", class = paste("warn-icon", paste0("warn-icon-", level))))
+    }
+  }
+  colour <- c(alert = APP_ALERT_HEX, warning = APP_WARNING_HEX, severe = APP_SEVERE_HEX)[[level]]
+  n <- c(alert = 1L, warning = 2L, severe = 3L)[[level]]
+  waves <- vapply(seq_len(n), function(i) {
+    y <- 62 + (i - 1L) * 10
+    sprintf('<path d="M8 %d q 10 -8 20 0 t 20 0 t 20 0 t 20 0" fill="none" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round"/>', y)
+  }, character(1))
+  htmltools::HTML(paste0(
+    sprintf('<svg class="warn-icon warn-icon-%s" viewBox="0 0 96 96" aria-hidden="true" focusable="false">', level),
+    sprintf('<rect width="96" height="96" rx="8" fill="%s"/>', colour),
+    '<path d="M48 12 L82 40 H74 V56 H22 V40 H14 Z" fill="#FFFFFF"/>',
+    sprintf('<rect x="42" y="42" width="12" height="14" fill="%s"/>', colour),
+    paste(waves, collapse = ""), '</svg>'))
+}
+
+
+# -----------------------------------------------------------------------------
 # Charts (plotly)
 #
 # One look for every chart: the app font and ink, a transparent surface, faint
