@@ -874,3 +874,20 @@ test_that("a gauge given only as an easting and northing is placed, and one with
   expect_equal(nrow(rain_filter(r)), 3L)                                           # the unplaced gauge is not drawn
   expect_equal(nrow(rain_filter(r, hide_stale = TRUE)), 3L - 0L)
 })
+
+
+test_that("adding a gauge to the chart keeps the order, ignores repeats and unknowns, and drops the oldest when full", {
+  valid <- c("a", "b", "c", "d")
+  expect_equal(rain_add_pick(character(), "a", valid), "a")
+  expect_equal(rain_add_pick("a", "b", valid), c("a", "b"))
+  expect_equal(rain_add_pick(c("a", "b"), "a", valid), c("a", "b"))              # already there
+  expect_equal(rain_add_pick("a", "zzz", valid), "a"); expect_equal(rain_add_pick("a", NA_character_, valid), "a"); expect_equal(rain_add_pick("a", "", valid), "a")
+  expect_equal(rain_add_pick(c("a", "b", "c"), "d", valid, max = 3L), c("b", "c", "d"))
+  expect_equal(RAIN_MAX_CHARTED, 6L)
+})
+
+
+test_that("charted gauges take their colours from the series palette in turn", {
+  expect_equal(rain_series_colour(1), "#053D7E"); expect_equal(rain_series_colour(2), "#BE0553")
+  expect_equal(rain_series_colour(9), rain_series_colour(1))                      # it wraps
+})

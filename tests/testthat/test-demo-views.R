@@ -156,18 +156,28 @@ test_that("the Rain gauges tab loads on first open, summarises, and takes its fi
     session$setInputs(rain_max_reading = 99999); expect_equal(rain_cap(), 1000)    # held to a sensible range
     session$setInputs(rain_max_reading = NA); expect_equal(rain_cap(), 100)
     expect_null(rain_chart_data())                                           # nothing is charted until a gauge is picked
-    expect_match(txt(output$rain_chart_head), "Click a gauge")
-    picked <- rain_raw()[stale == FALSE]$key[1]
-    session$setInputs(rain_map_marker_click = list(id = picked, lat = 52, lng = -1, group = "rain"))
+    expect_match(txt(output$rain_chart_head), "Click gauges on the map")
+    ok <- rain_raw()[stale == FALSE & placed == TRUE]$key
+    click <- function(k) session$setInputs(rain_map_marker_click = list(id = k, lat = 52, lng = -1, group = "rain"))
+    click(ok[1])
     cd <- rain_chart_data()
-    expect_equal(cd$row$key, picked); expect_gt(nrow(cd$bars), 0L); expect_equal(cd$step, 3600L)
-    expect_lte(nrow(cd$bars), 25L)                                           # 24 hours of hourly bars
+    expect_equal(cd$rows$key, ok[1]); expect_equal(length(cd$bars), 1L); expect_gt(nrow(cd$bars[[1]]), 0L); expect_equal(cd$step, 3600L)
+    expect_lte(nrow(cd$bars[[1]]), 25L)                                      # 24 hours of hourly bars
     expect_match(txt(output$rain_chart_head), "in 24 hours, most in one hour")
+    click(ok[2]); click(ok[3]); click(ok[2])                                  # a second click on a gauge changes nothing
+    expect_equal(rain_picks(), ok[1:3]); expect_equal(nrow(rain_chart_data()$rows), 3L)
+    expect_equal(length(rain_chart_data()$bars), 3L)
     session$setInputs(rain_bars = "900")
-    expect_equal(rain_chart_data()$step, 900L); expect_gt(nrow(rain_chart_data()$bars), 25L)
+    expect_equal(rain_chart_data()$step, 900L); expect_gt(nrow(rain_chart_data()$bars[[1]]), 25L)
     session$setInputs(rain_bars = "junk"); expect_equal(rain_chart_data()$step, 3600L)
-    session$setInputs(rain_map_marker_click = list(id = "no-such-gauge"))
-    expect_null(rain_chart_data())
+    for (k in ok[4:8]) click(k)                                               # the seventh and eighth drop the oldest
+    expect_equal(length(rain_picks()), RAIN_MAX_CHARTED); expect_false(ok[1] %in% rain_picks()); expect_true(ok[8] %in% rain_picks())
+    click("no-such-gauge"); expect_false("no-such-gauge" %in% rain_picks())
+    session$setInputs(rain_charted = rain_picks()[2:3])                       # removing gauges from the box un-charts them
+    expect_equal(length(rain_picks()), 2L)
+    session$setInputs(rain_charted = c(rain_picks()[1], "bogus")); expect_equal(length(rain_picks()), 1L)
+    session$setInputs(rain_clear = 1); expect_equal(length(rain_picks()), 0L); expect_null(rain_chart_data())
+    session$setInputs(rain_find = ok[5]); expect_equal(rain_picks(), ok[5])    # finding a gauge charts it too
     expect_no_error(session$setInputs(rain_find = rain_raw()$key[1]))
     expect_no_error(session$setInputs(rain_find = "no-such-gauge"))
     expect_no_error(session$setInputs(rain_refresh = 1))
