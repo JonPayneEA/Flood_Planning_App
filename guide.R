@@ -195,7 +195,7 @@ guide_products <- function(s) {
       steps = c(
         "Pick a statement and a forecast day. The map draws that day's risk polygons, one for each flood source and risk, coloured by risk level.",
         "The source ticks and the risk matrix decide which polygons are shown. The matrix starts with the Minor impact column unticked.",
-        sprintf("The flood areas are the stored overlaps for that day. An area is shown if its flood source is ticked, its type (Flood Warning Area or Flood Alert Area) is ticked, and its overlap meets the intersection threshold. The slider starts at %s, the pipeline's own rule.",
+        sprintf("The flood areas are the stored overlaps for that day. An area is shown if its flood source is ticked, its type (Flood Warning Area or Flood Alert Area) is ticked, the risk it overlaps sits in a ticked cell of the matrix, and its overlap meets the intersection threshold. The slider starts at %s, the pipeline's own rule.",
                 guide_pct(th$ea_min_pct)),
         "Flood areas are coloured by type, not by risk: magenta for warning areas and blue for alert areas. They read as context beneath the risk polygons. The list is ordered from Red to Green, then by overlap.",
         "The constituencies are those touched on that day, after the same source, matrix and threshold filters.",
@@ -377,7 +377,7 @@ guide_products <- function(s) {
       answers = "What have river levels, flows and rainfall been doing at the Environment Agency's gauges?",
       tables = c("ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_readings_bronze", "ea_rt_measures_mapped"),
       steps = c(
-        "The measure register lists every measure: a level, flow or rainfall series at a station. Where the telemetry mapping has matched a measure, a rain gauge the API calls only \"Rainfall station\" takes its real name, and the label carries its WISKI and FFFS ids, so you can search by either. The four drop-downs (EA area, river, parameter, station) narrow each other, so a choice never leads to an empty list.",
+        "The measure register lists every measure: a level, flow or rainfall series at a station. Where the telemetry mapping has matched a measure, a rain gauge the API calls only \"Rainfall station\" takes its real name, and the label carries its WISKI and FFFS ids, so you can search by either. The five drop-downs (EA area, river, parameter, station and FFFS ID) narrow each other, so a choice never leads to an empty list. Pick an FFFS ID, the key the thresholds use, to go straight to that gauge's measures; a gauge with two measures of one kind (a rain gauge's instantaneous and total readings, or a tide gauge in two datums) shows both.",
         "Choose up to eight measures and how far back to look, from 1 day to everything held. Readings are fetched only for those measures and that window, from one series that joins the daily archive to the live tail.",
         "Up to about 15 days every reading is drawn. Beyond that the warehouse summarises each measure to about 1,500 points, so a long window stays quick: level and flow are the mean of the readings in each point, and rainfall is the total. A short window shows the detail.",
         "Each unit gets its own panel, because metres and cubic metres a second do not share an axis.",
