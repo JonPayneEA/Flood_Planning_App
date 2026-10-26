@@ -1167,6 +1167,25 @@ server <- function(input, output, session) {
       card(n_draft, "MP briefings awaiting review", sub = if (DEMO_MODE && n_done > 0L) sprintf("%d actioned in this demo", n_done)))
   })
 
+  output$ov_inforce <- renderUI({
+    d <- ov_data()$sit
+    if (is.null(d)) return(NULL)
+    n <- function(x) sum(x > 0L, na.rm = TRUE)
+    sev <- n(d$severe_warnings); wrn <- n(d$warnings); alt <- n(d$alerts)
+    card <- function(num, label, sub = NULL, cls = "") {
+      tags$div(class = paste("stat-card", cls),
+               tags$div(class = "stat-num", num), tags$div(class = "stat-label", label),
+               if (!is.null(sub)) tags$div(class = "demo-note", sub))
+    }
+    tagList(
+      tags$p(class = "app-caption", "Constituencies with at least one of each in force now. A warning that crosses several constituencies is counted in each."),
+      tags$div(class = "ov-grid ov-inforce",
+        card(sev, "with a severe flood warning", sprintf("%d severe warning%s across them", sum(d$severe_warnings, na.rm = TRUE), if (sum(d$severe_warnings, na.rm = TRUE) == 1L) "" else "s"), "sev"),
+        card(wrn, "with a flood warning",        sprintf("%d warning%s across them", sum(d$warnings, na.rm = TRUE), if (sum(d$warnings, na.rm = TRUE) == 1L) "" else "s"), "warn"),
+        card(alt, "with a flood alert",          sprintf("%d alert%s across them", sum(d$alerts, na.rm = TRUE), if (sum(d$alerts, na.rm = TRUE) == 1L) "" else "s"), "alert"))
+    )
+  })
+
   output$ov_outlook <- renderUI({
     d <- ov_data()
     if (is.null(d$sit)) return(NULL)
