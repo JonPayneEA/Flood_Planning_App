@@ -47,6 +47,9 @@ test_that("the Overview summarises the latest statement from the demo data", {
     expect_lte(lengths(regmatches(w, gregexpr("goto_constituency", w))), 8L)
     expect_match(w, "goto_constituency")
     expect_match(txt(output$ov_changes), "up,")
+    f <- txt(output$ov_inforce)
+    expect_match(f, "flood alerts.*flood warnings.*severe flood warnings")   # left to right: alerts, warnings, severe
+    expect_match(f, "counted once")
   })
 })
 

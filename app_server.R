@@ -1011,6 +1011,7 @@ server <- function(input, output, session) {
   # statement list. NULL means "could not load".
   health_rv    <- reactiveVal(NULL)
   situation_rv <- reactiveVal(NULL)
+  inforce_rv   <- reactiveVal(NULL)
   briefing_rv  <- reactiveVal(NULL)
   exposure_rv  <- reactiveVal(NULL)
   history_rv   <- reactiveVal(NULL)
@@ -1022,6 +1023,7 @@ server <- function(input, output, session) {
   load_products <- function() {
     health_rv(safe_fetch(fetch_pipeline_health))
     situation_rv(safe_fetch(fetch_situation))
+    inforce_rv(safe_fetch(fetch_warnings_in_force))
     briefing_rv(safe_fetch(fetch_briefing_drafts))
     exposure_rv(safe_fetch(fetch_exposure, 12L))
     history_rv(safe_fetch(fetch_warning_history))
@@ -1168,21 +1170,22 @@ server <- function(input, output, session) {
   })
 
   output$ov_inforce <- renderUI({
-    d <- ov_data()$sit
-    if (is.null(d)) return(NULL)
-    n <- function(x) sum(x > 0L, na.rm = TRUE)
-    sev <- n(d$severe_warnings); wrn <- n(d$warnings); alt <- n(d$alerts)
-    card <- function(num, label, sub = NULL, cls = "") {
-      tags$div(class = paste("stat-card", cls),
-               tags$div(class = "stat-num", num), tags$div(class = "stat-label", label),
-               if (!is.null(sub)) tags$div(class = "demo-note", sub))
+    f <- inforce_rv()
+    if (is.null(f)) {
+      return(tags$p(class = "text-muted",
+        if (has_gap("flood_warnings_current")) gap_text("flood_warnings_current", "Warnings in force")
+        else "Warnings in force could not be loaded."))
+    }
+    n <- function(level) { v <- f$n[f$severity_level == level]; if (length(v) == 0L) 0L else as.integer(v[1L]) }
+    card <- function(num, label) {
+      tags$div(class = "stat-card", tags$div(class = "stat-num", num), tags$div(class = "stat-label", label))
     }
     tagList(
-      tags$p(class = "app-caption", "Constituencies with at least one of each in force now. A warning that crosses several constituencies is counted in each."),
+      tags$p(class = "app-caption", "Areas with each in force now, counted once however many constituencies they cover."),
       tags$div(class = "ov-grid ov-inforce",
-        card(sev, "with a severe flood warning", sprintf("%d severe warning%s across them", sum(d$severe_warnings, na.rm = TRUE), if (sum(d$severe_warnings, na.rm = TRUE) == 1L) "" else "s"), "sev"),
-        card(wrn, "with a flood warning",        sprintf("%d warning%s across them", sum(d$warnings, na.rm = TRUE), if (sum(d$warnings, na.rm = TRUE) == 1L) "" else "s"), "warn"),
-        card(alt, "with a flood alert",          sprintf("%d alert%s across them", sum(d$alerts, na.rm = TRUE), if (sum(d$alerts, na.rm = TRUE) == 1L) "" else "s"), "alert"))
+        card(n(3L), "flood alerts"),
+        card(n(2L), "flood warnings"),
+        card(n(1L), "severe flood warnings"))
     )
   })
 

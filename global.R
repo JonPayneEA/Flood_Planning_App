@@ -152,6 +152,7 @@ TBL_CHANGES   <- paste(CAT, SCH, "fgs_constituency_changes",    sep = ".")  # 18
 TBL_CHANGES_LOG <- paste(CAT, SCH, "fgs_changes_log",             sep = ".")  # 18 (one row per comparison made)
 TBL_SITUATION <- paste(CAT, SCH, "constituency_flood_situation", sep = ".")  # 19
 TBL_BRIEFINGS <- paste(CAT, SCH, "mp_briefing_drafts",          sep = ".")  # 20
+TBL_FLOOD_WARN_CURRENT <- paste(CAT, SCH, "flood_warnings_current", sep = ".")  # 11 (the live feed: one row per area in force)
 TBL_EXPOSURE  <- paste(CAT, SCH, "fgs_constituency_exposure",   sep = ".")  # 21
 TBL_HEALTH    <- paste(CAT, SCH, "pipeline_health",             sep = ".")  # 22
 TBL_RT_REGISTER <- paste(CAT, SCH, "ea_rt_measure_register",  sep = ".")  # 09 (what each gauge measures)
