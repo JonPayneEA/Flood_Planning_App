@@ -449,9 +449,8 @@ demo_situation_for <- function(scn, sid) demo_memo(sprintf("situation_%s_%d", sc
     }
   }
   wide[, has_active_warning := severe_warnings + warnings + alerts > 0L]
-  in_force <- if (nrow(warn) == 0L) c(`1` = 0L, `2` = 0L, `3` = 0L) else
-    c(`1` = sum(warn$ea_area_type == "flood_warning" & warn$rank >= 4L), `2` = sum(warn$ea_area_type == "flood_warning" & warn$rank < 4L),
-      `3` = sum(warn$ea_area_type != "flood_warning"))
+  in_force <- warn[, .(flood_area_id = ea_area_code,
+                       severity_level = fifelse(ea_area_type != "flood_warning", 3L, fifelse(rank >= 4L, 1L, 2L)))]
   if (!is_latest) wide[, `:=`(severe_warnings = NA_integer_, warnings = NA_integer_, alerts = NA_integer_, has_active_warning = NA)]
 
   out <- merge(g[, .(constituency_id, constituency_name, mp_name, mp_party, mp_email, mp_phone)], wide, by = "constituency_id", sort = FALSE)
@@ -677,9 +676,17 @@ demo_inforce_store <- new.env()   # areas in force by level, set when a scenario
 fetch_warnings_in_force <- function() {
   scn <- demo_current()$scenario
   invisible(demo_situation(scn))
-  v <- demo_inforce_store[[scn]]
-  if (is.null(v)) v <- c(`1` = 0L, `2` = 0L, `3` = 0L)
-  data.table(severity_level = as.integer(names(v)), n = as.integer(v))
+  w <- demo_inforce_store[[scn]]
+  ea <- demo_ea_areas()$table
+  if (is.null(w) || nrow(w) == 0L) return(data.table(flood_area_id = character(), severity_level = integer(), description = character(),
+                                                      river_or_sea = character(), county = character(), time_raised = as.POSIXct(character(), tz = "UTC"),
+                                                      time_severity_changed = as.POSIXct(character(), tz = "UTC")))
+  set.seed(sum(utf8ToInt(scn)))
+  out <- data.table(flood_area_id = w$flood_area_id, severity_level = w$severity_level,
+                    description = ea$ea_area_name[match(w$flood_area_id, ea$ea_area_code)])
+  out[, `:=`(river_or_sea = sub(" at .*", "", description), county = "Demo county",
+             time_raised = Sys.time() - sample(3600L * 2L:40L, .N), time_severity_changed = Sys.time() - sample(3600L * 1L:30L, .N))]
+  out[order(severity_level, description)]
 }
 
 fetch_situation <- function() copy(demo_situation(demo_current()$scenario))

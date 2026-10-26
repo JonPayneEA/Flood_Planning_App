@@ -1169,6 +1169,13 @@ server <- function(input, output, session) {
       card(n_draft, "MP briefings awaiting review", sub = if (DEMO_MODE && n_done > 0L) sprintf("%d actioned in this demo", n_done)))
   })
 
+  # Which level's list is open on the Overview (3 alerts, 2 warnings, 1 severe), or NULL.
+  ov_level <- reactiveVal(NULL)
+  observeEvent(input$ov_level, {
+    l <- as.integer(input$ov_level)
+    ov_level(if (identical(ov_level(), l)) NULL else l)
+  })
+
   output$ov_inforce <- renderUI({
     f <- inforce_rv()
     if (is.null(f)) {
@@ -1176,16 +1183,34 @@ server <- function(input, output, session) {
         if (has_gap("flood_warnings_current")) gap_text("flood_warnings_current", "Warnings in force")
         else "Warnings in force could not be loaded."))
     }
-    n <- function(level) { v <- f$n[f$severity_level == level]; if (length(v) == 0L) 0L else as.integer(v[1L]) }
-    card <- function(num, label) {
-      tags$div(class = "stat-card", tags$div(class = "stat-num", num), tags$div(class = "stat-label", label))
+    n <- function(level) length(unique(f$flood_area_id[f$severity_level == level]))
+    open <- ov_level()
+    card <- function(level, label) {
+      tags$button(type = "button", class = paste("stat-card stat-btn", if (identical(open, level)) "open"),
+                  `aria-pressed` = tolower(as.character(identical(open, level))), `aria-controls` = "ov_inforce_list",
+                  onclick = sprintf("Shiny.setInputValue('ov_level', %d, {priority: 'event'});", level),
+                  tags$span(class = "stat-num", n(level)), tags$span(class = "stat-label", label),
+                  tags$span(class = "stat-hint", if (identical(open, level)) "Hide the list" else "Show the list"))
+    }
+    list_ui <- if (!is.null(open)) {
+      rows <- f[severity_level == open]
+      label <- c("1" = "Severe flood warnings", "2" = "Flood warnings", "3" = "Flood alerts")[[as.character(open)]]
+      fmt <- function(x) ifelse(is.na(x), "-", format(as.POSIXct(x, tz = "UTC"), "%a %d %b %H:%M"))
+      tags$div(id = "ov_inforce_list", class = "ov-inforce-list",
+        tags$h3(sprintf("%s in force (%d)", label, nrow(rows))),
+        if (nrow(rows) == 0L) tags$p(class = "text-muted", "None in force.") else
+          tags$table(class = "ov-table",
+            tags$thead(tags$tr(tags$th("Area"), tags$th("River or sea"), tags$th("County"), tags$th("Raised"), tags$th("At this level since"))),
+            tags$tbody(lapply(seq_len(nrow(rows)), function(i) {
+              r <- rows[i]
+              tags$tr(tags$td(field_or_dash(r$description)), tags$td(field_or_dash(r$river_or_sea)), tags$td(field_or_dash(r$county)),
+                      tags$td(fmt(r$time_raised)), tags$td(fmt(r$time_severity_changed)))
+            }))))
     }
     tagList(
-      tags$p(class = "app-caption", "Areas with each in force now, counted once however many constituencies they cover."),
-      tags$div(class = "ov-grid ov-inforce",
-        card(n(3L), "flood alerts"),
-        card(n(2L), "flood warnings"),
-        card(n(1L), "severe flood warnings"))
+      tags$p(class = "app-caption", "Areas with each in force now, counted once however many constituencies they cover. Select a count to list them."),
+      tags$div(class = "ov-grid ov-inforce", card(3L, "flood alerts"), card(2L, "flood warnings"), card(1L, "severe flood warnings")),
+      list_ui
     )
   })
 

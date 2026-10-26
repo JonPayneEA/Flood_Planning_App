@@ -50,6 +50,12 @@ test_that("the Overview summarises the latest statement from the demo data", {
     f <- txt(output$ov_inforce)
     expect_match(f, "flood alerts.*flood warnings.*severe flood warnings")   # left to right: alerts, warnings, severe
     expect_match(f, "counted once")
+    expect_false(grepl("id=\"ov_inforce_list\"", as.character(output$ov_inforce$html)))
+    session$setInputs(ov_level = 3L)                                       # selecting a count lists those areas
+    expect_match(txt(output$ov_inforce), "Flood alerts in force \\(\\d+\\)")
+    expect_match(as.character(output$ov_inforce$html), "id=\"ov_inforce_list\"", fixed = TRUE)
+    session$setInputs(ov_level = 3L)                                       # and selecting it again closes the list
+    expect_false(grepl("id=\"ov_inforce_list\"", as.character(output$ov_inforce$html)))
   })
 })
 
