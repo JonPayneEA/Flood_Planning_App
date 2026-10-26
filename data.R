@@ -809,6 +809,24 @@ fetch_warning_episodes <- function(constituency_id) {
 
 
 # -----------------------------------------------------------------------------
+# fetch_warnings_in_force()
+#
+# How many alerts, warnings and severe warnings are out now, nationally. One row per level, each
+# EA area counted once however many constituencies it spans (flood_warnings_current, job 11:
+# severity 1 severe flood warning, 2 flood warning, 3 flood alert; 4 is "no longer in force").
+# -----------------------------------------------------------------------------
+
+fetch_warnings_in_force <- function() {
+  db_query(sprintf("
+    SELECT severity_level, COUNT(DISTINCT flood_area_id) AS n
+    FROM %s
+    WHERE severity_level BETWEEN 1 AND 3
+    GROUP BY severity_level
+  ", TBL_FLOOD_WARN_CURRENT))
+}
+
+
+# -----------------------------------------------------------------------------
 # Hydrometrics (Environment Agency real-time data)
 #
 # fetch_rt_register(): one row per measure (what is measured, where, on which river), with the real
