@@ -1185,11 +1185,13 @@ server <- function(input, output, session) {
     }
     n <- function(level) length(unique(f$flood_area_id[f$severity_level == level]))
     open <- ov_level()
+    icon_for <- c(`3` = "alert", `2` = "warning", `1` = "severe")
     card <- function(level, label) {
       tags$button(type = "button", class = paste("stat-card stat-btn", if (identical(open, level)) "open"),
                   `aria-pressed` = tolower(as.character(identical(open, level))), `aria-controls` = "ov_inforce_list",
                   onclick = sprintf("Shiny.setInputValue('ov_level', %d, {priority: 'event'});", level),
-                  tags$span(class = "stat-num", n(level)), tags$span(class = "stat-label", label),
+                  tags$span(class = "stat-top", warning_icon(icon_for[[as.character(level)]]), tags$span(class = "stat-num", n(level))),
+                  tags$span(class = "stat-label", label),
                   tags$span(class = "stat-hint", if (identical(open, level)) "Hide the list" else "Show the list"))
     }
     list_ui <- if (!is.null(open)) {
@@ -1197,7 +1199,7 @@ server <- function(input, output, session) {
       label <- c("1" = "Severe flood warnings", "2" = "Flood warnings", "3" = "Flood alerts")[[as.character(open)]]
       fmt <- function(x) ifelse(is.na(x), "-", format(as.POSIXct(x, tz = "UTC"), "%a %d %b %H:%M"))
       tags$div(id = "ov_inforce_list", class = "ov-inforce-list",
-        tags$h3(sprintf("%s in force (%d)", label, nrow(rows))),
+        tags$h3(class = "ov-list-h", warning_icon(icon_for[[as.character(open)]]), sprintf("%s in force (%d)", label, nrow(rows))),
         if (nrow(rows) == 0L) tags$p(class = "text-muted", "None in force.") else
           tags$table(class = "ov-table",
             tags$thead(tags$tr(tags$th("Area"), tags$th("River or sea"), tags$th("County"), tags$th("Raised"), tags$th("At this level since"))),

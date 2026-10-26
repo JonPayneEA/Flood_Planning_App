@@ -116,3 +116,19 @@ test_that("the chart axis draws horizontal gridlines only when asked, and never 
   expect_false(a$zeroline)
   expect_equal(app_plot_axis(range = c(0, 5))$range, c(0, 5))                   # extra settings pass through
 })
+
+
+test_that("warning_icon draws one, two or three waves, and uses an official file when one is supplied", {
+  svg <- function(l) as.character(warning_icon(l))
+  waves <- function(l) lengths(regmatches(svg(l), gregexpr("stroke-linecap", svg(l), fixed = TRUE)))
+  expect_equal(c(waves("alert"), waves("warning"), waves("severe")), 1:3)
+  expect_match(svg("severe"), APP_SEVERE_HEX, fixed = TRUE)
+  expect_match(svg("alert"), 'aria-hidden="true"', fixed = TRUE)                # decoration: the label beside it carries the meaning
+  expect_error(warning_icon("nonsense"))
+  old <- setwd(tempdir()); on.exit(setwd(old), add = TRUE)
+  dir.create(file.path("www", "icons"), recursive = TRUE, showWarnings = FALSE)
+  writeLines("<svg/>", file.path("www", "icons", "flood-warning.svg"))
+  expect_match(svg("warning"), 'src="icons/flood-warning.svg"', fixed = TRUE)     # the official file replaces the drawing
+  expect_match(svg("alert"), "<svg", fixed = TRUE)                                # the others are still drawn
+  unlink("www", recursive = TRUE)
+})

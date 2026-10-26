@@ -304,6 +304,12 @@ button.stat-btn .stat-hint { display: block; font-size: 16px; color: var(--gov-l
 .cov-page .app-caption { margin-bottom: var(--sp-3); }
 .guide h2 { margin-top: var(--sp-7); }
 
+/* Warning icons beside the in-force counts. */
+.warn-icon { width: 44px; height: 44px; flex: 0 0 auto; }
+button.stat-btn .stat-top { display: flex; align-items: center; gap: var(--sp-3); }
+.ov-list-h { display: flex; align-items: center; gap: var(--sp-3); }
+.ov-list-h .warn-icon { width: 32px; height: 32px; }
+
 /* Style guide (demonstration mode). */
 .sg-swatches { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin-bottom: var(--sp-6); }
 .sg-swatch { width: 170px; font-size: 16px; }
@@ -491,6 +497,9 @@ make_styleguide_tab <- function() {
       tags$div(class = "kpi-row",
         tags$div(class = "stat-card", tags$div(class = "stat-num", "143"), tags$div(class = "stat-label", "constituencies at Medium or above")),
         tags$div(class = "stat-card", tags$div(class = "stat-num accent", "12"), tags$div(class = "stat-label", "warnings in force")))),
+    tags$div(class = "sg-section", tags$h2("Warning icons"),
+      tags$p(class = "app-caption", "A house with one, two or three waves. Put the Environment Agency's own files in www/icons (flood-alert, flood-warning, severe-flood-warning, .svg or .png) and they replace these."),
+      tags$div(class = "sg-row", lapply(c("alert", "warning", "severe"), function(l) tags$div(warning_icon(l), tags$br(), l)))),
     tags$div(class = "sg-section", tags$h2("Notices"),
       tags$div(class = "ov-headline", tags$div(class = "ov-kicker", "Headline"), tags$div(class = "ov-text", "Inset text carries the main message of a page.")),
       tags$div(class = "quiet-notice", "A quiet notice for a normal state, such as a day with no risk areas."),
