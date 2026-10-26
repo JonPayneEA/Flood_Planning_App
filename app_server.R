@@ -2409,12 +2409,70 @@ server <- function(input, output, session) {
                        title = names(RAIN_METRICS)[RAIN_METRICS == m])
   })
 
+  # The gauge whose past 24 hours is charted under the map: the one clicked, or the one found.
+  rain_pick <- reactiveVal(NULL)
+  observeEvent(input$rain_map_marker_click, {
+    id <- input$rain_map_marker_click$id
+    if (!is.null(id) && nzchar(rt_text(id))) rain_pick(as.character(id))
+  })
+
+  # One query for the gauge's last 24 hours, only when the gauge changes (or Refresh is pressed); the bar width is
+  # applied afterwards, so switching between 15 minutes and an hour does not query again.
+  rain_readings <- reactive({
+    input$rain_refresh
+    picked <- rain_pick(); r <- rain_raw()
+    if (is.null(picked) || is.null(r)) return(NULL)
+    row <- r[which(r$key == picked)]                 # not r[key == picked]: inside [] "key" is the column
+    if (nrow(row) != 1L) return(NULL)
+    rd <- safe_fetch(fetch_rt_readings, row$measure_uri, 1L)
+    list(row = row, readings = rd, now = as.POSIXct(Sys.time(), tz = "UTC"))
+  })
+
+  rain_chart_data <- reactive({
+    x <- rain_readings()
+    if (is.null(x)) return(NULL)
+    step <- suppressWarnings(as.integer(input$rain_bars)[1L]); if (is.na(step) || !(step %in% c(900L, 3600L))) step <- 3600L
+    b <- rain_bars(x$readings, step)
+    c(x, list(step = step, bars = b$bars, ignored = b$ignored))
+  })
+
+  output$rain_chart_head <- renderUI({
+    x <- rain_chart_data()
+    if (is.null(x)) return(tags$p(class = "text-muted mb-0", "Click a gauge on the map to chart its past 24 hours."))
+    if (is.null(x$readings)) return(tags$p(class = "text-muted mb-0", sprintf("%s: the readings could not be loaded.", x$row$station)))
+    if (nrow(x$bars) == 0L) return(tags$p(class = "text-muted mb-0", sprintf("%s: no readings in the past 24 hours.", x$row$station)))
+    tags$p(class = "mb-0", tags$strong(x$row$station),
+           sprintf(": %s in 24 hours, most in one %s %s.%s", rain_mm(sum(x$bars$mm)),
+                   if (x$step == 3600L) "hour" else "15 minutes", rain_mm(max(x$bars$mm)),
+                   if (x$ignored > 0L) sprintf(" %d impossible reading%s ignored.", x$ignored, if (x$ignored == 1L) "" else "s") else ""))
+  })
+
+  if (requireNamespace("plotly", quietly = TRUE)) {
+    output$rain_plot <- plotly::renderPlotly({
+      x <- rain_chart_data()
+      req(x, nrow(x$bars) > 0L)
+      b <- x$bars
+      start <- x$now - 86400
+      fmt <- function(v) format(v, "%Y-%m-%d %H:%M:%S", tz = "UTC")
+      fig <- plotly::add_trace(plotly::plot_ly(), type = "bar", x = fmt(b$t), y = b$mm, width = x$step * 1000, offset = 0,
+                               marker = list(color = APP_SERIES[1L]),
+                               hovertemplate = paste0("%{x|%a %d %b %H:%M} UTC<br>%{y:.1f} mm<extra></extra>"))
+      app_plot_style(fig, height = 260, showlegend = FALSE, bargap = 0.04,
+                     xaxis = app_plot_axis(range = fmt(c(start, x$now)), type = "date", nticks = 8),
+                     yaxis = app_plot_axis("mm", grid = TRUE, range = c(0, max(1, ceiling(max(b$mm) * 1.15))), tickformat = ".1~f", nticks = 6),
+                     title = list(text = sprintf("%s: rainfall in each %s, past 24 hours, times in UTC", x$row$station, if (x$step == 3600L) "hour" else "15 minutes"),
+                                  x = 0.01, xanchor = "left", font = list(size = 13, color = APP_PALETTE$navy)),
+                     margin = list(t = 44, l = 60, r = 20))
+    })
+  }
+
   # Find a gauge: fly to it and open its popup, whether or not the filters would draw it.
   observeEvent(input$rain_find, {
     r <- rain_raw()
     if (is.null(r) || !nzchar(rt_text(input$rain_find))) return()
     row <- r[r$key == input$rain_find]
     if (nrow(row) != 1L) return()
+    rain_pick(row$key)
     proxy <- leaflet::leafletProxy("rain_map")
     proxy <- leaflet::clearPopups(proxy)
     proxy <- leaflet::setView(proxy, lng = row$long, lat = row$lat, zoom = 12)

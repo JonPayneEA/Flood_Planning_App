@@ -145,6 +145,19 @@ test_that("the Rain gauges tab loads on first open, summarises, and takes its fi
     expect_true(all(rain_view()$ea_area_name == "Demo North"))
     session$setInputs(rain_area = "All", rain_hide_stale = TRUE)
     expect_lt(nrow(rain_view()), 24L)
+    expect_null(rain_chart_data())                                           # nothing is charted until a gauge is picked
+    expect_match(txt(output$rain_chart_head), "Click a gauge")
+    picked <- rain_raw()[stale == FALSE]$key[1]
+    session$setInputs(rain_map_marker_click = list(id = picked, lat = 52, lng = -1, group = "rain"))
+    cd <- rain_chart_data()
+    expect_equal(cd$row$key, picked); expect_gt(nrow(cd$bars), 0L); expect_equal(cd$step, 3600L)
+    expect_lte(nrow(cd$bars), 25L)                                           # 24 hours of hourly bars
+    expect_match(txt(output$rain_chart_head), "in 24 hours, most in one hour")
+    session$setInputs(rain_bars = "900")
+    expect_equal(rain_chart_data()$step, 900L); expect_gt(nrow(rain_chart_data()$bars), 25L)
+    session$setInputs(rain_bars = "junk"); expect_equal(rain_chart_data()$step, 3600L)
+    session$setInputs(rain_map_marker_click = list(id = "no-such-gauge"))
+    expect_null(rain_chart_data())
     expect_no_error(session$setInputs(rain_find = rain_raw()$key[1]))
     expect_no_error(session$setInputs(rain_find = "no-such-gauge"))
     expect_no_error(session$setInputs(rain_refresh = 1))

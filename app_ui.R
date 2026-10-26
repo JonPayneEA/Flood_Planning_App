@@ -858,7 +858,8 @@ make_coverage_tab <- function() tags$div(
 # Rain gauges tab.
 #
 # A map of the Environment Agency's rain gauges. Each is coloured by its rainfall over the past 1, 12 or 24 hours;
-# click one for its name, ids, latest reading and all three totals. A gauge with no recent reading is grey.
+# click one for its name, ids, latest reading and all three totals, and a bar chart of its past 24 hours appears
+# under the map. A gauge with no recent reading is grey.
 # -----------------------------------------------------------------------------
 
 make_rain_tab <- function() tags$div(
@@ -874,7 +875,15 @@ make_rain_tab <- function() tags$div(
   ),
   uiOutput("rain_message"),
   uiOutput("rain_summary"),
-  leaflet::leafletOutput("rain_map", height = "68vh"),
+  leaflet::leafletOutput("rain_map", height = "55vh"),
+  tags$div(
+    class = "mt-3",
+    tags$div(class = "d-flex flex-wrap align-items-baseline gap-3",
+             uiOutput("rain_chart_head"),
+             radioButtons("rain_bars", NULL, choices = c("1 hour" = 3600L, "15 minutes" = 900L), selected = 3600L, inline = TRUE)),
+    if (requireNamespace("plotly", quietly = TRUE)) plotly::plotlyOutput("rain_plot", height = "260px")
+    else tags$p(class = "text-muted", "The plotly package is not installed on this server, so the chart cannot be drawn.")
+  ),
   tags$small(class = "text-muted d-block mt-2",
              "This uses Environment Agency flood and river level data from the real-time data API (Beta). ",
              "Totals add up the readings in the window; times are UTC. Where a gauge reports both 15-minute totals and ",

@@ -25,7 +25,7 @@ Tabs:
   rain gauges show their real names and every label carries the WISKI and FFFS ids.
 - **Rain gauges**: a map of the Environment Agency's rain gauges, each coloured by its rainfall over the
   past 1, 12 or 24 hours. Click a gauge for its latest reading, the three totals and how many of the expected
-  readings arrived. A grey gauge has had no reading for three hours. Find a gauge by name, station or FFFS ID.
+  readings arrived, and a bar chart of its past 24 hours (hourly or 15-minute bars) appears under the map. A grey gauge has had no reading for three hours. Find a gauge by name, station or FFFS ID.
   A gauge that reports both 15-minute totals and instantaneous readings is drawn once, on its totals. Reads
   `ea_rt_measure_register`, `ea_rt_readings_all` and `ea_rt_latest` (notebooks 9 and 23), and
   `ea_rt_measures_mapped` for names and ids where notebook 16 has built it.

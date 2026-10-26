@@ -1239,3 +1239,19 @@ in_selected_cells <- function(risk_x, risk_y, cells) {
   if (is.null(cells) || nrow(cells) == 0L) return(rep(FALSE, length(risk_x)))
   paste(risk_x, risk_y) %in% paste(cells$x, cells$y)
 }
+
+
+# The bars of the Rain gauges chart: one gauge's readings (date_time, value) summed into step-second buckets (900 for 15
+# minutes, 3600 for an hour), each bucket labelled by its start. A reading below zero or over RAIN_MAX_READING is left
+# out and counted, as in the totals. Returns list(bars = data.table(t, mm), ignored = n).
+rain_bars <- function(readings, step = 3600L) {
+  empty <- data.table(t = as.POSIXct(character(), tz = "UTC"), mm = numeric())
+  if (is.null(readings) || nrow(readings) == 0L) return(list(bars = empty, ignored = 0L))
+  d <- as.data.table(readings)[!is.na(date_time) & !is.na(value)]
+  bad <- d$value < 0 | d$value > RAIN_MAX_READING
+  d <- d[!bad]
+  if (nrow(d) == 0L) return(list(bars = empty, ignored = sum(bad)))
+  step <- as.integer(step)
+  d[, t := as.POSIXct(floor(as.numeric(date_time) / step) * step, origin = "1970-01-01", tz = "UTC")]
+  list(bars = d[, .(mm = sum(value)), by = t][order(t)], ignored = sum(bad))
+}

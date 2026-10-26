@@ -751,7 +751,8 @@ fetch_rt_boundary <- function() rt_boundary(Sys.Date() - 1L)
 fetch_rt_span <- function(measure_uris) as.POSIXct(Sys.time(), tz = "UTC") - 3 * 365 * 86400
 
 fetch_rt_readings <- function(measure_uris, days, sum_uris = character()) {
-  reg <- demo_rt_register()[measure_uri %in% measure_uris]
+  reg <- rbind(demo_rt_register()[, .(measure_uri, parameter)], demo_rain_gauges()[, .(measure_uri, parameter)])
+  reg <- reg[measure_uri %in% measure_uris]
   if (nrow(reg) == 0L) return(data.table(measure_uri = character(), date_time = as.POSIXct(character(), tz = "UTC"), value = numeric()))
   now <- as.POSIXct(trunc(Sys.time(), "mins"), tz = "UTC")
   bucket <- rt_bucket_seconds(days)

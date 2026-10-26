@@ -402,7 +402,8 @@ guide_products <- function(s) {
         "One query returns every rainfall measure that has a position, its newest reading, and its rainfall over the past 1, 12 and 24 hours. The totals add up the readings in each window.",
         "A gauge can report both 15-minute totals and instantaneous readings. It is drawn once, on its totals.",
         "Each gauge is a circle coloured by its total for the window you choose, in six bands from the palest (almost nothing) to the darkest (the heaviest). The legend gives the bands in millimetres, which differ by window because an hour's rain is smaller than a day's.",
-        "Click a gauge for its name, its station reference and FFFS and WISKI ids where the telemetry mapping holds them, its latest reading and when it was taken, the three totals, and how many of the expected readings it reported in 24 hours. Use Find a gauge to fly to one by name, station or FFFS ID."
+        "Click a gauge for its name, its station reference and FFFS and WISKI ids where the telemetry mapping holds them, its latest reading and when it was taken, the three totals, and how many of the expected readings it reported in 24 hours. Use Find a gauge to fly to one by name, station or FFFS ID.",
+        "Clicking a gauge also draws a bar chart of its past 24 hours under the map: the rain in each hour, or in each 15 minutes if you switch the bars. One query fetches that gauge's readings when you click, and switching the bar width does not fetch again."
       ),
       read = c(
         "A grey gauge has had no reading for three hours. Its last reading is in the popup, but it is not counted as dry.",

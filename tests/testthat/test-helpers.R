@@ -819,3 +819,15 @@ test_that("an impossible reading is left out of the value, named in the popup, a
   expect_equal(if_else_s(c(1, 2), "was", "were"), c("was", "were"))
   expect_equal(RAIN_MAX_READING, 100)
 })
+
+
+test_that("rain bars sum the readings into hours or quarter hours and leave out impossible ones", {
+  t0 <- as.POSIXct("2026-10-23 10:00:00", tz = "UTC")
+  rd <- data.table(date_time = t0 + c(0, 900, 1800, 2700, 3600, 4500, 5400), value = c(0.2, 0.4, 0, 0.1, 1, 19999999, -3))
+  h <- rain_bars(rd, 3600L)
+  expect_equal(nrow(h$bars), 2L); expect_equal(h$bars$mm, c(0.7, 1)); expect_equal(h$ignored, 2L)
+  expect_equal(h$bars$t, t0 + c(0, 3600))                                          # each bar is labelled by its start
+  q <- rain_bars(rd, 900L)
+  expect_equal(nrow(q$bars), 5L); expect_equal(q$bars$mm, c(0.2, 0.4, 0, 0.1, 1))
+  expect_equal(nrow(rain_bars(NULL)$bars), 0L); expect_equal(rain_bars(rd[value > 1000])$ignored, 1L)
+})
