@@ -165,3 +165,24 @@ test_that("the register is read from the mapped view, and from the plain registe
   d$db_query <- function(sql) stop("Failed to connect to warehouse")         # any other failure is still a failure
   expect_error(d$fetch_rt_register(), "Failed to connect")
 })
+
+
+test_that("the rain gauge query reads the mapped view, falls back to the register, and sums three windows", {
+  d <- load_data_layer(stub_query = FALSE)
+  seen <- character()
+  d$db_query <- function(sql) {
+    seen <<- c(seen, gsub("\\s+", " ", sql))
+    if (grepl("ea_rt_measures_mapped", sql, fixed = TRUE)) stop("[TABLE_OR_VIEW_NOT_FOUND] table or view `cat`.`sch`.`ea_rt_measures_mapped` cannot be found")
+    data.table(measure_uri = "m/1")
+  }
+  r <- d$fetch_rain_gauges()
+  expect_equal(r$measure_uri, "m/1")
+  expect_match(seen[1], "gauge_name, fffs_id, wiski_id FROM cat\\.sch\\.ea_rt_measures_mapped")
+  expect_match(seen[2], "CAST\\(NULL AS STRING\\) AS wiski_id FROM cat\\.sch\\.ea_rt_measure_register")
+  q <- seen[2]
+  expect_match(q, "parameter = 'rainfall'"); expect_match(q, "INTERVAL 1 HOURS"); expect_match(q, "INTERVAL 12 HOURS"); expect_match(q, "INTERVAL 24 HOURS")
+  expect_match(q, "FROM cat\\.sch\\.ea_rt_readings_all"); expect_match(q, "LEFT JOIN cat\\.sch\\.ea_rt_latest")
+  expect_match(q, "reading_date >= date_sub\\(current_date\\(\\), 1\\)")             # prunes the partitions
+  d$db_query <- function(sql) stop("[TABLE_OR_VIEW_NOT_FOUND] table or view `cat`.`sch`.`ea_rt_latest` cannot be found")
+  expect_error(d$fetch_rain_gauges(), "ea_rt_latest")                         # a missing latest table is a gap, not a fallback
+})

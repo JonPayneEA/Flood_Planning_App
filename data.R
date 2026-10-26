@@ -829,6 +829,44 @@ fetch_rt_register <- function() {
   })
 }
 
+# fetch_rain_gauges(): every rainfall measure with a position, the newest reading it has, and its rainfall over the
+# past 1, 12 and 24 hours, in one query. Names, FFFS and WISKI ids come from ea_rt_measures_mapped where job 16 has
+# built it, else the plain register is used. A gauge can have two measures (an instantaneous reading and a 15-minute
+# total); the app chooses one per gauge, so both are returned here. A sum over no readings is NULL, so "no readings
+# in the window" stays different from "0 mm".
+rain_gauges_sql <- function(src, mapped) sprintf("
+  WITH g AS (
+    SELECT measure_uri, station_uri, station_reference, station_label, river_name, town, ea_area_name,
+           lat, long, unit_name, value_type, period, parameter, %s
+    FROM %s
+    WHERE parameter = 'rainfall' AND lat IS NOT NULL AND long IS NOT NULL
+  ),
+  w AS (
+    SELECT r.measure_uri,
+           SUM(CASE WHEN r.date_time >= current_timestamp() - INTERVAL 1 HOURS  THEN r.value END) AS mm_1h,
+           SUM(CASE WHEN r.date_time >= current_timestamp() - INTERVAL 12 HOURS THEN r.value END) AS mm_12h,
+           SUM(r.value) AS mm_24h,
+           COUNT(*) AS n_24h
+    FROM %s r JOIN g ON g.measure_uri = r.measure_uri
+    WHERE r.reading_date >= date_sub(current_date(), 1)
+      AND r.date_time >= current_timestamp() - INTERVAL 24 HOURS
+    GROUP BY r.measure_uri
+  )
+  SELECT g.*, w.mm_1h, w.mm_12h, w.mm_24h, w.n_24h, l.date_time AS last_time, l.value AS last_value
+  FROM g
+  LEFT JOIN w ON w.measure_uri = g.measure_uri
+  LEFT JOIN %s l ON l.measure_uri = g.measure_uri",
+  if (mapped) "gauge_name, fffs_id, wiski_id" else "CAST(NULL AS STRING) AS gauge_name, CAST(NULL AS STRING) AS fffs_id, CAST(NULL AS STRING) AS wiski_id",
+  src, TBL_RT_ALL, TBL_RT_LATEST)
+
+fetch_rain_gauges <- function() {
+  tryCatch(db_query(rain_gauges_sql(TBL_RT_MAPPED, TRUE)), error = function(e) {
+    info <- missing_table_info(conditionMessage(e))
+    if (is.null(info) || !grepl("ea_rt_measures_mapped", info$table, fixed = TRUE)) stop(e)
+    db_query(rain_gauges_sql(TBL_RT_REGISTER, FALSE))
+  })
+}
+
 fetch_rt_readings <- function(measure_uris, days, sum_uris = character()) {
   clean <- function(x) { x <- gsub("[^A-Za-z0-9:/._#-]", "", as.character(x)); x[nzchar(x)] }
   uris <- clean(measure_uris)
@@ -1225,6 +1263,7 @@ fetch_constituency_intersections   <- with_cache(fetch_constituency_intersection
 fetch_constituency_geometry        <- with_cache(fetch_constituency_geometry,        "const_geometry", group = "geometry")
 fetch_constituencies_for_statement <- with_cache(fetch_constituencies_for_statement, "const_meta")
 fetch_changes                      <- with_cache(fetch_changes,                      "changes")
+fetch_rain_gauges                  <- with_cache(fetch_rain_gauges,                  "rain_gauges", ttl = min(CACHE_TTL_SECONDS, 60))
 fetch_potential_areas              <- with_cache(fetch_potential_areas,              "potential_areas")
 fetch_changes_log                  <- with_cache(fetch_changes_log,                  "changes_log", ttl = min(CACHE_TTL_SECONDS, 60))
 fetch_constituency_shape           <- with_cache(fetch_constituency_shape,           "const_shape", group = "geometry")

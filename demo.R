@@ -706,6 +706,41 @@ demo_rt_register <- function() demo_memo("rt_register", {
   m[]
 })
 
+# An invented rain gauge network for the Rain gauges tab: 24 gauges around a made-up centre, a few of them with both
+# 15-minute totals and instantaneous readings, one silent, one with no recent reading. Totals follow a smooth
+# rain band so the map shows a pattern. Times are relative to now, so it never goes stale.
+demo_rain_gauges <- function() {
+  set <- demo_with_seed(5521, {
+    n <- 24L
+    lat <- 52.0 + runif(n, 0, 1.6); long <- -2.4 + runif(n, 0, 1.8)
+    band <- pmax(0, 1 - abs((lat - 52.8) * 1.4 + (long + 1.5) * 0.6))            # wettest along a diagonal
+    mm24 <- round(band * runif(n, 12, 34), 1)
+    list(n = n, lat = lat, long = long, mm24 = mm24)
+  })
+  n <- set$n; now <- Sys.time()
+  g <- data.table(
+    measure_uri = sprintf("http://demo.invalid/id/measures/RG%02d-rainfall-t-900", seq_len(n)),
+    station_uri = sprintf("http://demo.invalid/id/stations/RG%02d", seq_len(n)),
+    station_reference = sprintf("RG%02d", seq_len(n)),
+    station_label = ifelse(seq_len(n) %% 3L == 0L, "Rainfall station", sprintf("Demo rain gauge %02d", seq_len(n))),
+    river_name = NA_character_, town = sprintf("Town %02d", seq_len(n)),
+    ea_area_name = rep(c("Demo North", "Demo Central", "Demo South"), length.out = n),
+    lat = set$lat, long = set$long, unit_name = "mm", value_type = "total", period = "900", parameter = "rainfall",
+    gauge_name = ifelse(seq_len(n) %% 3L == 0L, sprintf("Town %02d RG", seq_len(n)), NA_character_),
+    fffs_id = ifelse(seq_len(n) %% 2L == 0L, sprintf("FRG%02d", seq_len(n)), NA_character_),
+    wiski_id = ifelse(seq_len(n) %% 2L == 0L, as.character(520000L + seq_len(n)), NA_character_),
+    mm_24h = set$mm24)
+  g[, mm_12h := round(mm_24h * 0.7, 1)][, mm_1h := round(mm_24h * 0.06, 1)]
+  g[, n_24h := 96L][, last_time := now - 60 * (5 + (seq_len(.N) %% 9L) * 2)][, last_value := round(mm_1h / 4, 1)]
+  g[22L, `:=`(last_time = now - 3600 * 30, mm_1h = NA_real_, mm_12h = NA_real_, mm_24h = NA_real_, n_24h = NA_integer_, last_value = 0)]   # silent for 30 hours
+  g[23L, `:=`(last_time = as.POSIXct(NA), mm_1h = NA_real_, mm_12h = NA_real_, mm_24h = NA_real_, n_24h = NA_integer_, last_value = NA_real_)]  # no reading at all
+  inst <- copy(g[2:4])                                                          # the same stations also report instantaneous readings
+  inst[, `:=`(measure_uri = sub("-t-", "-i-", measure_uri), value_type = "instantaneous", mm_24h = mm_24h * 1.1)]
+  rbind(g, inst)
+}
+
+fetch_rain_gauges <- function() copy(demo_rain_gauges())
+
 fetch_rt_register <- function() copy(demo_rt_register())
 
 # The archive ends at midnight last night; everything after it is the live tail.

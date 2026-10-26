@@ -547,6 +547,20 @@ concurrent_counts <- function(ep, now) {
 
 RT_ALL <- "All"
 RT_MAX_MEASURES <- 8L
+# -----------------------------------------------------------------------------
+# Rain gauges tab (constants).
+#
+# The map colours each gauge by its rainfall total over the chosen window. The breaks are in millimetres, one set per
+# window, and give six bands (under the first break, between breaks, over the last). A gauge with no reading for
+# RAIN_STALE_HOURS is drawn grey whatever it last read, so a silent gauge is not mistaken for a dry one.
+# -----------------------------------------------------------------------------
+RAIN_METRICS      <- c("Past 1 hour" = "mm_1h", "Past 12 hours" = "mm_12h", "Past 24 hours" = "mm_24h")
+RAIN_METRIC_HOURS <- c(mm_1h = 1, mm_12h = 12, mm_24h = 24)
+RAIN_BREAKS       <- list(mm_1h = c(0.1, 0.5, 2, 5, 10), mm_12h = c(0.2, 2, 5, 10, 25), mm_24h = c(0.2, 5, 10, 20, 40))
+RAIN_COLOURS      <- c("#DCE9F7", "#B3D1EE", "#7FB1E3", "#3F8BD3", "#1B5FA8", "#053D7E")   # light to dark, from the app's navy
+RAIN_STALE_COLOUR <- "#9AA5B1"
+RAIN_STALE_HOURS  <- 3
+
 # How far back the chart can look. 0 means everything held for the chosen measures.
 RT_WINDOWS <- c("1 day" = 1L, "3 days" = 3L, "7 days" = 7L, "14 days" = 14L, "30 days" = 30L, "90 days" = 90L,
                 "6 months" = 183L, "1 year" = 365L, "2 years" = 730L, "5 years" = 1826L, "All available" = 0L)
@@ -996,7 +1010,7 @@ empty_situation_message <- function(ranks, floor, other_filters = FALSE) {
 
 PIPELINE_TABLE_JOBS <- c(
   fgs_constituency_changes = 18L, constituency_flood_situation = 19L, mp_briefing_drafts = 20L,
-  fgs_constituency_exposure = 21L, pipeline_health = 22L, ea_warning_episodes = 25L, ea_warning_fgs_coverage = 26L, ea_rt_measure_register = 9L, ea_rt_readings_all = 23L, ea_rt_readings_bronze = 10L, fgs_constituency_mp_contacts = 14L,
+  fgs_constituency_exposure = 21L, pipeline_health = 22L, ea_warning_episodes = 25L, ea_warning_fgs_coverage = 26L, ea_rt_measure_register = 9L, ea_rt_readings_all = 23L, ea_rt_latest = 23L, ea_rt_readings_bronze = 10L, fgs_constituency_mp_contacts = 14L,
   flood_warning_constituency_contacts = 13L, fgs_constituency_intersections = 7L,
   fgs_ea_area_intersections = 7L, ea_area_constituency_lookup = 6L)
 
@@ -1103,6 +1117,107 @@ outage_success <- function(state, now) {
                  fmt_duration(difftime(now, state$since, units = "secs")), state$failures,
                  if (state$failures == 1L) "" else "s")
   list(state = outage_new(), log = log)
+}
+
+
+# -----------------------------------------------------------------------------
+# Rain gauges tab. Pure functions, so they can be tested without a map or a warehouse.
+#
+# rain_prepare():  one row per gauge from fetch_rain_gauges(): a gauge that reports both 15-minute totals and
+#                  instantaneous readings is drawn once, on its totals; gets a readable name, the age of its newest
+#                  reading, and whether it is stale.
+# rain_band(), rain_fill(): the colour band of a rainfall total, and the fill colour (grey for a stale gauge).
+# rain_popup():    what a click shows: name, ids, latest reading, 1, 12 and 24 hour totals, completeness.
+# rain_filter(), rain_summary(): the area and stale filters, and the line of facts above the map.
+# -----------------------------------------------------------------------------
+
+rain_mm <- function(x) {
+  x <- suppressWarnings(as.numeric(x))
+  ifelse(is.na(x), "no readings", paste0(formatC(round(x, 1), format = "f", digits = 1), " mm"))
+}
+
+rain_age_text <- function(minutes) {
+  minutes <- suppressWarnings(as.numeric(minutes))
+  ifelse(is.na(minutes), "",
+         ifelse(minutes < 90, sprintf("%d min ago", as.integer(round(minutes))),
+                ifelse(minutes < 2880, sprintf("%.1f h ago", minutes / 60), sprintf("%d days ago", as.integer(round(minutes / 1440))))))
+}
+
+rain_band <- function(v, metric) {
+  b <- RAIN_BREAKS[[metric]]
+  out <- findInterval(suppressWarnings(as.numeric(v)), b) + 1L
+  out[is.na(v)] <- NA_integer_
+  out
+}
+
+rain_band_labels <- function(metric) {
+  b <- RAIN_BREAKS[[metric]]
+  c(sprintf("Under %s mm", b[1L]), sprintf("%s to %s mm", b[-length(b)], b[-1L]), sprintf("%s mm or more", b[length(b)]))
+}
+
+rain_prepare <- function(d, now = Sys.time()) {
+  if (is.null(d) || nrow(d) == 0L) return(data.table())
+  r <- rt_prepare_register(d)
+  for (col in c("lat", "long", "mm_1h", "mm_12h", "mm_24h", "n_24h", "last_value")) {
+    if (!(col %in% names(r))) r[, (col) := NA_real_]
+    r[, (col) := suppressWarnings(as.numeric(get(col)))]
+  }
+  if (!("last_time" %in% names(r))) r[, last_time := as.POSIXct(NA)]
+  r[, last_time := as.POSIXct(last_time, tz = "UTC")]
+  rank <- c(total = 1L, instantaneous = 2L)
+  r[, vt_rank := { v <- unname(rank[tolower(rt_text(value_type))]); v[is.na(v)] <- 3L; v }]
+  r[, key := ifelse(nzchar(rt_text(station_uri)), rt_text(station_uri),
+                    ifelse(nzchar(rt_text(station_reference)), rt_text(station_reference), measure_uri))]
+  data.table::setorder(r, key, vt_rank, measure_uri)
+  r <- r[!duplicated(key)]
+  r[, age_min := as.numeric(difftime(now, last_time, units = "mins"))]
+  r[, stale := is.na(age_min) | age_min > RAIN_STALE_HOURS * 60]
+  p <- suppressWarnings(as.numeric(r$period))
+  r[, n_expected := ifelse(is.na(p) | p <= 0, 96, round(86400 / p))]
+  r[]
+}
+
+rain_fill <- function(r, metric) {
+  out <- RAIN_COLOURS[rain_band(r[[metric]], metric)]
+  out[is.na(out) | r$stale] <- RAIN_STALE_COLOUR
+  out
+}
+
+rain_popup <- function(r) {
+  esc <- htmltools::htmlEscape
+  ids <- paste0(esc(rt_text(r$station_reference)),
+                ifelse(nzchar(rt_text(r$fffs_id)),  paste0(" &middot; FFFS ",  esc(rt_text(r$fffs_id))),  ""),
+                ifelse(nzchar(rt_text(r$wiski_id)), paste0(" &middot; WISKI ", esc(rt_text(r$wiski_id))), ""))
+  latest <- ifelse(is.na(r$last_time), "no reading in the last few days",
+                   paste0(rain_mm(r$last_value), " at ", format(r$last_time, "%a %d %b %H:%M", tz = "UTC"), " UTC (", rain_age_text(r$age_min), ")"))
+  vt <- tolower(rt_text(r$value_type))
+  kind <- ifelse(vt == "total", " &middot; 15-minute totals", ifelse(vt == "instantaneous", " &middot; instantaneous readings", ""))
+  n24 <- ifelse(is.na(r$n_24h), 0, r$n_24h)
+  paste0("<strong>", esc(r$station), "</strong><br><small>", ids, "</small><br>",
+         ifelse(r$stale, "<em>No recent reading</em><br>", ""),
+         "Latest: ", latest, "<br>",
+         "Past 1 hour: ",   rain_mm(r$mm_1h),  "<br>",
+         "Past 12 hours: ", rain_mm(r$mm_12h), "<br>",
+         "Past 24 hours: ", rain_mm(r$mm_24h), "<br>",
+         "<small>", format(n24), " of ", r$n_expected, " readings in 24 hours", kind, "</small>")
+}
+
+rain_filter <- function(r, area = RT_ALL, hide_stale = FALSE) {
+  if (nrow(r) == 0L) return(r)
+  if (!identical(area, RT_ALL)) r <- r[r$ea_area_name %in% area]
+  if (isTRUE(hide_stale)) r <- r[!r$stale]
+  r
+}
+
+# The facts above the map: gauges drawn, how many reported recently, how many had rain in the window, the wettest.
+rain_summary <- function(r, metric) {
+  if (nrow(r) == 0L) return(list(n = 0L, recent = 0L, wet = 0L, wettest = NULL, newest = NULL))
+  ok <- !r$stale
+  v <- r[[metric]]
+  top <- if (any(ok & !is.na(v))) which.max(ifelse(ok & !is.na(v), v, -Inf)) else NA_integer_
+  list(n = nrow(r), recent = sum(ok), wet = sum(ok & !is.na(v) & v > 0),
+       wettest = if (is.na(top)) NULL else list(name = r$station[top], mm = v[top]),
+       newest = if (all(is.na(r$last_time))) NULL else max(r$last_time, na.rm = TRUE))
 }
 
 
