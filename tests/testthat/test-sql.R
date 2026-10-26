@@ -183,6 +183,8 @@ test_that("the rain gauge query reads the mapped view, falls back to the registe
   expect_match(q, "parameter = 'rainfall'"); expect_match(q, "INTERVAL 1 HOURS"); expect_match(q, "INTERVAL 12 HOURS"); expect_match(q, "INTERVAL 24 HOURS")
   expect_match(q, "FROM cat\\.sch\\.ea_rt_readings_all"); expect_match(q, "LEFT JOIN cat\\.sch\\.ea_rt_latest")
   expect_match(q, "reading_date >= date_sub\\(current_date\\(\\), 1\\)")             # prunes the partitions
+  expect_equal(lengths(regmatches(q, gregexpr("BETWEEN 0 AND 100", q))), 4L)                   # every total leaves out an impossible reading
+  expect_match(q, "COUNT\\(CASE WHEN r.value < 0 OR r.value > 100 THEN 1 END\\) AS n_bad")
   d$db_query <- function(sql) stop("[TABLE_OR_VIEW_NOT_FOUND] table or view `cat`.`sch`.`ea_rt_latest` cannot be found")
   expect_error(d$fetch_rain_gauges(), "ea_rt_latest")                         # a missing latest table is a gap, not a fallback
 })

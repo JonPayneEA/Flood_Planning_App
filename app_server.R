@@ -711,7 +711,7 @@ server <- function(input, output, session) {
     # Street map default; satellite and terrain give forecasters context
     # (river courses, contours) the street map doesn't show.
     m <- leaflet::addProviderTiles(m, leaflet::providers$OpenStreetMap,    group = "Street")
-    m <- leaflet::addProviderTiles(m, leaflet::providers$CartoDB.Positron, group = "Light")
+    m <- leaflet::addProviderTiles(m, leaflet::providers$Esri.WorldGrayCanvas, group = "Light")
     m <- leaflet::addProviderTiles(m, leaflet::providers$Esri.WorldImagery, group = "Satellite")
     m <- leaflet::addProviderTiles(m, leaflet::providers$OpenTopoMap,      group = "Terrain")
 
@@ -2383,7 +2383,7 @@ server <- function(input, output, session) {
 
   output$rain_map <- leaflet::renderLeaflet({
     m <- leaflet::leaflet()
-    m <- leaflet::addProviderTiles(m, leaflet::providers$CartoDB.Positron, group = "Light")
+    m <- leaflet::addProviderTiles(m, leaflet::providers$Esri.WorldGrayCanvas, group = "Light")
     m <- leaflet::addProviderTiles(m, leaflet::providers$OpenStreetMap,    group = "Street")
     m <- leaflet::addLayersControl(m, baseGroups = c("Light", "Street"),
                                    options = leaflet::layersControlOptions(collapsed = TRUE), position = "topright")

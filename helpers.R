@@ -560,6 +560,7 @@ RAIN_BREAKS       <- list(mm_1h = c(0.1, 0.5, 2, 5, 10), mm_12h = c(0.2, 2, 5, 1
 RAIN_COLOURS      <- c("#DCE9F7", "#B3D1EE", "#7FB1E3", "#3F8BD3", "#1B5FA8", "#053D7E")   # light to dark, from the app's navy
 RAIN_STALE_COLOUR <- "#9AA5B1"
 RAIN_STALE_HOURS  <- 3
+RAIN_MAX_READING  <- 100     # mm in one reading; more (or below zero) is an error. The query leaves these out of the totals (data.R)
 
 # How far back the chart can look. 0 means everything held for the chosen measures.
 RT_WINDOWS <- c("1 day" = 1L, "3 days" = 3L, "7 days" = 7L, "14 days" = 14L, "30 days" = 30L, "90 days" = 90L,
@@ -1136,6 +1137,9 @@ rain_mm <- function(x) {
   ifelse(is.na(x), "no readings", paste0(formatC(round(x, 1), format = "f", digits = 1), " mm"))
 }
 
+# One word or the other by a count: "1 reading was", "3 readings were".
+if_else_s <- function(n, one, many) ifelse(n == 1, one, many)
+
 rain_age_text <- function(minutes) {
   minutes <- suppressWarnings(as.numeric(minutes))
   ifelse(is.na(minutes), "",
@@ -1158,12 +1162,16 @@ rain_band_labels <- function(metric) {
 rain_prepare <- function(d, now = Sys.time()) {
   if (is.null(d) || nrow(d) == 0L) return(data.table())
   r <- rt_prepare_register(d)
-  for (col in c("lat", "long", "mm_1h", "mm_12h", "mm_24h", "n_24h", "last_value")) {
+  for (col in c("lat", "long", "mm_1h", "mm_12h", "mm_24h", "n_24h", "n_bad", "last_value")) {
     if (!(col %in% names(r))) r[, (col) := NA_real_]
     r[, (col) := suppressWarnings(as.numeric(get(col)))]
   }
   if (!("last_time" %in% names(r))) r[, last_time := as.POSIXct(NA)]
   r[, last_time := as.POSIXct(last_time, tz = "UTC")]
+  # A newest reading that cannot be rain is kept for the popup but not shown as a value.
+  r[, last_raw := last_value]
+  r[, last_bad := !is.na(last_value) & (last_value < 0 | last_value > RAIN_MAX_READING)]
+  r[last_bad == TRUE, last_value := NA_real_]
   rank <- c(total = 1L, instantaneous = 2L)
   r[, vt_rank := { v <- unname(rank[tolower(rt_text(value_type))]); v[is.na(v)] <- 3L; v }]
   r[, key := ifelse(nzchar(rt_text(station_uri)), rt_text(station_uri),
@@ -1188,8 +1196,10 @@ rain_popup <- function(r) {
   ids <- paste0(esc(rt_text(r$station_reference)),
                 ifelse(nzchar(rt_text(r$fffs_id)),  paste0(" &middot; FFFS ",  esc(rt_text(r$fffs_id))),  ""),
                 ifelse(nzchar(rt_text(r$wiski_id)), paste0(" &middot; WISKI ", esc(rt_text(r$wiski_id))), ""))
+  shown <- ifelse(r$last_bad %in% TRUE, paste0("an impossible reading (", trimws(format(round(r$last_raw), big.mark = ",", scientific = FALSE)), " mm), ignored"), rain_mm(r$last_value))
   latest <- ifelse(is.na(r$last_time), "no reading in the last few days",
-                   paste0(rain_mm(r$last_value), " at ", format(r$last_time, "%a %d %b %H:%M", tz = "UTC"), " UTC (", rain_age_text(r$age_min), ")"))
+                   paste0(shown, " at ", format(r$last_time, "%a %d %b %H:%M", tz = "UTC"), " UTC (", rain_age_text(r$age_min), ")"))
+  nbad <- ifelse(is.na(r$n_bad), 0, r$n_bad)
   vt <- tolower(rt_text(r$value_type))
   kind <- ifelse(vt == "total", " &middot; 15-minute totals", ifelse(vt == "instantaneous", " &middot; instantaneous readings", ""))
   n24 <- ifelse(is.na(r$n_24h), 0, r$n_24h)
@@ -1199,7 +1209,9 @@ rain_popup <- function(r) {
          "Past 1 hour: ",   rain_mm(r$mm_1h),  "<br>",
          "Past 12 hours: ", rain_mm(r$mm_12h), "<br>",
          "Past 24 hours: ", rain_mm(r$mm_24h), "<br>",
-         "<small>", format(n24), " of ", r$n_expected, " readings in 24 hours", kind, "</small>")
+         "<small>", as.character(n24), " of ", r$n_expected, " readings in 24 hours", kind, "</small>",
+         ifelse(nbad > 0, paste0("<br><em>", as.character(nbad), if_else_s(nbad, " reading was", " readings were"),
+                                 " ignored as impossible (below zero or over ", RAIN_MAX_READING, " mm).</em>"), ""))
 }
 
 rain_filter <- function(r, area = RT_ALL, hide_stale = FALSE) {

@@ -834,7 +834,9 @@ fetch_rt_register <- function() {
 # built it, else the plain register is used. A gauge can have two measures (an instantaneous reading and a 15-minute
 # total); the app chooses one per gauge, so both are returned here. A sum over no readings is NULL, so "no readings
 # in the window" stays different from "0 mm".
-rain_gauges_sql <- function(src, mapped) sprintf("
+# max_mm: a single reading above this (or below zero) is an error, not rain, and is left out of the totals and counted in
+# n_bad. 100 mm in one 15-minute reading is beyond any UK record. Keep in step with RAIN_MAX_READING in helpers.R.
+rain_gauges_sql <- function(src, mapped, max_mm = 100) sprintf("
   WITH g AS (
     SELECT measure_uri, station_uri, station_reference, station_label, river_name, town, ea_area_name,
            lat, long, unit_name, value_type, period, parameter, %s
@@ -843,21 +845,22 @@ rain_gauges_sql <- function(src, mapped) sprintf("
   ),
   w AS (
     SELECT r.measure_uri,
-           SUM(CASE WHEN r.date_time >= current_timestamp() - INTERVAL 1 HOURS  THEN r.value END) AS mm_1h,
-           SUM(CASE WHEN r.date_time >= current_timestamp() - INTERVAL 12 HOURS THEN r.value END) AS mm_12h,
-           SUM(r.value) AS mm_24h,
-           COUNT(*) AS n_24h
+           SUM(CASE WHEN r.value BETWEEN 0 AND %s AND r.date_time >= current_timestamp() - INTERVAL 1 HOURS  THEN r.value END) AS mm_1h,
+           SUM(CASE WHEN r.value BETWEEN 0 AND %s AND r.date_time >= current_timestamp() - INTERVAL 12 HOURS THEN r.value END) AS mm_12h,
+           SUM(CASE WHEN r.value BETWEEN 0 AND %s THEN r.value END) AS mm_24h,
+           COUNT(CASE WHEN r.value BETWEEN 0 AND %s THEN 1 END) AS n_24h,
+           COUNT(CASE WHEN r.value < 0 OR r.value > %s THEN 1 END) AS n_bad
     FROM %s r JOIN g ON g.measure_uri = r.measure_uri
     WHERE r.reading_date >= date_sub(current_date(), 1)
       AND r.date_time >= current_timestamp() - INTERVAL 24 HOURS
     GROUP BY r.measure_uri
   )
-  SELECT g.*, w.mm_1h, w.mm_12h, w.mm_24h, w.n_24h, l.date_time AS last_time, l.value AS last_value
+  SELECT g.*, w.mm_1h, w.mm_12h, w.mm_24h, w.n_24h, w.n_bad, l.date_time AS last_time, l.value AS last_value
   FROM g
   LEFT JOIN w ON w.measure_uri = g.measure_uri
   LEFT JOIN %s l ON l.measure_uri = g.measure_uri",
   if (mapped) "gauge_name, fffs_id, wiski_id" else "CAST(NULL AS STRING) AS gauge_name, CAST(NULL AS STRING) AS fffs_id, CAST(NULL AS STRING) AS wiski_id",
-  src, TBL_RT_ALL, TBL_RT_LATEST)
+  src, max_mm, max_mm, max_mm, max_mm, max_mm, TBL_RT_ALL, TBL_RT_LATEST)
 
 fetch_rain_gauges <- function() {
   tryCatch(db_query(rain_gauges_sql(TBL_RT_MAPPED, TRUE)), error = function(e) {

@@ -731,9 +731,10 @@ demo_rain_gauges <- function() {
     wiski_id = ifelse(seq_len(n) %% 2L == 0L, as.character(520000L + seq_len(n)), NA_character_),
     mm_24h = set$mm24)
   g[, mm_12h := round(mm_24h * 0.7, 1)][, mm_1h := round(mm_24h * 0.06, 1)]
-  g[, n_24h := 96L][, last_time := now - 60 * (5 + (seq_len(.N) %% 9L) * 2)][, last_value := round(mm_1h / 4, 1)]
-  g[22L, `:=`(last_time = now - 3600 * 30, mm_1h = NA_real_, mm_12h = NA_real_, mm_24h = NA_real_, n_24h = NA_integer_, last_value = 0)]   # silent for 30 hours
-  g[23L, `:=`(last_time = as.POSIXct(NA), mm_1h = NA_real_, mm_12h = NA_real_, mm_24h = NA_real_, n_24h = NA_integer_, last_value = NA_real_)]  # no reading at all
+  g[, n_24h := 96L][, n_bad := 0L][, last_time := now - 60 * (5 + (seq_len(.N) %% 9L) * 2)][, last_value := round(mm_1h / 4, 1)]
+  g[5L, `:=`(n_bad = 2L, n_24h = 94L, last_value = 19999999)]                  # a gauge that sent impossible readings, left out of its totals
+  g[22L, `:=`(last_time = now - 3600 * 30, mm_1h = NA_real_, mm_12h = NA_real_, mm_24h = NA_real_, n_24h = NA_integer_, n_bad = NA_integer_, last_value = 0)]   # silent for 30 hours
+  g[23L, `:=`(last_time = as.POSIXct(NA), mm_1h = NA_real_, mm_12h = NA_real_, mm_24h = NA_real_, n_24h = NA_integer_, n_bad = NA_integer_, last_value = NA_real_)]  # no reading at all
   inst <- copy(g[2:4])                                                          # the same stations also report instantaneous readings
   inst[, `:=`(measure_uri = sub("-t-", "-i-", measure_uri), value_type = "instantaneous", mm_24h = mm_24h * 1.1)]
   rbind(g, inst)

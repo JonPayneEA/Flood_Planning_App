@@ -729,7 +729,7 @@ rain_fake <- function(now = as.POSIXct("2026-10-23 12:00:00", tz = "UTC")) data.
   station_reference = c("A", "A", "B", "C", "D"), station_label = c("Aldwyn RG", "Aldwyn RG", "Rainfall station", "Cardell", "Dunmere"),
   ea_area_name = c("North", "North", "North", "South", "South"), lat = c(53, 53, 52.5, 51.5, 51.2), long = c(-2, -2, -1.5, -1, -0.5),
   unit_name = "mm", value_type = c("instantaneous", "total", "total", "total", "total"), period = "900", parameter = "rainfall",
-  gauge_name = c(NA, NA, "Hexton RG", NA, NA), fffs_id = c("F1", "F1", "F2", NA, NA), wiski_id = NA_character_,
+  gauge_name = c(NA, NA, "Hexton RG", NA, NA), fffs_id = c("F1", "F1", "F2", NA, NA), wiski_id = NA_character_, n_bad = c(0, 0, 3, 0, NA),
   mm_1h = c(1, 0.4, 0, 0, NA), mm_12h = c(5, 4.2, 0, 0, NA), mm_24h = c(9, 8.1, 0, 0.1, NA), n_24h = c(96, 96, 96, 90, NA),
   last_time = now - c(600, 600, 300, 7200, 86400), last_value = c(0.2, 0.1, 0, 0, 0.3))
 
@@ -804,4 +804,18 @@ test_that("in_selected_cells keeps the rows whose risk cell is ticked and nothin
   expect_equal(in_selected_cells(c(2, 3), c(4, 1), cells), c(TRUE, TRUE))                  # numbers from the warehouse match integers
   expect_equal(in_selected_cells(c(2L, 3L), c(4L, 1L), cells[0]), c(FALSE, FALSE))
   expect_equal(in_selected_cells(integer(), integer(), cells), logical())
+})
+
+
+test_that("an impossible reading is left out of the value, named in the popup, and counted", {
+  now <- as.POSIXct("2026-10-23 12:00:00", tz = "UTC")
+  d <- rain_fake(now); d[station_reference == "B", last_value := 19999999]
+  r <- rain_prepare(d, now)
+  b <- r[station_reference == "B"]
+  expect_true(b$last_bad); expect_true(is.na(b$last_value)); expect_equal(b$last_raw, 19999999)
+  p <- rain_popup(b)
+  expect_match(p, "an impossible reading \\(19,999,999 mm\\), ignored"); expect_match(p, "3 readings were ignored as impossible")
+  expect_false(any(grepl("ignored as impossible", rain_popup(r[station_reference == "A"]))))
+  expect_equal(if_else_s(c(1, 2), "was", "were"), c("was", "were"))
+  expect_equal(RAIN_MAX_READING, 100)
 })
