@@ -722,6 +722,23 @@ test_that("a gauge's instantaneous and total measures are told apart by value ty
 })
 
 
+test_that("the FFFS ID narrows every Hydrometrics drop-down and the measure list", {
+  reg <- data.table(
+    station_label = c("Aldwyn", "Aldwyn", "Rainfall station", "Rainfall station"), station_reference = c("S1", "S1", "R1", "R2"),
+    station_uri = c("u/S1", "u/S1", "u/R1", "u/R2"), measure_uri = c("m/1", "m/2", "m/3", "m/4"),
+    parameter = c("level", "flow", "rainfall", "rainfall"), qualifier = c("Stage", "Flow", "Gauge", "Gauge"),
+    unit_name = c("mASD", "m3/s", "mm", "mm"), river_name = c("Aldwyn", "Aldwyn", NA, NA), ea_area_name = c("North", "North", "North", "South"),
+    fffs_id = c("F1", "F1", "F3", NA), gauge_name = c(NA, NA, "Hexton RG", NA))
+  r <- rt_prepare_register(reg)
+  expect_equal(nrow(rt_filter_register(r, fffs = "F1")), 2L)
+  o <- rt_options(r, fffs = "F3")
+  expect_equal(o$areas, c("All", "North")); expect_equal(o$parameters, c("All", "rainfall")); expect_equal(o$stations, c("All", "Hexton RG"))
+  expect_equal(o$fffs, c("All", "F1", "F3"))                       # the FFFS choices are not narrowed by the FFFS ID itself
+  expect_equal(rt_options(r, area = "South")$fffs, "All")           # no mapped gauge in the South: only All is offered
+  expect_equal(rt_options(r, param = "flow")$fffs, c("All", "F1"))
+})
+
+
 test_that("in_selected_cells keeps the rows whose risk cell is ticked and nothing when none is", {
   cells <- data.table(x = c(2L, 3L), y = c(4L, 1L))
   expect_equal(in_selected_cells(c(2L, 3L, 2L, 1L), c(4L, 1L, 1L, 1L), cells), c(TRUE, TRUE, FALSE, FALSE))

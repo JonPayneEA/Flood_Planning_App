@@ -849,8 +849,8 @@ make_coverage_tab <- function() tags$div(
 # Hydrometrics tab.
 #
 # Environment Agency real-time river level, flow and rainfall readings, the daily
-# archive and the live tail as one series. Narrow by area, river, parameter and
-# station, pick up to eight measures, set how many days back. One panel per unit;
+# archive and the live tail as one series. Narrow by area, river, parameter,
+# station and FFFS ID, pick up to eight measures, set how many days back. One panel per unit;
 # the shaded band is the live tail that is not yet archived.
 # -----------------------------------------------------------------------------
 
@@ -861,7 +861,8 @@ make_hydrometrics_tab <- function() tags$div(
     selectInput("rt_area",    "EA area",   choices = RT_ALL, width = "230px"),
     selectInput("rt_river",   "River",     choices = RT_ALL, width = "230px"),
     selectInput("rt_param",   "Parameter", choices = RT_ALL, width = "170px"),
-    selectInput("rt_station", "Station",   choices = RT_ALL, width = "260px")
+    selectInput("rt_station", "Station",   choices = RT_ALL, width = "260px"),
+    selectizeInput("rt_fffs", "FFFS ID",   choices = RT_ALL, width = "170px")
   ),
   tags$div(
     class = "filter-row",
