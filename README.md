@@ -359,6 +359,11 @@ The header shows the logo mark, drawn inline from `theme.R` (`app_logo()`), so n
 file has to ship. To use the artwork itself, drop a mark-only file (no lettering)
 at `www/logo.svg` or `www/logo.png`; it replaces the drawn mark.
 
+The warning icons beside the in-force counts on the Overview are drawn too (a house with one, two or three
+waves, `warning_icon()` in `theme.R`). To use the Environment Agency's own artwork, put the files in `www/icons/`
+named `flood-alert`, `flood-warning` and `severe-flood-warning`, as `.svg` or `.png`. Each replaces its drawn
+icon; the folder is in git (with a `.gitkeep`) so the path exists on every checkout.
+
 The FGS risk colours (red, amber, yellow, green on the matrix, map, chips and
 heat grid) are deliberately **not** brand colours. They come from the FGS User
 Guide and keep a fixed meaning. The frame is blue so that it is never read as the
