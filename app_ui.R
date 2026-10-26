@@ -864,26 +864,36 @@ make_coverage_tab <- function() tags$div(
 # -----------------------------------------------------------------------------
 
 make_rain_tab <- function() tags$div(
-  class = "p-3",
+  class = "rain-page",
+  tags$h1(class = "app-title", "Rain gauges"),
+  tags$p(class = "app-lead", "Rainfall recorded by Environment Agency gauges, live. Select a gauge on the map to chart it."),
   tags$div(
     class = "filter-row",
     selectInput("rain_area",   "EA area",   choices = RT_ALL, width = "230px"),
     selectInput("rain_metric", "Colour by", choices = RAIN_METRICS, selected = "mm_24h", width = "170px"),
     selectizeInput("rain_find", "Find a gauge", choices = NULL, width = "320px",
                    options = list(placeholder = "Name, station or FFFS ID")),
-    checkboxInput("rain_hide_stale", sprintf("Hide gauges with no reading for %d hours", RAIN_STALE_HOURS), value = FALSE),
-    numericInput("rain_max_reading", "Ignore single readings above (mm)", value = RAIN_MAX_READING, min = 1, max = 1000, step = 5, width = "200px"),
-    checkboxInput("rain_hide_suspect", "Hide gauges with suspect values", value = FALSE),
     actionButton("rain_refresh", "Refresh", icon = icon("rotate"), class = "btn-sm btn-outline-secondary")
+  ),
+  tags$details(
+    class = "app-details",
+    tags$summary("Filter out stale or suspect gauges"),
+    tags$div(
+      class = "filter-row",
+      checkboxInput("rain_hide_stale", sprintf("Hide gauges with no reading for %d hours", RAIN_STALE_HOURS), value = FALSE),
+      numericInput("rain_max_reading", "Ignore single readings above (mm)", value = RAIN_MAX_READING, min = 1, max = 1000, step = 5, width = "200px"),
+      checkboxInput("rain_hide_suspect", "Hide gauges with suspect values", value = FALSE)
+    )
   ),
   uiOutput("rain_message"),
   uiOutput("rain_summary"),
   tags$div(
-    class = "row g-3",
+    class = "row g-4",
     tags$div(class = "col-12 col-xl-7", leaflet::leafletOutput("rain_map", height = "72vh")),
     tags$div(
       class = "col-12 col-xl-5",
-      selectizeInput("rain_charted", "Charted gauges (click the map to add, up to 6)", choices = NULL, multiple = TRUE, width = "100%",
+      tags$h2("Charted gauges"),
+      selectizeInput("rain_charted", "Click the map to add a gauge, up to 6", choices = NULL, multiple = TRUE, width = "100%",
                      options = list(maxItems = RAIN_MAX_CHARTED, placeholder = "Click a gauge on the map")),
       tags$div(class = "d-flex flex-wrap align-items-center gap-3 mb-2",
                radioButtons("rain_bars", NULL, choices = c("1 hour" = 3600L, "15 minutes" = 900L), selected = 3600L, inline = TRUE),
@@ -893,12 +903,15 @@ make_rain_tab <- function() tags$div(
       else tags$p(class = "text-muted", "The plotly package is not installed on this server, so the chart cannot be drawn.")
     )
   ),
-  tags$small(class = "text-muted d-block mt-2",
-             "This uses Environment Agency flood and river level data from the real-time data API (Beta). ",
-             "Totals add up the readings in the window; times are UTC. Where a gauge reports both 15-minute totals and ",
-             "instantaneous readings, the totals are used. A single reading below zero or above the limit is left out of the totals. ",
-             "A gauge with such readings, or a total too large to believe, has a dashed outline and is suspect. ",
-             "These are readings as supplied, not quality-controlled.")
+  tags$details(
+    class = "app-details",
+    tags$summary("About these readings"),
+    tags$p("This uses Environment Agency flood and river level data from the real-time data API (Beta). ",
+           "Totals add up the readings in the window; times are UTC. Where a gauge reports both 15-minute totals and ",
+           "instantaneous readings, the totals are used. A single reading below zero or above the limit is left out of the totals. ",
+           "A gauge with such readings, or a total too large to believe, has a dashed outline and is suspect. ",
+           "These are readings as supplied, not quality-controlled.")
+  )
 )
 
 
