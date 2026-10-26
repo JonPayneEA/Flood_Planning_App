@@ -84,6 +84,7 @@ or after a network failure), so that overhead is paid once, not per query.
 | `guide.R` | The Guide tab: how each product is calculated. All the wording is here and is tested against the code and the pipeline's `config.py`. |
 | `demo.R` | Synthetic data for demo mode. Replaces every query. Fictional throughout. |
 | `theme.R` | Logo palette, Bootstrap theme and header mark, in one place. |
+| `design.R` | The design system and page shell: GOV.UK-style tokens, `design_css()`, the section list `APP_SECTIONS`, masthead, navigation, footer, the Planned page and the demo-only Style guide. |
 | `helpers.R` | Pure functions (colours, popups, staleness, statement choice). Unit tested. |
 | `app_ui.R` | Layout, sidebar, panels, custom CSS, risk matrix grid builder. Every section is a function of the request, which bookmarking needs. |
 | `app_server.R` | Reactive logic, filtering, output bindings, map updates. |
@@ -362,6 +363,23 @@ The FGS risk colours (red, amber, yellow, green on the matrix, map, chips and
 heat grid) are deliberately **not** brand colours. They come from the FGS User
 Guide and keep a fixed meaning. The frame is blue so that it is never read as the
 "Very Low" green, and magenta stays reserved for flood warning areas on the map.
+
+## Design system and shell
+
+The look follows the GOV.UK Design System (Arial, its type scale, plain links, square
+form controls, the yellow focus state, flat buttons, hairline tables, inset notices),
+in the brand navy with the house-on-waves mark. `design.R` holds it. `design_css()` is
+added after the older rules in `app_ui.R`, so it overrides them one component at a
+time. Colour tokens are in `GOV_COLOURS`; `tests/testthat/test-design.R` checks their
+contrast. The FGS risk colours are not touched.
+
+Navigation is a masthead, five sections (Now, Constituencies and briefings, Observed,
+History, Help) and a row of views for the section you are in. `APP_SECTIONS` is the one
+list of what sits where. The views are the same `tabPanel`s as before, and Shiny's own
+tab strip is hidden: the links click it, so `input$main_tabs`, bookmarked links and the
+server code are unchanged. Adding a view means adding its `tabPanel` in `app_ui.R` and
+one line in `APP_SECTIONS`; a test fails if the two disagree. In demonstration mode a
+Style guide view under Help shows every component on one page.
 
 ## Nations filter
 

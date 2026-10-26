@@ -1058,51 +1058,32 @@ ui <- function(request) {
     tabPanel("Warnings vs FGS",        make_coverage_tab()),
     tabPanel("Hydrometrics",           make_hydrometrics_tab()),
     tabPanel("Rain gauges",            make_rain_tab()),
+    tabPanel("Guide",                  make_guide_tab()),
+    tabPanel("Planned",                make_planned_tab(DEMO_MODE)),
     if (DEMO_MODE) tabPanel("MP audit log", make_audit_tab()),
-    tabPanel("Guide", make_guide_tab()),
-
-    # Planned. These need data the pipeline does not hold yet (observed gauge
-    # levels, the Met Office licence decision), so they sit in one menu.
-    do.call(navbarMenu, c(list("Planned"), Filter(Negate(is.null), list(
-      tabPanel("Warning issue times",   tags$p(class = "p-3 text-muted", "Planned. The history is held (see Warning history); a view of the hour and day warnings are issued is still to come.")),
-      tabPanel("Forecast verification", tags$p(class = "p-3 text-muted", "Planned. Needs observed gauge levels and a decision on the Met Office licence.")),
-      tabPanel("Event playback",        tags$p(class = "p-3 text-muted", "Planned. Needs observed gauge levels and a decision on the Met Office licence.")),
-      if (!DEMO_MODE) tabPanel("MP audit log", tags$p(class = "p-3 text-muted", "Planned. Needs a record of who sent what."))
-    ))))
+    if (DEMO_MODE) tabPanel("Style guide",  make_styleguide_tab())
   )
 
   bslib::page_fluid(
     theme = app_theme(),
     tags$head(tags$title(if (DEMO_MODE) "Flood Intelligence Tool (demonstration)" else "Flood Intelligence Tool"),
-              tags$style(HTML(paste(app_css_variables(), custom_css)))),
+              tags$style(HTML(paste(app_css_variables(), custom_css, design_css()))),
+              tags$script(HTML(app_nav_js()))),
     if (DEMO_MODE) tags$div(class = "demo-ribbon", "Demonstration: synthetic data. Nothing is connected, saved or sent."),
-    tags$div(
-      class = "app-header",
-      tags$div(class = "header-left",
-               app_logo(),
-               tags$div(tags$h2("Flood ", tags$span(class = "hl", "Intelligence"), " Tool"),
-                        tags$div(class = "app-sub", "Flood Guidance Statement: forecast, constituencies and flood areas"))),
-      tags$div(class = "header-right",
-               uiOutput("data_asof"),
-               tags$button(
-                 type = "button", id = "copy_link", class = "btn btn-sm btn-outline-secondary",
-                 title = "Copy a link to this exact view",
-                 onclick = paste0(
-                   "var b=this,t=b.innerHTML;",
-                   "if(navigator.clipboard){navigator.clipboard.writeText(window.location.href).then(function(){",
-                   "b.textContent='Copied';setTimeout(function(){b.innerHTML=t;},1500);});}",
-                   "else{window.prompt('Copy this link',window.location.href);}"),
-                 icon("link"), " Copy link"),
-               uiOutput("health_badge"))
-    ),
+    tags$a(class = "skip-link", href = "#main-content", "Skip to main content"),
+    app_masthead(),
+    app_navigation(DEMO_MODE),
     if (DEMO_MODE) make_demo_controls(),
     # Shown only when the pipeline is failing, stale or unreadable.
     uiOutput("stale_banner"),
     # Shown only when a pipeline table has not been built yet.
     uiOutput("data_gaps_banner"),
 
-    make_nation_strip(),
-
-    do.call(tabsetPanel, c(list(id = "main_tabs"), Filter(Negate(is.null), tabs)))
+    tags$main(
+      id = "main-content", class = "app-container app-main",
+      make_nation_strip(),
+      do.call(tabsetPanel, c(list(id = "main_tabs"), Filter(Negate(is.null), tabs)))
+    ),
+    app_footer()
   )
 }
