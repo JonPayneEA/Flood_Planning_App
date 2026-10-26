@@ -858,8 +858,8 @@ make_coverage_tab <- function() tags$div(
 # Rain gauges tab.
 #
 # A map of the Environment Agency's rain gauges. Each is coloured by its rainfall over the past 1, 12 or 24 hours;
-# click one for its name, ids, latest reading and all three totals, and a bar chart of its past 24 hours appears
-# under the map. A gauge with no recent reading is grey.
+# click one for its name, ids, latest reading and all three totals. Clicked gauges are added to a bar chart of their
+# past 24 hours beside the map (up to six, one panel each, on one scale). A gauge with no recent reading is grey.
 # -----------------------------------------------------------------------------
 
 make_rain_tab <- function() tags$div(
@@ -877,14 +877,20 @@ make_rain_tab <- function() tags$div(
   ),
   uiOutput("rain_message"),
   uiOutput("rain_summary"),
-  leaflet::leafletOutput("rain_map", height = "55vh"),
   tags$div(
-    class = "mt-3",
-    tags$div(class = "d-flex flex-wrap align-items-baseline gap-3",
-             uiOutput("rain_chart_head"),
-             radioButtons("rain_bars", NULL, choices = c("1 hour" = 3600L, "15 minutes" = 900L), selected = 3600L, inline = TRUE)),
-    if (requireNamespace("plotly", quietly = TRUE)) plotly::plotlyOutput("rain_plot", height = "260px")
-    else tags$p(class = "text-muted", "The plotly package is not installed on this server, so the chart cannot be drawn.")
+    class = "row g-3",
+    tags$div(class = "col-12 col-xl-7", leaflet::leafletOutput("rain_map", height = "72vh")),
+    tags$div(
+      class = "col-12 col-xl-5",
+      selectizeInput("rain_charted", "Charted gauges (click the map to add, up to 6)", choices = NULL, multiple = TRUE, width = "100%",
+                     options = list(maxItems = RAIN_MAX_CHARTED, placeholder = "Click a gauge on the map")),
+      tags$div(class = "d-flex flex-wrap align-items-center gap-3 mb-2",
+               radioButtons("rain_bars", NULL, choices = c("1 hour" = 3600L, "15 minutes" = 900L), selected = 3600L, inline = TRUE),
+               actionButton("rain_clear", "Clear", class = "btn-sm btn-outline-secondary")),
+      uiOutput("rain_chart_head"),
+      if (requireNamespace("plotly", quietly = TRUE)) plotly::plotlyOutput("rain_plot", height = "auto")
+      else tags$p(class = "text-muted", "The plotly package is not installed on this server, so the chart cannot be drawn.")
+    )
   ),
   tags$small(class = "text-muted d-block mt-2",
              "This uses Environment Agency flood and river level data from the real-time data API (Beta). ",

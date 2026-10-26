@@ -560,6 +560,7 @@ RAIN_BREAKS       <- list(mm_1h = c(0.1, 0.5, 2, 5, 10), mm_12h = c(0.2, 2, 5, 1
 RAIN_COLOURS      <- c("#DCE9F7", "#B3D1EE", "#7FB1E3", "#3F8BD3", "#1B5FA8", "#053D7E")   # light to dark, from the app's navy
 RAIN_STALE_COLOUR <- "#9AA5B1"
 RAIN_STALE_HOURS  <- 3
+RAIN_MAX_CHARTED  <- 6        # gauges charted beside the map at once
 RAIN_MAX_READING  <- 100     # mm in one reading; more (or below zero) is an error. The query leaves these out of the totals (data.R)
 # A window total above this is not believed: no UK gauge has recorded more than about 280 mm in a day or 100 mm in an hour.
 RAIN_SUSPECT_TOTALS <- c(mm_1h = 80, mm_12h = 200, mm_24h = 300)
@@ -1300,4 +1301,20 @@ rain_bars <- function(readings, step = 3600L, max_mm = RAIN_MAX_READING) {
   step <- as.integer(step)
   d[, t := as.POSIXct(floor(as.numeric(date_time) / step) * step, origin = "1970-01-01", tz = "UTC")]
   list(bars = d[, .(mm = sum(value)), by = t][order(t)], ignored = sum(bad))
+}
+
+
+# Adds a gauge to the charted set: unknown keys and keys already there change nothing; when the set is full the oldest goes.
+rain_add_pick <- function(current, key, valid, max = RAIN_MAX_CHARTED) {
+  current <- as.character(current)
+  if (length(key) != 1L || is.na(key) || !nzchar(key) || !(key %in% valid) || key %in% current) return(current)
+  utils::tail(c(current, key), max)
+}
+
+
+# The colour of the i-th charted gauge: the app's series palette (theme.R), with the same colours as a fallback so the helper
+# works wherever helpers.R is loaded without the theme.
+rain_series_colour <- function(i) {
+  pal <- get0("APP_SERIES", ifnotfound = c("#053D7E", "#BE0553", "#038CF4", "#475A70", "#7A2E8E", "#0B7A75", "#5B7FA6", "#8A5A00"))
+  pal[(as.integer(i) - 1L) %% length(pal) + 1L]
 }
