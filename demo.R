@@ -731,15 +731,23 @@ demo_rain_gauges <- function() {
     wiski_id = ifelse(seq_len(n) %% 2L == 0L, as.character(520000L + seq_len(n)), NA_character_),
     mm_24h = set$mm24)
   g[, mm_12h := round(mm_24h * 0.7, 1)][, mm_1h := round(mm_24h * 0.06, 1)]
-  g[, n_24h := 96L][, last_time := now - 60 * (5 + (seq_len(.N) %% 9L) * 2)][, last_value := round(mm_1h / 4, 1)]
-  g[22L, `:=`(last_time = now - 3600 * 30, mm_1h = NA_real_, mm_12h = NA_real_, mm_24h = NA_real_, n_24h = NA_integer_, last_value = 0)]   # silent for 30 hours
-  g[23L, `:=`(last_time = as.POSIXct(NA), mm_1h = NA_real_, mm_12h = NA_real_, mm_24h = NA_real_, n_24h = NA_integer_, last_value = NA_real_)]  # no reading at all
+  g[, n_24h := 96L][, n_bad := 0L][, last_time := now - 60 * (5 + (seq_len(.N) %% 9L) * 2)][, last_value := round(mm_1h / 4, 1)]
+  g[5L, `:=`(n_bad = 2L, n_24h = 94L, last_value = 19999999)]                  # a gauge that sent impossible readings, left out of its totals
+  g[22L, `:=`(last_time = now - 3600 * 30, mm_1h = NA_real_, mm_12h = NA_real_, mm_24h = NA_real_, n_24h = NA_integer_, n_bad = NA_integer_, last_value = 0)]   # silent for 30 hours
+  g[23L, `:=`(last_time = as.POSIXct(NA), mm_1h = NA_real_, mm_12h = NA_real_, mm_24h = NA_real_, n_24h = NA_integer_, n_bad = NA_integer_, last_value = NA_real_)]  # no reading at all
+  g[7L, `:=`(mm_24h = 412.5, mm_12h = 380.2, mm_1h = 96)]                       # a total too large to believe, with no single bad reading
+  g[, `:=`(easting = NA_real_, northing = NA_real_)]
+  if (requireNamespace("sf", quietly = TRUE)) {                                  # gauge 8 gives only a grid position, as some real stations do
+    en <- sf::st_coordinates(sf::st_transform(sf::st_sfc(sf::st_point(c(g$long[8L], g$lat[8L])), crs = 4326), 27700))
+    g[8L, `:=`(easting = en[1L, 1L], northing = en[1L, 2L], lat = NA_real_, long = NA_real_)]
+  }
+  g[24L, `:=`(lat = NA_real_, long = NA_real_)]                                  # and gauge 24 has no position at all
   inst <- copy(g[2:4])                                                          # the same stations also report instantaneous readings
   inst[, `:=`(measure_uri = sub("-t-", "-i-", measure_uri), value_type = "instantaneous", mm_24h = mm_24h * 1.1)]
   rbind(g, inst)
 }
 
-fetch_rain_gauges <- function() copy(demo_rain_gauges())
+fetch_rain_gauges <- function(max_mm = 100) copy(demo_rain_gauges())
 
 fetch_rt_register <- function() copy(demo_rt_register())
 
@@ -750,7 +758,8 @@ fetch_rt_boundary <- function() rt_boundary(Sys.Date() - 1L)
 fetch_rt_span <- function(measure_uris) as.POSIXct(Sys.time(), tz = "UTC") - 3 * 365 * 86400
 
 fetch_rt_readings <- function(measure_uris, days, sum_uris = character()) {
-  reg <- demo_rt_register()[measure_uri %in% measure_uris]
+  reg <- rbind(demo_rt_register()[, .(measure_uri, parameter)], demo_rain_gauges()[, .(measure_uri, parameter)])
+  reg <- reg[measure_uri %in% measure_uris]
   if (nrow(reg) == 0L) return(data.table(measure_uri = character(), date_time = as.POSIXct(character(), tz = "UTC"), value = numeric()))
   now <- as.POSIXct(trunc(Sys.time(), "mins"), tz = "UTC")
   bucket <- rt_bucket_seconds(days)

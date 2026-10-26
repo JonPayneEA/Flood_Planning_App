@@ -45,7 +45,7 @@ test_that("no demo fetcher reaches for the warehouse", {
     rg <- demo_env$fetch_rain_gauges()
     expect_true(all(c("measure_uri", "lat", "long", "mm_1h", "mm_12h", "mm_24h", "last_time", "value_type", "fffs_id") %in% names(rg)))
     prepared <- rain_prepare(rg)
-    expect_equal(nrow(prepared), 24L); expect_true(any(prepared$stale)); expect_true(any(!prepared$stale & prepared$mm_24h > 5, na.rm = TRUE))
+    expect_equal(nrow(prepared), 24L); expect_equal(sum(!prepared$placed), 1L); expect_true(all(is.finite(prepared$lat[prepared$placed]))); expect_equal(sum(rain_suspect(prepared, "mm_24h")), 2L); expect_true(any(prepared$stale)); expect_true(any(!prepared$stale & prepared$mm_24h > 5, na.rm = TRUE))
     for (d in 1:5) {
       expect_no_error(demo_env$fetch_risk_polygons(4812L, d))
       expect_no_error(demo_env$fetch_ea_areas_for_statement(4812L, d))

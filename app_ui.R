@@ -858,7 +858,8 @@ make_coverage_tab <- function() tags$div(
 # Rain gauges tab.
 #
 # A map of the Environment Agency's rain gauges. Each is coloured by its rainfall over the past 1, 12 or 24 hours;
-# click one for its name, ids, latest reading and all three totals. A gauge with no recent reading is grey.
+# click one for its name, ids, latest reading and all three totals, and a bar chart of its past 24 hours appears
+# under the map. A gauge with no recent reading is grey.
 # -----------------------------------------------------------------------------
 
 make_rain_tab <- function() tags$div(
@@ -870,15 +871,27 @@ make_rain_tab <- function() tags$div(
     selectizeInput("rain_find", "Find a gauge", choices = NULL, width = "320px",
                    options = list(placeholder = "Name, station or FFFS ID")),
     checkboxInput("rain_hide_stale", sprintf("Hide gauges with no reading for %d hours", RAIN_STALE_HOURS), value = FALSE),
+    numericInput("rain_max_reading", "Ignore single readings above (mm)", value = RAIN_MAX_READING, min = 1, max = 1000, step = 5, width = "200px"),
+    checkboxInput("rain_hide_suspect", "Hide gauges with suspect values", value = FALSE),
     actionButton("rain_refresh", "Refresh", icon = icon("rotate"), class = "btn-sm btn-outline-secondary")
   ),
   uiOutput("rain_message"),
   uiOutput("rain_summary"),
-  leaflet::leafletOutput("rain_map", height = "68vh"),
+  leaflet::leafletOutput("rain_map", height = "55vh"),
+  tags$div(
+    class = "mt-3",
+    tags$div(class = "d-flex flex-wrap align-items-baseline gap-3",
+             uiOutput("rain_chart_head"),
+             radioButtons("rain_bars", NULL, choices = c("1 hour" = 3600L, "15 minutes" = 900L), selected = 3600L, inline = TRUE)),
+    if (requireNamespace("plotly", quietly = TRUE)) plotly::plotlyOutput("rain_plot", height = "260px")
+    else tags$p(class = "text-muted", "The plotly package is not installed on this server, so the chart cannot be drawn.")
+  ),
   tags$small(class = "text-muted d-block mt-2",
              "This uses Environment Agency flood and river level data from the real-time data API (Beta). ",
              "Totals add up the readings in the window; times are UTC. Where a gauge reports both 15-minute totals and ",
-             "instantaneous readings, the totals are used. These are readings as supplied, not quality-controlled.")
+             "instantaneous readings, the totals are used. A single reading below zero or above the limit is left out of the totals. ",
+             "A gauge with such readings, or a total too large to believe, has a dashed outline and is suspect. ",
+             "These are readings as supplied, not quality-controlled.")
 )
 
 

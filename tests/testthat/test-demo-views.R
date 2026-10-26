@@ -137,7 +137,7 @@ test_that("the Rain gauges tab loads on first open, summarises, and takes its fi
     expect_null(rain_raw())                                                  # nothing is fetched until the tab is opened
     session$setInputs(main_tabs = "Rain gauges")
     expect_equal(nrow(rain_raw()), 24L)
-    expect_match(txt(output$rain_summary), "24 gauges shown")
+    expect_match(txt(output$rain_summary), "23 gauges shown"); expect_match(txt(output$rain_summary), "1 more rain gauge has no position"); expect_match(txt(output$rain_summary), "without an FFFS ID")
     expect_null(output$rain_message)
     session$setInputs(rain_metric = "mm_1h"); expect_equal(rain_metric(), "mm_1h")
     session$setInputs(rain_metric = "nonsense"); expect_equal(rain_metric(), "mm_24h")      # an unknown window falls back
@@ -145,6 +145,29 @@ test_that("the Rain gauges tab loads on first open, summarises, and takes its fi
     expect_true(all(rain_view()$ea_area_name == "Demo North"))
     session$setInputs(rain_area = "All", rain_hide_stale = TRUE)
     expect_lt(nrow(rain_view()), 24L)
+    session$setInputs(rain_hide_stale = FALSE)
+    n_all <- nrow(rain_view())
+    session$setInputs(rain_hide_suspect = TRUE)
+    expect_equal(nrow(rain_view()), n_all - 2L)                                # the two suspect demo gauges are hidden
+    expect_match(txt(output$rain_summary), "gauges shown")
+    session$setInputs(rain_hide_suspect = FALSE)
+    expect_equal(rain_cap(), 100)
+    session$setInputs(rain_max_reading = 250); expect_equal(rain_cap(), 250)
+    session$setInputs(rain_max_reading = 99999); expect_equal(rain_cap(), 1000)    # held to a sensible range
+    session$setInputs(rain_max_reading = NA); expect_equal(rain_cap(), 100)
+    expect_null(rain_chart_data())                                           # nothing is charted until a gauge is picked
+    expect_match(txt(output$rain_chart_head), "Click a gauge")
+    picked <- rain_raw()[stale == FALSE]$key[1]
+    session$setInputs(rain_map_marker_click = list(id = picked, lat = 52, lng = -1, group = "rain"))
+    cd <- rain_chart_data()
+    expect_equal(cd$row$key, picked); expect_gt(nrow(cd$bars), 0L); expect_equal(cd$step, 3600L)
+    expect_lte(nrow(cd$bars), 25L)                                           # 24 hours of hourly bars
+    expect_match(txt(output$rain_chart_head), "in 24 hours, most in one hour")
+    session$setInputs(rain_bars = "900")
+    expect_equal(rain_chart_data()$step, 900L); expect_gt(nrow(rain_chart_data()$bars), 25L)
+    session$setInputs(rain_bars = "junk"); expect_equal(rain_chart_data()$step, 3600L)
+    session$setInputs(rain_map_marker_click = list(id = "no-such-gauge"))
+    expect_null(rain_chart_data())
     expect_no_error(session$setInputs(rain_find = rain_raw()$key[1]))
     expect_no_error(session$setInputs(rain_find = "no-such-gauge"))
     expect_no_error(session$setInputs(rain_refresh = 1))

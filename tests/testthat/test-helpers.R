@@ -729,7 +729,7 @@ rain_fake <- function(now = as.POSIXct("2026-10-23 12:00:00", tz = "UTC")) data.
   station_reference = c("A", "A", "B", "C", "D"), station_label = c("Aldwyn RG", "Aldwyn RG", "Rainfall station", "Cardell", "Dunmere"),
   ea_area_name = c("North", "North", "North", "South", "South"), lat = c(53, 53, 52.5, 51.5, 51.2), long = c(-2, -2, -1.5, -1, -0.5),
   unit_name = "mm", value_type = c("instantaneous", "total", "total", "total", "total"), period = "900", parameter = "rainfall",
-  gauge_name = c(NA, NA, "Hexton RG", NA, NA), fffs_id = c("F1", "F1", "F2", NA, NA), wiski_id = NA_character_,
+  gauge_name = c(NA, NA, "Hexton RG", NA, NA), fffs_id = c("F1", "F1", "F2", NA, NA), wiski_id = NA_character_, n_bad = c(0, 0, 3, 0, NA),
   mm_1h = c(1, 0.4, 0, 0, NA), mm_12h = c(5, 4.2, 0, 0, NA), mm_24h = c(9, 8.1, 0, 0.1, NA), n_24h = c(96, 96, 96, 90, NA),
   last_time = now - c(600, 600, 300, 7200, 86400), last_value = c(0.2, 0.1, 0, 0, 0.3))
 
@@ -804,4 +804,73 @@ test_that("in_selected_cells keeps the rows whose risk cell is ticked and nothin
   expect_equal(in_selected_cells(c(2, 3), c(4, 1), cells), c(TRUE, TRUE))                  # numbers from the warehouse match integers
   expect_equal(in_selected_cells(c(2L, 3L), c(4L, 1L), cells[0]), c(FALSE, FALSE))
   expect_equal(in_selected_cells(integer(), integer(), cells), logical())
+})
+
+
+test_that("an impossible reading is left out of the value, named in the popup, and counted", {
+  now <- as.POSIXct("2026-10-23 12:00:00", tz = "UTC")
+  d <- rain_fake(now); d[station_reference == "B", last_value := 19999999]
+  r <- rain_prepare(d, now)
+  b <- r[station_reference == "B"]
+  expect_true(b$last_bad); expect_true(is.na(b$last_value)); expect_equal(b$last_raw, 19999999)
+  p <- rain_popup(b)
+  expect_match(p, "an impossible reading \\(19,999,999 mm\\), ignored"); expect_match(p, "3 readings were ignored as impossible")
+  expect_false(any(grepl("ignored as impossible", rain_popup(r[station_reference == "A"]))))
+  expect_equal(if_else_s(c(1, 2), "was", "were"), c("was", "were"))
+  expect_equal(RAIN_MAX_READING, 100)
+})
+
+
+test_that("rain bars sum the readings into hours or quarter hours and leave out impossible ones", {
+  t0 <- as.POSIXct("2026-10-23 10:00:00", tz = "UTC")
+  rd <- data.table(date_time = t0 + c(0, 900, 1800, 2700, 3600, 4500, 5400), value = c(0.2, 0.4, 0, 0.1, 1, 19999999, -3))
+  h <- rain_bars(rd, 3600L)
+  expect_equal(nrow(h$bars), 2L); expect_equal(h$bars$mm, c(0.7, 1)); expect_equal(h$ignored, 2L)
+  expect_equal(h$bars$t, t0 + c(0, 3600))                                          # each bar is labelled by its start
+  q <- rain_bars(rd, 900L)
+  expect_equal(nrow(q$bars), 5L); expect_equal(q$bars$mm, c(0.2, 0.4, 0, 0.1, 1))
+  expect_equal(nrow(rain_bars(NULL)$bars), 0L); expect_equal(rain_bars(rd[value > 1000])$ignored, 1L)
+})
+
+
+test_that("a gauge is suspect when it sent impossible readings or its total is too large to believe, and is kept out of the wettest", {
+  now <- as.POSIXct("2026-10-23 12:00:00", tz = "UTC")
+  d <- rain_fake(now)
+  d[station_reference == "C", mm_24h := 412.5]                  # no bad reading, but 412 mm in a day is not believable
+  r <- rain_prepare(d, now)
+  sus <- rain_suspect(r, "mm_24h")
+  expect_equal(sus[r$station_reference == "A"], FALSE)
+  expect_equal(sus[r$station_reference == "B"], TRUE)           # n_bad is 3
+  expect_equal(sus[r$station_reference == "C"], TRUE)           # over the 300 mm limit
+  expect_equal(rain_suspect(r, "mm_1h")[r$station_reference == "C"], FALSE)   # the limit is per window; C's hour is fine
+  expect_equal(rain_suspect_text(r[station_reference == "C"]), "<br><em>Suspect: the past 24 hours total (412.5 mm) is above 300 mm.</em>")
+  expect_equal(rain_suspect_text(r[station_reference == "A"]), "")
+  expect_match(rain_popup(r[station_reference == "C"]), "Suspect: the past 24 hours total")
+  expect_equal(nrow(rain_filter(r, RT_ALL, FALSE, TRUE, "mm_24h")), 2L)       # B and C are hidden
+  expect_equal(nrow(rain_filter(r, RT_ALL, FALSE, FALSE, "mm_24h")), 4L)
+  s <- rain_summary(r, "mm_24h")
+  expect_equal(s$suspect, 2L); expect_equal(s$wettest$name, "Aldwyn RG"); expect_equal(s$wet, 1L)   # C is not counted as the wettest
+  # The limit is the caller's: a lower one marks a reading impossible that the default would not.
+  expect_true(rain_prepare(transform(rain_fake(now), last_value = 60), now, max_mm = 50)$last_bad[1])
+  expect_false(rain_prepare(transform(rain_fake(now), last_value = 60), now)$last_bad[1])
+  expect_equal(rain_bars(data.table(date_time = now - c(600, 1200), value = c(60, 1)), 3600L, max_mm = 50)$ignored, 1L)
+  expect_match(rain_popup(rain_prepare(transform(rain_fake(now), n_bad = 2), now, max_mm = 50)[1]), "over 50 mm")
+})
+
+
+test_that("a gauge given only as an easting and northing is placed, and one with no position is counted but not drawn", {
+  skip_if_not_installed("sf")
+  ll <- rain_latlong(c(53.1, NA, NA), c(-1.5, NA, NA), c(NA, 530000, NA), c(NA, 180000, NA))
+  expect_equal(ll$lat[1], 53.1); expect_equal(ll$long[1], -1.5)                  # a given latitude and longitude is untouched
+  expect_equal(ll$lat[2], 51.50, tolerance = 0.02); expect_equal(ll$long[2], -0.13, tolerance = 0.02)   # central London
+  expect_true(is.na(ll$lat[3]) && is.na(ll$long[3]))
+  now <- as.POSIXct("2026-10-23 12:00:00", tz = "UTC")
+  d <- rain_fake(now)
+  d[station_reference == "C", `:=`(lat = NA_real_, long = NA_real_, easting = 530000, northing = 180000)]
+  d[station_reference == "D", `:=`(lat = NA_real_, long = NA_real_)]
+  r <- rain_prepare(d, now)
+  expect_equal(r[order(station_reference)]$placed, c(TRUE, TRUE, TRUE, FALSE))
+  expect_equal(r[station_reference == "C"]$lat, 51.50, tolerance = 0.02)
+  expect_equal(nrow(rain_filter(r)), 3L)                                           # the unplaced gauge is not drawn
+  expect_equal(nrow(rain_filter(r, hide_stale = TRUE)), 3L - 0L)
 })

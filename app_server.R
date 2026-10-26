@@ -711,7 +711,7 @@ server <- function(input, output, session) {
     # Street map default; satellite and terrain give forecasters context
     # (river courses, contours) the street map doesn't show.
     m <- leaflet::addProviderTiles(m, leaflet::providers$OpenStreetMap,    group = "Street")
-    m <- leaflet::addProviderTiles(m, leaflet::providers$CartoDB.Positron, group = "Light")
+    m <- leaflet::addProviderTiles(m, leaflet::providers$Esri.WorldGrayCanvas, group = "Light")
     m <- leaflet::addProviderTiles(m, leaflet::providers$Esri.WorldImagery, group = "Satellite")
     m <- leaflet::addProviderTiles(m, leaflet::providers$OpenTopoMap,      group = "Terrain")
 
@@ -2333,16 +2333,24 @@ server <- function(input, output, session) {
   rain_raw     <- reactiveVal(NULL)
   rain_started <- reactiveVal(FALSE)
 
+  # The limit for one reading, from the box: a number from 1 to 1000, else the default.
+  rain_cap <- reactive({
+    v <- suppressWarnings(as.numeric(input$rain_max_reading)[1L])
+    if (is.na(v) || !is.finite(v)) RAIN_MAX_READING else min(max(v, 1), 1000)
+  })
+
   rain_load <- function() {
-    d <- safe_fetch(fetch_rain_gauges)
+    cap <- isolate(rain_cap())
+    d <- safe_fetch(fetch_rain_gauges, cap)
     if (is.null(d)) { rain_raw(NULL); return(invisible(NULL)) }
-    r <- rain_prepare(d)
+    r <- rain_prepare(d, max_mm = cap)
     rain_raw(r)
     updateSelectInput(session, "rain_area", choices = rt_values(r, "ea_area_name"), selected = RT_ALL)
-    labels <- paste0(r$station, ifelse(nzchar(rt_text(r$fffs_id)), paste0(" \u00b7 FFFS ", rt_text(r$fffs_id)), ""),
-                     " \u00b7 ", rt_text(r$station_reference))
+    rp <- r[r$placed]                                          # only a gauge with a position can be flown to
+    labels <- paste0(rp$station, ifelse(nzchar(rt_text(rp$fffs_id)), paste0(" \u00b7 FFFS ", rt_text(rp$fffs_id)), ""),
+                     " \u00b7 ", rt_text(rp$station_reference))
     ord <- order(tolower(labels))
-    updateSelectizeInput(session, "rain_find", choices = stats::setNames(r$key[ord], labels[ord]), selected = character(), server = TRUE)
+    updateSelectizeInput(session, "rain_find", choices = stats::setNames(rp$key[ord], labels[ord]), selected = character(), server = TRUE)
     invisible(r)
   }
 
@@ -2352,13 +2360,16 @@ server <- function(input, output, session) {
     rain_load()
   })
   observeEvent(input$rain_refresh, { if (rain_started()) rain_load() }, ignoreInit = TRUE)
+  # Changing the limit re-reads the totals, once the box has settled for a moment.
+  rain_cap_settled <- debounce(rain_cap, 900)
+  observeEvent(rain_cap_settled(), { if (rain_started()) rain_load() }, ignoreInit = TRUE)
 
   rain_metric <- reactive({ m <- input$rain_metric; if (is.null(m) || !(m %in% RAIN_METRICS)) "mm_24h" else m })
 
   rain_view <- reactive({
     r <- rain_raw()
     if (is.null(r) || nrow(r) == 0L) return(NULL)
-    rain_filter(r, rt_or_all(input$rain_area), isTRUE(input$rain_hide_stale))
+    rain_filter(r, rt_or_all(input$rain_area), isTRUE(input$rain_hide_stale), isTRUE(input$rain_hide_suspect), rain_metric())
   })
 
   output$rain_message <- renderUI({
@@ -2375,15 +2386,19 @@ server <- function(input, output, session) {
     m <- rain_metric(); s <- rain_summary(r, m)
     window <- tolower(names(RAIN_METRICS)[RAIN_METRICS == m])
     tags$p(class = "text-muted mb-1",
-           sprintf("%s gauges shown. %s reported in the last %d hours and %s of those had rain in the %s.%s%s",
-                   format(s$n, big.mark = ","), format(s$recent, big.mark = ","), RAIN_STALE_HOURS, format(s$wet, big.mark = ","), window,
+           sprintf("%s gauges shown%s. %s reported in the last %d hours and %s of those had rain in the %s.%s%s%s%s",
+                   format(s$n, big.mark = ","),
+                   sprintf(" (%s without an FFFS ID)", format(sum(!nzchar(rt_text(r$fffs_id))), big.mark = ",")),
+                   format(s$recent, big.mark = ","), RAIN_STALE_HOURS, format(s$wet, big.mark = ","), window,
                    if (is.null(s$wettest)) "" else sprintf(" Wettest: %s, %s.", s$wettest$name, rain_mm(s$wettest$mm)),
-                   if (is.null(s$newest)) "" else sprintf(" Newest reading %s UTC.", format(s$newest, "%a %d %b %H:%M", tz = "UTC"))))
+                   if (s$suspect > 0L) sprintf(" %s suspect (dashed outline, not counted as wet).", format(s$suspect, big.mark = ",")) else "",
+                   if (is.null(s$newest)) "" else sprintf(" Newest reading %s UTC.", format(s$newest, "%a %d %b %H:%M", tz = "UTC")),
+                   { u <- sum(!rain_raw()$placed); if (u > 0L) sprintf(" %s more rain gauge%s no position in the register and cannot be mapped.", format(u, big.mark = ","), if (u == 1L) " has" else "s have") else "" }))
   })
 
   output$rain_map <- leaflet::renderLeaflet({
     m <- leaflet::leaflet()
-    m <- leaflet::addProviderTiles(m, leaflet::providers$CartoDB.Positron, group = "Light")
+    m <- leaflet::addProviderTiles(m, leaflet::providers$Esri.WorldGrayCanvas, group = "Light")
     m <- leaflet::addProviderTiles(m, leaflet::providers$OpenStreetMap,    group = "Street")
     m <- leaflet::addLayersControl(m, baseGroups = c("Light", "Street"),
                                    options = leaflet::layersControlOptions(collapsed = TRUE), position = "topright")
@@ -2399,9 +2414,11 @@ server <- function(input, output, session) {
     if (is.null(d) || nrow(d) == 0L) return()
     band <- rain_band(d[[m]], m)
     radius <- ifelse(d$stale | is.na(band), 4, 4 + 1.3 * (band - 1))
+    sus <- rain_suspect(d, m)
     proxy <- leaflet::addCircleMarkers(
       proxy, lng = d$long, lat = d$lat, group = "rain", layerId = d$key, radius = radius,
-      color = "#243B53", weight = 1, opacity = 0.9, fillColor = rain_fill(d, m), fillOpacity = 0.85,
+      color = ifelse(sus, "#BE0553", "#243B53"), weight = ifelse(sus, 3, 1), dashArray = ifelse(sus, "3,3", ""),
+      opacity = 0.9, fillColor = rain_fill(d, m), fillOpacity = 0.85,
       popup = rain_popup(d), label = paste0(d$station, ": ", rain_mm(d[[m]])))
     leaflet::addLegend(proxy, position = "bottomright", layerId = "rain_legend", opacity = 0.9,
                        colors = c(RAIN_COLOURS, RAIN_STALE_COLOUR),
@@ -2409,12 +2426,70 @@ server <- function(input, output, session) {
                        title = names(RAIN_METRICS)[RAIN_METRICS == m])
   })
 
+  # The gauge whose past 24 hours is charted under the map: the one clicked, or the one found.
+  rain_pick <- reactiveVal(NULL)
+  observeEvent(input$rain_map_marker_click, {
+    id <- input$rain_map_marker_click$id
+    if (!is.null(id) && nzchar(rt_text(id))) rain_pick(as.character(id))
+  })
+
+  # One query for the gauge's last 24 hours, only when the gauge changes (or Refresh is pressed); the bar width is
+  # applied afterwards, so switching between 15 minutes and an hour does not query again.
+  rain_readings <- reactive({
+    input$rain_refresh
+    picked <- rain_pick(); r <- rain_raw()
+    if (is.null(picked) || is.null(r)) return(NULL)
+    row <- r[which(r$key == picked)]                 # not r[key == picked]: inside [] "key" is the column
+    if (nrow(row) != 1L) return(NULL)
+    rd <- safe_fetch(fetch_rt_readings, row$measure_uri, 1L)
+    list(row = row, readings = rd, now = as.POSIXct(Sys.time(), tz = "UTC"))
+  })
+
+  rain_chart_data <- reactive({
+    x <- rain_readings()
+    if (is.null(x)) return(NULL)
+    step <- suppressWarnings(as.integer(input$rain_bars)[1L]); if (is.na(step) || !(step %in% c(900L, 3600L))) step <- 3600L
+    b <- rain_bars(x$readings, step, rain_cap())
+    c(x, list(step = step, bars = b$bars, ignored = b$ignored))
+  })
+
+  output$rain_chart_head <- renderUI({
+    x <- rain_chart_data()
+    if (is.null(x)) return(tags$p(class = "text-muted mb-0", "Click a gauge on the map to chart its past 24 hours."))
+    if (is.null(x$readings)) return(tags$p(class = "text-muted mb-0", sprintf("%s: the readings could not be loaded.", x$row$station)))
+    if (nrow(x$bars) == 0L) return(tags$p(class = "text-muted mb-0", sprintf("%s: no readings in the past 24 hours.", x$row$station)))
+    tags$p(class = "mb-0", tags$strong(x$row$station),
+           sprintf(": %s in 24 hours, most in one %s %s.%s", rain_mm(sum(x$bars$mm)),
+                   if (x$step == 3600L) "hour" else "15 minutes", rain_mm(max(x$bars$mm)),
+                   if (x$ignored > 0L) sprintf(" %d impossible reading%s ignored.", x$ignored, if (x$ignored == 1L) "" else "s") else ""))
+  })
+
+  if (requireNamespace("plotly", quietly = TRUE)) {
+    output$rain_plot <- plotly::renderPlotly({
+      x <- rain_chart_data()
+      req(x, nrow(x$bars) > 0L)
+      b <- x$bars
+      start <- x$now - 86400
+      fmt <- function(v) format(v, "%Y-%m-%d %H:%M:%S", tz = "UTC")
+      fig <- plotly::add_trace(plotly::plot_ly(), type = "bar", x = fmt(b$t), y = b$mm, width = x$step * 1000, offset = 0,
+                               marker = list(color = APP_SERIES[1L]),
+                               hovertemplate = paste0("%{x|%a %d %b %H:%M} UTC<br>%{y:.1f} mm<extra></extra>"))
+      app_plot_style(fig, height = 260, showlegend = FALSE, bargap = 0.04,
+                     xaxis = app_plot_axis(range = fmt(c(start, x$now)), type = "date", nticks = 8),
+                     yaxis = app_plot_axis("mm", grid = TRUE, range = c(0, max(1, ceiling(max(b$mm) * 1.15))), tickformat = ".1~f", nticks = 6),
+                     title = list(text = sprintf("%s: rainfall in each %s, past 24 hours, times in UTC", x$row$station, if (x$step == 3600L) "hour" else "15 minutes"),
+                                  x = 0.01, xanchor = "left", font = list(size = 13, color = APP_PALETTE$navy)),
+                     margin = list(t = 44, l = 60, r = 20))
+    })
+  }
+
   # Find a gauge: fly to it and open its popup, whether or not the filters would draw it.
   observeEvent(input$rain_find, {
     r <- rain_raw()
     if (is.null(r) || !nzchar(rt_text(input$rain_find))) return()
     row <- r[r$key == input$rain_find]
     if (nrow(row) != 1L) return()
+    rain_pick(row$key)
     proxy <- leaflet::leafletProxy("rain_map")
     proxy <- leaflet::clearPopups(proxy)
     proxy <- leaflet::setView(proxy, lng = row$long, lat = row$lat, zoom = 12)

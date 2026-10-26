@@ -560,6 +560,9 @@ RAIN_BREAKS       <- list(mm_1h = c(0.1, 0.5, 2, 5, 10), mm_12h = c(0.2, 2, 5, 1
 RAIN_COLOURS      <- c("#DCE9F7", "#B3D1EE", "#7FB1E3", "#3F8BD3", "#1B5FA8", "#053D7E")   # light to dark, from the app's navy
 RAIN_STALE_COLOUR <- "#9AA5B1"
 RAIN_STALE_HOURS  <- 3
+RAIN_MAX_READING  <- 100     # mm in one reading; more (or below zero) is an error. The query leaves these out of the totals (data.R)
+# A window total above this is not believed: no UK gauge has recorded more than about 280 mm in a day or 100 mm in an hour.
+RAIN_SUSPECT_TOTALS <- c(mm_1h = 80, mm_12h = 200, mm_24h = 300)
 
 # How far back the chart can look. 0 means everything held for the chosen measures.
 RT_WINDOWS <- c("1 day" = 1L, "3 days" = 3L, "7 days" = 7L, "14 days" = 14L, "30 days" = 30L, "90 days" = 90L,
@@ -1136,6 +1139,9 @@ rain_mm <- function(x) {
   ifelse(is.na(x), "no readings", paste0(formatC(round(x, 1), format = "f", digits = 1), " mm"))
 }
 
+# One word or the other by a count: "1 reading was", "3 readings were".
+if_else_s <- function(n, one, many) ifelse(n == 1, one, many)
+
 rain_age_text <- function(minutes) {
   minutes <- suppressWarnings(as.numeric(minutes))
   ifelse(is.na(minutes), "",
@@ -1155,15 +1161,37 @@ rain_band_labels <- function(metric) {
   c(sprintf("Under %s mm", b[1L]), sprintf("%s to %s mm", b[-length(b)], b[-1L]), sprintf("%s mm or more", b[length(b)]))
 }
 
-rain_prepare <- function(d, now = Sys.time()) {
+# Latitude and longitude for gauges the register gives only as an OSGB easting and northing (the API leaves lat and long out for
+# some stations). Rows with a latitude and longitude are untouched; rows with neither stay NA.
+rain_latlong <- function(lat, long, easting, northing) {
+  lat <- suppressWarnings(as.numeric(lat)); long <- suppressWarnings(as.numeric(long))
+  e <- suppressWarnings(as.numeric(easting)); n <- suppressWarnings(as.numeric(northing))
+  need <- (is.na(lat) | is.na(long)) & !is.na(e) & !is.na(n)
+  if (any(need) && requireNamespace("sf", quietly = TRUE)) {
+    pts <- sf::st_as_sf(data.frame(x = e[need], y = n[need]), coords = c("x", "y"), crs = 27700)
+    xy <- sf::st_coordinates(sf::st_transform(pts, 4326))
+    long[need] <- xy[, 1L]; lat[need] <- xy[, 2L]
+  }
+  list(lat = lat, long = long)
+}
+
+rain_prepare <- function(d, now = Sys.time(), max_mm = RAIN_MAX_READING) {
   if (is.null(d) || nrow(d) == 0L) return(data.table())
   r <- rt_prepare_register(d)
-  for (col in c("lat", "long", "mm_1h", "mm_12h", "mm_24h", "n_24h", "last_value")) {
+  for (col in c("lat", "long", "mm_1h", "mm_12h", "mm_24h", "n_24h", "n_bad", "last_value")) {
     if (!(col %in% names(r))) r[, (col) := NA_real_]
     r[, (col) := suppressWarnings(as.numeric(get(col)))]
   }
   if (!("last_time" %in% names(r))) r[, last_time := as.POSIXct(NA)]
   r[, last_time := as.POSIXct(last_time, tz = "UTC")]
+  for (col in c("easting", "northing")) if (!(col %in% names(r))) r[, (col) := NA_real_]
+  ll <- rain_latlong(r$lat, r$long, r$easting, r$northing)
+  r[, `:=`(lat = ll$lat, long = ll$long)]
+  r[, placed := !is.na(lat) & !is.na(long)]          # a gauge with no position is kept for the count but cannot be drawn
+  # A newest reading that cannot be rain is kept for the popup but not shown as a value.
+  r[, last_raw := last_value]
+  r[, last_bad := !is.na(last_value) & (last_value < 0 | last_value > max_mm)]
+  r[last_bad == TRUE, last_value := NA_real_]
   rank <- c(total = 1L, instantaneous = 2L)
   r[, vt_rank := { v <- unname(rank[tolower(rt_text(value_type))]); v[is.na(v)] <- 3L; v }]
   r[, key := ifelse(nzchar(rt_text(station_uri)), rt_text(station_uri),
@@ -1174,7 +1202,28 @@ rain_prepare <- function(d, now = Sys.time()) {
   r[, stale := is.na(age_min) | age_min > RAIN_STALE_HOURS * 60]
   p <- suppressWarnings(as.numeric(r$period))
   r[, n_expected := ifelse(is.na(p) | p <= 0, 96, round(86400 / p))]
+  r[, max_mm := max_mm]
   r[]
+}
+
+# TRUE for a gauge whose values cannot be trusted over this window: it sent impossible readings (left out of its totals),
+# or its total for the window is above RAIN_SUSPECT_TOTALS. A suspect gauge is outlined, not counted in the wettest, and
+# can be hidden.
+rain_suspect <- function(r, metric) {
+  if (nrow(r) == 0L) return(logical())
+  v <- r[[metric]]
+  (!is.na(r$n_bad) & r$n_bad > 0) | (!is.na(v) & v > RAIN_SUSPECT_TOTALS[[metric]]) | (r$last_bad %in% TRUE)
+}
+
+# The reasons, for the popup, as one line per gauge ("" for a gauge with none).
+rain_suspect_text <- function(r) {
+  big <- vapply(names(RAIN_SUSPECT_TOTALS), function(m) {
+    v <- r[[m]]; ifelse(!is.na(v) & v > RAIN_SUSPECT_TOTALS[[m]],
+      sprintf("the %s total (%s) is above %s mm", tolower(names(RAIN_METRICS)[RAIN_METRICS == m]), rain_mm(v), RAIN_SUSPECT_TOTALS[[m]]), "")
+  }, character(nrow(r)))
+  if (nrow(r) == 1L) big <- matrix(big, nrow = 1L)
+  why <- apply(big, 1L, function(x) paste(x[nzchar(x)], collapse = "; "))
+  ifelse(nzchar(why), paste0("<br><em>Suspect: ", why, ".</em>"), "")
 }
 
 rain_fill <- function(r, metric) {
@@ -1188,8 +1237,10 @@ rain_popup <- function(r) {
   ids <- paste0(esc(rt_text(r$station_reference)),
                 ifelse(nzchar(rt_text(r$fffs_id)),  paste0(" &middot; FFFS ",  esc(rt_text(r$fffs_id))),  ""),
                 ifelse(nzchar(rt_text(r$wiski_id)), paste0(" &middot; WISKI ", esc(rt_text(r$wiski_id))), ""))
+  shown <- ifelse(r$last_bad %in% TRUE, paste0("an impossible reading (", trimws(format(round(r$last_raw), big.mark = ",", scientific = FALSE)), " mm), ignored"), rain_mm(r$last_value))
   latest <- ifelse(is.na(r$last_time), "no reading in the last few days",
-                   paste0(rain_mm(r$last_value), " at ", format(r$last_time, "%a %d %b %H:%M", tz = "UTC"), " UTC (", rain_age_text(r$age_min), ")"))
+                   paste0(shown, " at ", format(r$last_time, "%a %d %b %H:%M", tz = "UTC"), " UTC (", rain_age_text(r$age_min), ")"))
+  nbad <- ifelse(is.na(r$n_bad), 0, r$n_bad)
   vt <- tolower(rt_text(r$value_type))
   kind <- ifelse(vt == "total", " &middot; 15-minute totals", ifelse(vt == "instantaneous", " &middot; instantaneous readings", ""))
   n24 <- ifelse(is.na(r$n_24h), 0, r$n_24h)
@@ -1199,23 +1250,30 @@ rain_popup <- function(r) {
          "Past 1 hour: ",   rain_mm(r$mm_1h),  "<br>",
          "Past 12 hours: ", rain_mm(r$mm_12h), "<br>",
          "Past 24 hours: ", rain_mm(r$mm_24h), "<br>",
-         "<small>", format(n24), " of ", r$n_expected, " readings in 24 hours", kind, "</small>")
+         "<small>", as.character(n24), " of ", r$n_expected, " readings in 24 hours", kind, "</small>",
+         ifelse(nbad > 0, paste0("<br><em>", as.character(nbad), if_else_s(nbad, " reading was", " readings were"),
+                                 " ignored as impossible (below zero or over ", r$max_mm, " mm).</em>"), ""),
+         rain_suspect_text(r))
 }
 
-rain_filter <- function(r, area = RT_ALL, hide_stale = FALSE) {
+rain_filter <- function(r, area = RT_ALL, hide_stale = FALSE, hide_suspect = FALSE, metric = "mm_24h") {
+  if (nrow(r) == 0L) return(r)
+  r <- r[r$placed]                                  # only gauges with a position can be drawn
   if (nrow(r) == 0L) return(r)
   if (!identical(area, RT_ALL)) r <- r[r$ea_area_name %in% area]
   if (isTRUE(hide_stale)) r <- r[!r$stale]
+  if (isTRUE(hide_suspect) && nrow(r) > 0L) r <- r[!rain_suspect(r, metric)]
   r
 }
 
 # The facts above the map: gauges drawn, how many reported recently, how many had rain in the window, the wettest.
 rain_summary <- function(r, metric) {
-  if (nrow(r) == 0L) return(list(n = 0L, recent = 0L, wet = 0L, wettest = NULL, newest = NULL))
-  ok <- !r$stale
+  if (nrow(r) == 0L) return(list(n = 0L, recent = 0L, wet = 0L, suspect = 0L, wettest = NULL, newest = NULL))
+  sus <- rain_suspect(r, metric)
+  ok <- !r$stale & !sus                                    # a suspect gauge is not counted as wet or wettest
   v <- r[[metric]]
   top <- if (any(ok & !is.na(v))) which.max(ifelse(ok & !is.na(v), v, -Inf)) else NA_integer_
-  list(n = nrow(r), recent = sum(ok), wet = sum(ok & !is.na(v) & v > 0),
+  list(n = nrow(r), recent = sum(!r$stale), wet = sum(ok & !is.na(v) & v > 0), suspect = sum(sus),
        wettest = if (is.na(top)) NULL else list(name = r$station[top], mm = v[top]),
        newest = if (all(is.na(r$last_time))) NULL else max(r$last_time, na.rm = TRUE))
 }
@@ -1226,4 +1284,20 @@ rain_summary <- function(r, metric) {
 in_selected_cells <- function(risk_x, risk_y, cells) {
   if (is.null(cells) || nrow(cells) == 0L) return(rep(FALSE, length(risk_x)))
   paste(risk_x, risk_y) %in% paste(cells$x, cells$y)
+}
+
+
+# The bars of the Rain gauges chart: one gauge's readings (date_time, value) summed into step-second buckets (900 for 15
+# minutes, 3600 for an hour), each bucket labelled by its start. A reading below zero or over max_mm is left
+# out and counted, as in the totals. Returns list(bars = data.table(t, mm), ignored = n).
+rain_bars <- function(readings, step = 3600L, max_mm = RAIN_MAX_READING) {
+  empty <- data.table(t = as.POSIXct(character(), tz = "UTC"), mm = numeric())
+  if (is.null(readings) || nrow(readings) == 0L) return(list(bars = empty, ignored = 0L))
+  d <- as.data.table(readings)[!is.na(date_time) & !is.na(value)]
+  bad <- d$value < 0 | d$value > max_mm
+  d <- d[!bad]
+  if (nrow(d) == 0L) return(list(bars = empty, ignored = sum(bad)))
+  step <- as.integer(step)
+  d[, t := as.POSIXct(floor(as.numeric(date_time) / step) * step, origin = "1970-01-01", tz = "UTC")]
+  list(bars = d[, .(mm = sum(value)), by = t][order(t)], ignored = sum(bad))
 }
