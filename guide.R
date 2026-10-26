@@ -48,12 +48,12 @@ GUIDE_TABLES <- data.frame(
             "ea_area_constituency_lookup", "mp_contact_details",
             "fgs_constituency_changes", "fgs_changes_log", "constituency_flood_situation", "mp_briefing_drafts",
             "fgs_constituency_exposure", "pipeline_health", "ea_warning_episodes",
-            "ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_readings_bronze", "ea_warning_fgs_coverage", "ea_rt_measures_mapped", "ea_rt_latest"),
-  notebook = c("01", "01", "07", "07", "03", "03", "05", "06", "04", "18", "18", "19", "20", "21", "22", "25", "09", "23", "10", "26", "16", "23"),
+            "ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_readings_bronze", "ea_warning_fgs_coverage", "ea_rt_measures_mapped", "ea_rt_latest", "flood_warnings_current"),
+  notebook = c("01", "01", "07", "07", "03", "03", "05", "06", "04", "18", "18", "19", "20", "21", "22", "25", "09", "23", "10", "26", "16", "23", "11"),
   refresh = c("Each FGS issue or amendment", "Each FGS issue or amendment", "Each FGS issue", "Each FGS issue",
               "Weekly", "Weekly", "Quarterly, or after an election", "Weekly and quarterly", "Weekly",
               "Every poll", "Every poll", "Every poll", "Every poll", "Daily", "Every poll", "Every poll",
-              "Weekly", "Every 15 minutes", "Daily", "Daily", "When the mapping file changes", "Every 15 minutes"),
+              "Weekly", "Every 15 minutes", "Daily", "Daily", "When the mapping file changes", "Every 15 minutes", "Every poll"),
   holds = c("One row per statement: the headline and the forecast text.",
             "One row per risk polygon, flood source and day, with impact, likelihood and risk level.",
             "Each FGS shape that overlaps an EA flood warning or alert area.",
@@ -75,7 +75,8 @@ GUIDE_TABLES <- data.frame(
             "The daily archive of readings. Its last day marks where the live tail begins.",
             "Each alert and warning, and whether and when an FGS polygon covered it.",
             "The measure register with each measure's real gauge name, FFFS id and WISKI id, where the telemetry mapping matched it. Optional.",
-            "The newest reading of each measure, from the live tail."),
+            "The newest reading of each measure, from the live tail.",
+            "One row per EA area with an alert, warning or severe warning in force now, from the live feed."),
   stringsAsFactors = FALSE
 )
 
@@ -165,9 +166,10 @@ guide_products <- function(s) {
     list(
       id = "overview", title = "Overview", where = "Overview",
       answers = "What does the latest statement say, and where should I look first?",
-      tables = c("fgs_statements", "constituency_flood_situation", "fgs_constituency_changes", "mp_briefing_drafts", "pipeline_health"),
+      tables = c("fgs_statements", "constituency_flood_situation", "fgs_constituency_changes", "mp_briefing_drafts", "pipeline_health", "flood_warnings_current"),
       steps = c(
         "The headline is the text of the latest statement, as issued.",
+        "Warnings and alerts in force counts EA areas, once each however many constituencies they cover: flood alerts, flood warnings and severe flood warnings. Select a count to list the areas.",
         "Highest forecast risk is the highest worst risk of any constituency.",
         "Constituencies at Medium or above counts constituencies whose worst risk over the five days is rank 3 or 4. The figure for High counts rank 4.",
         "Escalated counts constituencies where the forecast rose against the previous statement, on any day or for any flood source. A new risk where there was none counts. So does a rise from Very Low to Low.",

@@ -738,9 +738,12 @@ make_nation_strip <- function() tags$div(
 )
 
 make_situation_tab <- function() tags$div(
-  class = "p-3",
+  class = "sit-page",
+  tags$h1(class = "app-title", "Constituencies and briefings"),
+  tags$p(class = "app-lead", "Each constituency's forecast risk, the warnings in force and its MP briefing. Select a row for the briefing."),
   uiOutput("situation_note"),
   uiOutput("situation_kpis"),
+  tags$h2("Find constituencies"),
   tags$div(
     class = "filter-row",
     # POC-ONLY: statement look-back. Remove this control with the other POC-ONLY blocks.
@@ -754,18 +757,26 @@ make_situation_tab <- function() tags$div(
                    choices  = c("River" = "river", "Coastal" = "coastal", "Surface water" = "surface",
                                 "Groundwater" = "ground"),
                    multiple = TRUE, options = list(placeholder = "All sources"), width = "230px"),
-    selectInput("sit_min_impact", "Minimum impact",
-                choices  = c("Any" = "0", stats::setNames(as.character(seq_along(IMPACT_LABELS)), IMPACT_LABELS)),
-                selected = "0", width = "160px"),
     textInput("sit_search", "Search", placeholder = "Constituency or MP", width = "220px"),
-    checkboxInput("sit_escalated", "Escalated only", FALSE),
-    checkboxInput("sit_warning", "Warning or alert in force", FALSE),
     downloadButton("download_situation", "Export CSV",
                    class = "btn-sm btn-outline-secondary")
   ),
+  tags$details(
+    class = "app-details",
+    tags$summary("More filters"),
+    tags$div(
+      class = "filter-row",
+      selectInput("sit_min_impact", "Minimum impact",
+                  choices  = c("Any" = "0", stats::setNames(as.character(seq_along(IMPACT_LABELS)), IMPACT_LABELS)),
+                  selected = "0", width = "160px"),
+      checkboxInput("sit_escalated", "Escalated only", FALSE),
+      checkboxInput("sit_warning", "Warning or alert in force", FALSE)
+    )
+  ),
+  tags$h2("Constituencies"),
   DT::dataTableOutput("situation_table"),
   uiOutput("rank_legend"),
-  tags$hr(),
+  tags$h2(class = "sit-briefing-h", "MP briefing"),
   uiOutput("briefing_panel")
 )
 
@@ -779,7 +790,9 @@ make_situation_tab <- function() tags$div(
 # -----------------------------------------------------------------------------
 
 make_warning_history_tab <- function() tags$div(
-  class = "p-3",
+  class = "wh-page",
+  tags$h1(class = "app-title", "Warning history"),
+  tags$p(class = "app-lead", "How many flood alerts and flood warnings have been issued for areas in each constituency. Select a row to see each area."),
   uiOutput("wh_note"),
   tags$div(
     class = "filter-row",
@@ -789,14 +802,15 @@ make_warning_history_tab <- function() tags$div(
     textInput("wh_search", "Search", placeholder = "Constituency or MP", width = "220px"),
     downloadButton("download_warning_history", "Export CSV", class = "btn-sm btn-outline-secondary")
   ),
+  tags$h2("Constituencies"),
   DT::dataTableOutput("wh_table"),
-  tags$hr(),
+  tags$h2(class = "sit-briefing-h", "Areas in the selected constituency"),
   uiOutput("wh_detail_title"),
   checkboxInput("wh_detailed", "Detailed: show the date and time of every alert and warning issued", FALSE),
   DT::dataTableOutput("wh_areas"),
   tags$div(class = "mt-2", downloadButton("download_wh_areas", "Export this table",
                                           class = "btn-sm btn-outline-secondary")),
-  tags$hr(),
+  tags$h2(class = "sit-briefing-h", "Warnings in force at the same time"),
   uiOutput("wh_concurrent_note"),
   if (requireNamespace("plotly", quietly = TRUE)) plotly::plotlyOutput("wh_concurrent", height = "auto")
 )
@@ -812,7 +826,9 @@ make_warning_history_tab <- function() tags$div(
 # -----------------------------------------------------------------------------
 
 make_coverage_tab <- function() tags$div(
-  class = "p-3",
+  class = "cov-page",
+  tags$h1(class = "app-title", "Warnings and the forecast"),
+  tags$p(class = "app-lead", "Was each alert and warning under an FGS risk polygon on the day it was issued, and was that forecast made before the day or on it?"),
   uiOutput("cov_note"),
   tags$div(
     class = "filter-row",
@@ -824,17 +840,17 @@ make_coverage_tab <- function() tags$div(
     downloadButton("download_coverage", "Export CSV", class = "btn-sm btn-outline-secondary")
   ),
   uiOutput("cov_kpis"),
-  tags$h6("How the polygons covered the warnings, by how serious a polygon must be"),
+  tags$h2("How the polygons covered the warnings"),
+  tags$p(class = "app-caption", "By how serious a polygon must be to count."),
   DT::dataTableOutput("cov_shares"),
   if (requireNamespace("plotly", quietly = TRUE)) plotly::plotlyOutput("cov_plot", height = "auto"),
-  tags$hr(),
-  tags$h6("The warnings"),
+  tags$h2(class = "sit-briefing-h", "The warnings"),
   uiOutput("cov_list_note"),
   DT::dataTableOutput("cov_table"),
-  tags$hr(),
+  tags$h2(class = "sit-briefing-h", "Statements behind a warning"),
   uiOutput("cov_detail_title"),
   DT::dataTableOutput("cov_detail"),
-  tags$small(class = "text-muted d-block mt-3",
+  tags$details(class = "app-details", tags$summary("How coverage is judged"), tags$p(
              "The reference is the day the warning was issued, because where there is an impact the FGS keeps a polygon over the area for the whole warning. ",
              "Before: a statement issued on an earlier day put a polygon over the area for the issue day, and the earliest one decides. ",
              "Same day: the earliest was issued on the issue day. Later days only: no polygon covered the issue day, but one covered a later day the warning was in force. ",
@@ -842,7 +858,7 @@ make_coverage_tab <- function() tags$div(
              "A coastal warning area counts as covered when a polygon covers the alert area above it. ",
              "The FGS forecasts risk across regions and the Environment Agency warns for particular rivers and coasts, ",
              "so a warning with no polygon is a disagreement between the two, not necessarily a missed forecast. ",
-             "Polygons that had no warning under them are not counted here.")
+             "Polygons that had no warning under them are not counted here."))
 )
 
 
@@ -960,7 +976,9 @@ make_hydrometrics_tab <- function() tags$div(
 # -----------------------------------------------------------------------------
 
 make_exposure_tab <- function() tags$div(
-  class = "p-3",
+  class = "exp-page",
+  tags$h1(class = "app-title", "Exposure history"),
+  tags$p(class = "app-lead", "The constituencies with most days at or above a chosen forecast risk over the last 12 months, by month."),
   fluidRow(
     column(3, selectInput("exp_source", "Flood source",
                           choices  = c("Any source" = "any", "River" = "river",
@@ -975,7 +993,7 @@ make_exposure_tab <- function() tags$div(
     column(3, sliderInput("exp_top_n", "Constituencies shown",
                           min = 10, max = 50, value = 25, step = 5))
   ),
-  tags$small(class = "text-muted d-block mb-2",
+  tags$p(class = "app-caption",
              "Counts one day per date (day 1 of the last statement issued that date). ",
              "A blank cell means no flagged day that month, not missing data. Click a row for its history. ",
              "Days with no statement are not counted as quiet."),
@@ -1028,8 +1046,8 @@ make_overview_tab <- function() tags$div(
 # -----------------------------------------------------------------------------
 
 make_audit_tab <- function() tags$div(
-  class = "p-3",
-  tags$div(class = "alert alert-secondary",
+  tags$h1(class = "app-title", "MP audit log"),
+  tags$div(class = "quiet-notice",
            tags$strong("Demonstration only. "),
            "This log is held in your browser session and disappears when you close the page. ",
            "Nothing is saved, sent or written to any warehouse. In the live app, briefings are read-only ",
