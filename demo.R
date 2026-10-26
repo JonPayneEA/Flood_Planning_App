@@ -577,10 +577,11 @@ fetch_ea_geometry <- function(statement_id, day_index) {
   ea <- demo_ea_areas()
   if (nrow(ei) == 0L) {
     return(sf::st_sf(ea_area_code = character(), ea_area_name = character(), ea_area_type = character(),
+                     risk_x = integer(), risk_y = integer(),
                      risk_colour = character(), risk_level = character(), intersection_pct = numeric(),
                      source = character(), geometry = sf::st_sfc(), crs = 4326))
   }
-  sf::st_sf(ei[, .(ea_area_code, ea_area_name, ea_area_type, risk_colour, risk_level, intersection_pct, source)],
+  sf::st_sf(ei[, .(ea_area_code, ea_area_name, ea_area_type, risk_x, risk_y, risk_colour, risk_level, intersection_pct, source)],
             geometry = ea$geom4326[match(ei$ea_area_code, ea$table$ea_area_code)])
 }
 

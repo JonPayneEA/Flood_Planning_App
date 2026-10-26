@@ -720,3 +720,12 @@ test_that("a gauge's instantaneous and total measures are told apart by value ty
   expect_match(r$measure_label[3], "\\(mAOD\\)"); expect_match(r$measure_label[4], "\\(m\\)")
   expect_false(any(grepl("\\[", r$measure_label)))                  # no URI tail was needed
 })
+
+
+test_that("in_selected_cells keeps the rows whose risk cell is ticked and nothing when none is", {
+  cells <- data.table(x = c(2L, 3L), y = c(4L, 1L))
+  expect_equal(in_selected_cells(c(2L, 3L, 2L, 1L), c(4L, 1L, 1L, 1L), cells), c(TRUE, TRUE, FALSE, FALSE))
+  expect_equal(in_selected_cells(c(2, 3), c(4, 1), cells), c(TRUE, TRUE))                  # numbers from the warehouse match integers
+  expect_equal(in_selected_cells(c(2L, 3L), c(4L, 1L), cells[0]), c(FALSE, FALSE))
+  expect_equal(in_selected_cells(integer(), integer(), cells), logical())
+})
