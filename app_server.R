@@ -1143,8 +1143,8 @@ server <- function(input, output, session) {
       class = "ov-headline", style = paste0("border-left-color:", colour, ";"),
       tags$div(class = "ov-kicker",
                sprintf("Flood Guidance Statement #%s, issued %s", d$stmt$statement_id, fmt_statement_time(d$stmt$issued_at, "%Y-%m-%d %H:%M"))),
-      tags$div(class = "ov-text", field_or_dash(d$stmt$headline)),
-      tags$div(class = "mt-2", "Highest forecast risk in any constituency: ", rank_chip(worst))
+      tags$p(class = "ov-text", field_or_dash(d$stmt$headline)),
+      tags$div(class = "ov-risk", "Highest forecast risk in any constituency: ", rank_chip(worst))
     )
   })
 
@@ -1196,7 +1196,7 @@ server <- function(input, output, session) {
                  if (r$warnings > 0L) sprintf("%d warning%s", r$warnings, if (r$warnings > 1L) "s" else ""),
                  if (r$alerts > 0L) sprintf("%d alert%s", r$alerts, if (r$alerts > 1L) "s" else ""))
       tags$tr(class = "clickable", onclick = goto_js(r$constituency_id),
-        tags$td(tags$strong(r$constituency_name), tags$br(),
+        tags$td(tags$a(href = "#", onclick = paste0("event.stopPropagation();", goto_js(r$constituency_id), "return false;"), tags$strong(r$constituency_name)), tags$br(),
                 tags$span(class = "demo-note", if (is.na(r$mp_name)) "Seat vacant" else r$mp_name)),
         tags$td(rank_chip(r$fgs_worst_rank), tags$br(),
                 tags$span(class = "demo-note", format(as.Date(r$fgs_worst_date), "%a %d %b"))),
@@ -1230,7 +1230,7 @@ server <- function(input, output, session) {
     rows <- lapply(seq_len(nrow(show)), function(i) {
       r <- show[i]
       tags$tr(class = "clickable", onclick = goto_js(r$constituency_id),
-        tags$td(r$constituency_name),
+        tags$td(tags$a(href = "#", onclick = paste0("event.stopPropagation();", goto_js(r$constituency_id), "return false;"), r$constituency_name)),
         tags$td(rank_chip(r$previous_rank), HTML(" &rarr; "), rank_chip(r$new_rank)),
         tags$td(class = "demo-note", format(as.Date(r$forecast_date), "%a %d")))
     })
@@ -1487,7 +1487,7 @@ server <- function(input, output, session) {
     row_html <- function(r) {
       tags$tr(
         class = "chg-row", onclick = goto_js(r$constituency_id),
-        tags$td(r$constituency_name),
+        tags$td(tags$a(href = "#", onclick = paste0("event.stopPropagation();", goto_js(r$constituency_id), "return false;"), r$constituency_name)),
         tags$td(rank_chip(r$previous_rank), HTML(" &rarr; "), rank_chip(r$new_rank)),
         tags$td(format(as.Date(r$forecast_date), "%a %d %b"), " ", tags$span(class = "text-muted", r$source)),
         tags$td(if (r$n_cells > 1L) tags$span(class = "chg-more", sprintf("+%d more", r$n_cells - 1L)))

@@ -972,20 +972,22 @@ make_exposure_tab <- function() tags$div(
 # -----------------------------------------------------------------------------
 
 make_overview_tab <- function() tags$div(
-  class = "p-3",
+  class = "ov-page",
+  tags$h1(class = "app-title", "Overview"),
   uiOutput("ov_headline"),
   uiOutput("ov_kpis"),
-  tags$div(class = "ov-panel mb-3",
-           tags$h6("Five-day outlook: constituencies at Medium risk or above"),
-           uiOutput("ov_outlook")),
+  tags$section(class = "ov-section",
+               tags$h2("Five-day outlook"),
+               tags$p(class = "app-caption", "Constituencies at Medium risk or above, day by day."),
+               uiOutput("ov_outlook")),
   tags$div(
     class = "ov-cols",
-    tags$div(class = "ov-panel",
-             tags$h6("Constituencies to watch"),
-             uiOutput("ov_watch")),
-    tags$div(class = "ov-panel",
-             tags$h6("Changed since the previous statement"),
-             uiOutput("ov_changes"))
+    tags$section(class = "ov-section",
+                 tags$h2("Constituencies to watch"),
+                 uiOutput("ov_watch")),
+    tags$section(class = "ov-section",
+                 tags$h2("Changed since the previous statement"),
+                 uiOutput("ov_changes"))
   ),
   uiOutput("ov_foot")
 )
