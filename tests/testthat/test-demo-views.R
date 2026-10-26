@@ -137,7 +137,7 @@ test_that("the Rain gauges tab loads on first open, summarises, and takes its fi
     expect_null(rain_raw())                                                  # nothing is fetched until the tab is opened
     session$setInputs(main_tabs = "Rain gauges")
     expect_equal(nrow(rain_raw()), 24L)
-    expect_match(txt(output$rain_summary), "24 gauges shown")
+    expect_match(txt(output$rain_summary), "23 gauges shown"); expect_match(txt(output$rain_summary), "1 more rain gauge has no position"); expect_match(txt(output$rain_summary), "without an FFFS ID")
     expect_null(output$rain_message)
     session$setInputs(rain_metric = "mm_1h"); expect_equal(rain_metric(), "mm_1h")
     session$setInputs(rain_metric = "nonsense"); expect_equal(rain_metric(), "mm_24h")      # an unknown window falls back

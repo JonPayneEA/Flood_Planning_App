@@ -1161,6 +1161,20 @@ rain_band_labels <- function(metric) {
   c(sprintf("Under %s mm", b[1L]), sprintf("%s to %s mm", b[-length(b)], b[-1L]), sprintf("%s mm or more", b[length(b)]))
 }
 
+# Latitude and longitude for gauges the register gives only as an OSGB easting and northing (the API leaves lat and long out for
+# some stations). Rows with a latitude and longitude are untouched; rows with neither stay NA.
+rain_latlong <- function(lat, long, easting, northing) {
+  lat <- suppressWarnings(as.numeric(lat)); long <- suppressWarnings(as.numeric(long))
+  e <- suppressWarnings(as.numeric(easting)); n <- suppressWarnings(as.numeric(northing))
+  need <- (is.na(lat) | is.na(long)) & !is.na(e) & !is.na(n)
+  if (any(need) && requireNamespace("sf", quietly = TRUE)) {
+    pts <- sf::st_as_sf(data.frame(x = e[need], y = n[need]), coords = c("x", "y"), crs = 27700)
+    xy <- sf::st_coordinates(sf::st_transform(pts, 4326))
+    long[need] <- xy[, 1L]; lat[need] <- xy[, 2L]
+  }
+  list(lat = lat, long = long)
+}
+
 rain_prepare <- function(d, now = Sys.time(), max_mm = RAIN_MAX_READING) {
   if (is.null(d) || nrow(d) == 0L) return(data.table())
   r <- rt_prepare_register(d)
@@ -1170,6 +1184,10 @@ rain_prepare <- function(d, now = Sys.time(), max_mm = RAIN_MAX_READING) {
   }
   if (!("last_time" %in% names(r))) r[, last_time := as.POSIXct(NA)]
   r[, last_time := as.POSIXct(last_time, tz = "UTC")]
+  for (col in c("easting", "northing")) if (!(col %in% names(r))) r[, (col) := NA_real_]
+  ll <- rain_latlong(r$lat, r$long, r$easting, r$northing)
+  r[, `:=`(lat = ll$lat, long = ll$long)]
+  r[, placed := !is.na(lat) & !is.na(long)]          # a gauge with no position is kept for the count but cannot be drawn
   # A newest reading that cannot be rain is kept for the popup but not shown as a value.
   r[, last_raw := last_value]
   r[, last_bad := !is.na(last_value) & (last_value < 0 | last_value > max_mm)]
@@ -1239,6 +1257,8 @@ rain_popup <- function(r) {
 }
 
 rain_filter <- function(r, area = RT_ALL, hide_stale = FALSE, hide_suspect = FALSE, metric = "mm_24h") {
+  if (nrow(r) == 0L) return(r)
+  r <- r[r$placed]                                  # only gauges with a position can be drawn
   if (nrow(r) == 0L) return(r)
   if (!identical(area, RT_ALL)) r <- r[r$ea_area_name %in% area]
   if (isTRUE(hide_stale)) r <- r[!r$stale]

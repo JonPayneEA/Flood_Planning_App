@@ -856,3 +856,21 @@ test_that("a gauge is suspect when it sent impossible readings or its total is t
   expect_equal(rain_bars(data.table(date_time = now - c(600, 1200), value = c(60, 1)), 3600L, max_mm = 50)$ignored, 1L)
   expect_match(rain_popup(rain_prepare(transform(rain_fake(now), n_bad = 2), now, max_mm = 50)[1]), "over 50 mm")
 })
+
+
+test_that("a gauge given only as an easting and northing is placed, and one with no position is counted but not drawn", {
+  skip_if_not_installed("sf")
+  ll <- rain_latlong(c(53.1, NA, NA), c(-1.5, NA, NA), c(NA, 530000, NA), c(NA, 180000, NA))
+  expect_equal(ll$lat[1], 53.1); expect_equal(ll$long[1], -1.5)                  # a given latitude and longitude is untouched
+  expect_equal(ll$lat[2], 51.50, tolerance = 0.02); expect_equal(ll$long[2], -0.13, tolerance = 0.02)   # central London
+  expect_true(is.na(ll$lat[3]) && is.na(ll$long[3]))
+  now <- as.POSIXct("2026-10-23 12:00:00", tz = "UTC")
+  d <- rain_fake(now)
+  d[station_reference == "C", `:=`(lat = NA_real_, long = NA_real_, easting = 530000, northing = 180000)]
+  d[station_reference == "D", `:=`(lat = NA_real_, long = NA_real_)]
+  r <- rain_prepare(d, now)
+  expect_equal(r[order(station_reference)]$placed, c(TRUE, TRUE, TRUE, FALSE))
+  expect_equal(r[station_reference == "C"]$lat, 51.50, tolerance = 0.02)
+  expect_equal(nrow(rain_filter(r)), 3L)                                           # the unplaced gauge is not drawn
+  expect_equal(nrow(rain_filter(r, hide_stale = TRUE)), 3L - 0L)
+})

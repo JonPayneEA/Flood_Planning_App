@@ -2346,10 +2346,11 @@ server <- function(input, output, session) {
     r <- rain_prepare(d, max_mm = cap)
     rain_raw(r)
     updateSelectInput(session, "rain_area", choices = rt_values(r, "ea_area_name"), selected = RT_ALL)
-    labels <- paste0(r$station, ifelse(nzchar(rt_text(r$fffs_id)), paste0(" \u00b7 FFFS ", rt_text(r$fffs_id)), ""),
-                     " \u00b7 ", rt_text(r$station_reference))
+    rp <- r[r$placed]                                          # only a gauge with a position can be flown to
+    labels <- paste0(rp$station, ifelse(nzchar(rt_text(rp$fffs_id)), paste0(" \u00b7 FFFS ", rt_text(rp$fffs_id)), ""),
+                     " \u00b7 ", rt_text(rp$station_reference))
     ord <- order(tolower(labels))
-    updateSelectizeInput(session, "rain_find", choices = stats::setNames(r$key[ord], labels[ord]), selected = character(), server = TRUE)
+    updateSelectizeInput(session, "rain_find", choices = stats::setNames(rp$key[ord], labels[ord]), selected = character(), server = TRUE)
     invisible(r)
   }
 
@@ -2385,11 +2386,14 @@ server <- function(input, output, session) {
     m <- rain_metric(); s <- rain_summary(r, m)
     window <- tolower(names(RAIN_METRICS)[RAIN_METRICS == m])
     tags$p(class = "text-muted mb-1",
-           sprintf("%s gauges shown. %s reported in the last %d hours and %s of those had rain in the %s.%s%s%s",
-                   format(s$n, big.mark = ","), format(s$recent, big.mark = ","), RAIN_STALE_HOURS, format(s$wet, big.mark = ","), window,
+           sprintf("%s gauges shown%s. %s reported in the last %d hours and %s of those had rain in the %s.%s%s%s%s",
+                   format(s$n, big.mark = ","),
+                   sprintf(" (%s without an FFFS ID)", format(sum(!nzchar(rt_text(r$fffs_id))), big.mark = ",")),
+                   format(s$recent, big.mark = ","), RAIN_STALE_HOURS, format(s$wet, big.mark = ","), window,
                    if (is.null(s$wettest)) "" else sprintf(" Wettest: %s, %s.", s$wettest$name, rain_mm(s$wettest$mm)),
                    if (s$suspect > 0L) sprintf(" %s suspect (dashed outline, not counted as wet).", format(s$suspect, big.mark = ",")) else "",
-                   if (is.null(s$newest)) "" else sprintf(" Newest reading %s UTC.", format(s$newest, "%a %d %b %H:%M", tz = "UTC"))))
+                   if (is.null(s$newest)) "" else sprintf(" Newest reading %s UTC.", format(s$newest, "%a %d %b %H:%M", tz = "UTC")),
+                   { u <- sum(!rain_raw()$placed); if (u > 0L) sprintf(" %s more rain gauge%s no position in the register and cannot be mapped.", format(u, big.mark = ","), if (u == 1L) " has" else "s have") else "" }))
   })
 
   output$rain_map <- leaflet::renderLeaflet({

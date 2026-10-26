@@ -829,7 +829,8 @@ fetch_rt_register <- function() {
   })
 }
 
-# fetch_rain_gauges(): every rainfall measure with a position, the newest reading it has, and its rainfall over the
+# fetch_rain_gauges(): every rainfall measure (a gauge with only an easting and northing is kept, and one with no position
+# is returned so it can be counted), the newest reading it has, and its rainfall over the
 # past 1, 12 and 24 hours, in one query. Names, FFFS and WISKI ids come from ea_rt_measures_mapped where job 16 has
 # built it, else the plain register is used. A gauge can have two measures (an instantaneous reading and a 15-minute
 # total); the app chooses one per gauge, so both are returned here. A sum over no readings is NULL, so "no readings
@@ -839,9 +840,9 @@ fetch_rt_register <- function() {
 rain_gauges_sql <- function(src, mapped, max_mm = 100) sprintf("
   WITH g AS (
     SELECT measure_uri, station_uri, station_reference, station_label, river_name, town, ea_area_name,
-           lat, long, unit_name, value_type, period, parameter, %s
+           lat, long, easting, northing, grid_reference, unit_name, value_type, period, parameter, %s
     FROM %s
-    WHERE parameter = 'rainfall' AND lat IS NOT NULL AND long IS NOT NULL
+    WHERE parameter = 'rainfall'
   ),
   w AS (
     SELECT r.measure_uri,

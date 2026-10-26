@@ -180,7 +180,8 @@ test_that("the rain gauge query reads the mapped view, falls back to the registe
   expect_match(seen[1], "gauge_name, fffs_id, wiski_id FROM cat\\.sch\\.ea_rt_measures_mapped")
   expect_match(seen[2], "CAST\\(NULL AS STRING\\) AS wiski_id FROM cat\\.sch\\.ea_rt_measure_register")
   q <- seen[2]
-  expect_match(q, "parameter = 'rainfall'"); expect_match(q, "INTERVAL 1 HOURS"); expect_match(q, "INTERVAL 12 HOURS"); expect_match(q, "INTERVAL 24 HOURS")
+  expect_match(q, "parameter = 'rainfall'"); expect_false(grepl("lat IS NOT NULL", q, fixed = TRUE)); expect_match(q, "easting, northing, grid_reference")   # every gauge is returned, with or without lat and long
+  ; expect_match(q, "INTERVAL 1 HOURS"); expect_match(q, "INTERVAL 12 HOURS"); expect_match(q, "INTERVAL 24 HOURS")
   expect_match(q, "FROM cat\\.sch\\.ea_rt_readings_all"); expect_match(q, "LEFT JOIN cat\\.sch\\.ea_rt_latest")
   expect_match(q, "reading_date >= date_sub\\(current_date\\(\\), 1\\)")             # prunes the partitions
   expect_equal(lengths(regmatches(q, gregexpr("BETWEEN 0 AND 100", q))), 4L)                   # every total leaves out an impossible reading

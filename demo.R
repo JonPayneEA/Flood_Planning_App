@@ -736,6 +736,12 @@ demo_rain_gauges <- function() {
   g[22L, `:=`(last_time = now - 3600 * 30, mm_1h = NA_real_, mm_12h = NA_real_, mm_24h = NA_real_, n_24h = NA_integer_, n_bad = NA_integer_, last_value = 0)]   # silent for 30 hours
   g[23L, `:=`(last_time = as.POSIXct(NA), mm_1h = NA_real_, mm_12h = NA_real_, mm_24h = NA_real_, n_24h = NA_integer_, n_bad = NA_integer_, last_value = NA_real_)]  # no reading at all
   g[7L, `:=`(mm_24h = 412.5, mm_12h = 380.2, mm_1h = 96)]                       # a total too large to believe, with no single bad reading
+  g[, `:=`(easting = NA_real_, northing = NA_real_)]
+  if (requireNamespace("sf", quietly = TRUE)) {                                  # gauge 8 gives only a grid position, as some real stations do
+    en <- sf::st_coordinates(sf::st_transform(sf::st_sfc(sf::st_point(c(g$long[8L], g$lat[8L])), crs = 4326), 27700))
+    g[8L, `:=`(easting = en[1L, 1L], northing = en[1L, 2L], lat = NA_real_, long = NA_real_)]
+  }
+  g[24L, `:=`(lat = NA_real_, long = NA_real_)]                                  # and gauge 24 has no position at all
   inst <- copy(g[2:4])                                                          # the same stations also report instantaneous readings
   inst[, `:=`(measure_uri = sub("-t-", "-i-", measure_uri), value_type = "instantaneous", mm_24h = mm_24h * 1.1)]
   rbind(g, inst)
