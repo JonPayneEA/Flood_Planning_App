@@ -75,6 +75,9 @@ APP_SECTIONS <- list(
        views = list(list(value = "Warning history",   label = "Warning history"),
                     list(value = "Exposure history",  label = "Exposure history"),
                     list(value = "Warnings vs FGS",   label = "Warnings and the forecast"))),
+  list(id = "exports", label = "Exports",
+       intro = "Lists to take away: areas by constituency, MP contact details and the current briefing emails.",
+       views = list(list(value = "Exports", label = "Exports"))),
   list(id = "help", label = "Help",
        intro = "How the figures are made, and what is planned.",
        views = list(list(value = "Guide",   label = "Guide"),
@@ -309,6 +312,10 @@ button.stat-btn .stat-hint { display: block; font-size: 16px; color: var(--gov-l
 button.stat-btn .stat-top { display: flex; align-items: center; gap: var(--sp-3); }
 .ov-list-h { display: flex; align-items: center; gap: var(--sp-3); }
 .ov-list-h .warn-icon { width: 32px; height: 32px; }
+
+.ex-section { margin-bottom: var(--sp-8); max-width: 48em; }
+.ex-section .btn { margin-top: var(--sp-2); }
+.ex-section .shiny-input-container { width: auto; max-width: 100%; }
 
 /* Style guide (demonstration mode). */
 .sg-swatches { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin-bottom: var(--sp-6); }

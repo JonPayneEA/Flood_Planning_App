@@ -386,6 +386,20 @@ server code are unchanged. Adding a view means adding its `tabPanel` in `app_ui.
 one line in `APP_SECTIONS`; a test fails if the two disagree. In demonstration mode a
 Style guide view under Help shows every component on one page.
 
+## Exports tab
+
+Three CSV files to take away, under their own section in the navigation. The files hold everything they describe, whatever the
+nations filter says, and open in Excel (UTF-8 with a byte order mark).
+
+- **Flood warning and flood alert areas linked to constituencies.** One row per area and constituency: area code and name, kind,
+  type, county, river or sea, constituency, the share of the area in the constituency, and the MP and email. Only overlaps at or
+  above `FGS_WARNING_CONTACT_MIN_PCT` (the minimum Warning history uses) unless the tick box includes the very small ones. Read from
+  `ea_area_constituency_lookup` with the area tables and `mp_contact_details` when the tab is first opened.
+- **Constituencies and MP contact details.** Every constituency with its nation, MP, party, email and phone, from the situation table.
+- **Emails for the current Flood Guidance Statement.** The briefing drafts for the latest statement as a mail-merge table: address,
+  subject, body, worst risk, escalation, warning in force and status. These are drafts and nothing is sent; the sender and sign-off
+  in the body are placeholders. The builders are `exp_*_table()` in `helpers.R`.
+
 ## Nations filter
 
 The Environment Agency works in England, but its flood areas run up to the borders, so the data

@@ -1298,6 +1298,64 @@ server <- function(input, output, session) {
              nav_link("How each figure is calculated", "Guide"), ".")
   })
 
+  # ---------------------------------------------------------------------------
+  # Exports tab. The area links are fetched when the tab is first opened (they are the largest table); the constituency list and the
+  # drafts are already loaded. The builders are pure (helpers.R). The files hold everything, whatever the nations filter says.
+  # ---------------------------------------------------------------------------
+  exp_started  <- reactiveVal(FALSE)
+  exp_links_rv <- reactiveVal(NULL)
+  observeEvent(input$main_tabs, {
+    if (!identical(input$main_tabs, "Exports") || exp_started()) return()
+    exp_started(TRUE)
+    exp_links_rv(safe_fetch(fetch_area_constituency_links))
+  })
+
+  exp_links <- reactive(exp_links_table(exp_links_rv(), isTRUE(input$exp_all_overlaps)))
+  exp_cons  <- reactive(exp_constituency_table(tryCatch(situation_latest_clean(), error = function(e) NULL)))
+  exp_mail  <- reactive({
+    b <- briefing_rv()
+    st <- review_status()
+    if (!is.null(b) && length(st) > 0L) {                       # a review recorded in this demonstration session
+      b <- copy(b); idx <- match(b$constituency_id, names(st)); hit <- !is.na(idx)
+      b[hit, `:=`(status = unname(st[idx[hit]]))]
+    }
+    exp_email_table(b)
+  })
+
+  exp_stamp <- function() format(Sys.time(), "%Y%m%d_%H%M")
+
+  output$exp_links_note <- renderUI({
+    if (!exp_started()) return(tags$p(class = "app-caption", "Open this tab to load the areas."))
+    l <- exp_links_rv()
+    if (is.null(l)) return(tags$p(class = "text-muted",
+      if (has_gap("ea_area_constituency_lookup")) gap_text("ea_area_constituency_lookup", "The area links") else "The area links could not be loaded."))
+    x <- exp_links()
+    tags$p(class = "app-caption", sprintf("%s rows: %s areas and %s constituencies.", format(nrow(x), big.mark = ","),
+                                          format(length(unique(x[["Area code"]])), big.mark = ","), format(length(unique(x[["Constituency ID"]])), big.mark = ",")))
+  })
+  output$exp_cons_note <- renderUI({
+    x <- exp_cons()
+    if (nrow(x) == 0L) return(tags$p(class = "text-muted", "The constituency list could not be loaded."))
+    tags$p(class = "app-caption", sprintf("%s constituencies, %s without a matched MP.", format(nrow(x), big.mark = ","), format(sum(x$MP == "(vacant or unmatched)"), big.mark = ",")))
+  })
+  output$exp_mail_note <- renderUI({
+    x <- exp_mail()
+    if (nrow(x) == 0L) return(tags$p(class = "text-muted", "No briefing drafts are held for the latest statement."))
+    n_none <- sum(is.na(x[["To (MP email)"]]) | !nzchar(trimws(x[["To (MP email)"]])))
+    tags$p(class = "app-caption", sprintf("Statement %s: %s drafts%s.", x$Statement[1L], format(nrow(x), big.mark = ","),
+                                          if (n_none > 0L) sprintf(", %d without an email address", n_none) else ""))
+  })
+
+  output$download_exp_links <- downloadHandler(
+    filename = function() sprintf("flood_areas_by_constituency_%s.csv", exp_stamp()),
+    content  = function(file) data.table::fwrite(exp_links(), file, bom = TRUE))
+  output$download_exp_cons <- downloadHandler(
+    filename = function() sprintf("constituencies_and_mps_%s.csv", exp_stamp()),
+    content  = function(file) data.table::fwrite(exp_cons(), file, bom = TRUE))
+  output$download_exp_mail <- downloadHandler(
+    filename = function() { x <- exp_mail(); sprintf("briefing_emails_statement_%s_%s.csv", if (nrow(x)) x$Statement[1L] else "none", exp_stamp()) },
+    content  = function(file) data.table::fwrite(exp_mail(), file, bom = TRUE))
+
   # The Guide (guide.R): how each product is calculated. The text is static; the
   # worked example uses the latest situation table, and a card notes any table
   # the pipeline has not built yet.
@@ -1350,6 +1408,7 @@ server <- function(input, output, session) {
     "refresh_data", "show_health", "goto_constituency", "exp_pick", "nav_to",
     "rv_reviewed", "rv_sent", "rv_rejected", "demo_reset",
     "area_row_click", "download_ea_areas", "download_situation",
+    "download_exp_links", "download_exp_cons", "download_exp_mail",
     "situation_table_rows_selected", "situation_table_row_last_clicked",
     "situation_table_cell_clicked", "situation_table_rows_current",
     "situation_table_rows_all", "situation_table_state", "situation_table_search",

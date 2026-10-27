@@ -1038,6 +1038,41 @@ make_overview_tab <- function() tags$div(
 
 
 # -----------------------------------------------------------------------------
+# Exports tab.
+#
+# Three lists to take away as CSV: the flood warning and flood alert areas linked to constituencies, every constituency with its
+# MP's contact details, and the briefing emails drafted for the current statement. The builders are in helpers.R (exp_*_table).
+# Nothing here is sent anywhere. The exports ignore the nations filter: each file holds everything it describes.
+# -----------------------------------------------------------------------------
+
+make_exports_tab <- function() tags$div(
+  class = "exports-page",
+  tags$h1(class = "app-title", "Exports"),
+  tags$p(class = "app-lead", "Lists to take away as CSV files. They open in Excel and work as the source for a mail merge."),
+  tags$section(
+    class = "ex-section",
+    tags$h2("Flood warning and flood alert areas linked to constituencies"),
+    tags$p("Each flood warning area and flood alert area with the constituencies it overlaps, the share of the area in each, and the MP."),
+    checkboxInput("exp_all_overlaps", "Include very small overlaps as well (by default only overlaps at or above the app's minimum)", FALSE),
+    uiOutput("exp_links_note"),
+    downloadButton("download_exp_links", "Download CSV", class = "btn-primary")),
+  tags$section(
+    class = "ex-section",
+    tags$h2("Constituencies and MP contact details"),
+    tags$p("Every constituency with its nation, MP, party, email address and phone number."),
+    uiOutput("exp_cons_note"),
+    downloadButton("download_exp_cons", "Download CSV", class = "btn-primary")),
+  tags$section(
+    class = "ex-section",
+    tags$h2("Emails for the current Flood Guidance Statement"),
+    tags$p("The briefing drafts for the latest statement, one row per MP: the address, subject and body, with the worst risk and the draft's status. ",
+           "These are drafts. Nothing has been sent, and the sender and sign-off are placeholders to complete."),
+    uiOutput("exp_mail_note"),
+    downloadButton("download_exp_mail", "Download CSV", class = "btn-primary"))
+)
+
+
+# -----------------------------------------------------------------------------
 # MP audit log tab (demo mode only).
 #
 # Shows the review actions taken on briefing drafts in THIS session. It is a
@@ -1104,6 +1139,7 @@ ui <- function(request) {
     tabPanel("Warnings vs FGS",        make_coverage_tab()),
     tabPanel("Hydrometrics",           make_hydrometrics_tab()),
     tabPanel("Rain gauges",            make_rain_tab()),
+    tabPanel("Exports",                make_exports_tab()),
     tabPanel("Guide",                  make_guide_tab()),
     tabPanel("Planned",                make_planned_tab(DEMO_MODE)),
     if (DEMO_MODE) tabPanel("MP audit log", make_audit_tab()),

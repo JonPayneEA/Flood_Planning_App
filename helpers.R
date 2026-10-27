@@ -334,6 +334,57 @@ in_nations <- function(ids, codes, known = c("E14", "W07", "S14", "N06")) {
 
 
 # -----------------------------------------------------------------------------
+# Exports tab: the three tables people take away. Pure functions, so the columns and the
+# row rules are tested without a session. Each returns a data.table with readable column names.
+# -----------------------------------------------------------------------------
+
+# The nation a constituency belongs to, from its ONS code ("" for an id that has none, such as the demonstration's).
+nation_label <- function(ids) {
+  p <- substr(as.character(ids), 1L, 3L)
+  out <- c(E14 = "England", W07 = "Wales", S14 = "Scotland", N06 = "Northern Ireland")[p]
+  unname(ifelse(is.na(out), "", out))
+}
+
+# Flood warning and flood alert areas linked to constituencies. `links` is fetch_area_constituency_links(): one row per area
+# and constituency, with the share of the area (0 to 1) that lies in the constituency. By default only overlaps at or above the
+# app's minimum (TARGET_AREA_MIN_PCT, as Warning history uses); include_all keeps every overlap, slivers too.
+exp_links_table <- function(links, include_all = FALSE, min_pct = get0("TARGET_AREA_MIN_PCT", ifnotfound = 0.01)) {
+  if (is.null(links) || nrow(links) == 0L) return(data.table::data.table())
+  d <- data.table::as.data.table(links)
+  if (!isTRUE(include_all)) d <- d[!is.na(share_of_area_in_constituency) & share_of_area_in_constituency >= min_pct]
+  d[order(area_kind, ea_area_name, -share_of_area_in_constituency, constituency_name), .(
+    `Area code` = ea_area_code, `Area name` = ea_area_name, Kind = area_kind, Type = type_text, County = county,
+    `River or sea` = river_or_sea, `Constituency ID` = constituency_id, Constituency = constituency_name,
+    `Share of the area in the constituency (%)` = round(100 * share_of_area_in_constituency, 1),
+    MP = mp_name, Party = mp_party, `MP email` = mp_email)]
+}
+
+# Every constituency with its MP and contact details, from the situation table (one row per constituency).
+exp_constituency_table <- function(sit) {
+  if (is.null(sit) || nrow(sit) == 0L) return(data.table::data.table())
+  d <- data.table::as.data.table(sit)
+  d[order(constituency_name), .(
+    `Constituency ID` = constituency_id, Constituency = constituency_name, Nation = nation_label(constituency_id),
+    MP = data.table::fifelse(is.na(mp_name), "(vacant or unmatched)", mp_name), Party = mp_party,
+    Email = mp_email, Phone = mp_phone)]
+}
+
+# The briefing drafts for the latest statement as a mail-merge table: who it is for, what it says and where it stands.
+# Drafts only: nothing here has been sent.
+exp_email_table <- function(b) {
+  if (is.null(b) || nrow(b) == 0L) return(data.table::data.table())
+  d <- data.table::as.data.table(b)
+  d[order(-worst_rank, constituency_name), .(
+    `Statement` = statement_id, `Constituency ID` = constituency_id, Constituency = constituency_name,
+    MP = mp_name, `To (MP email)` = mp_email, `Worst risk` = worst_level,
+    `On` = format(as.Date(worst_date), "%Y-%m-%d"),
+    Escalated = data.table::fifelse(is.na(is_escalation), "", data.table::fifelse(as.logical(is_escalation), "Yes", "No")),
+    `Warning in force` = data.table::fifelse(is.na(has_active_warning), "", data.table::fifelse(as.logical(has_active_warning), "Yes", "No")),
+    Subject = subject, Body = body, Status = status)]
+}
+
+
+# -----------------------------------------------------------------------------
 # Warning history by constituency
 #
 # h is the output of fetch_warning_history(): one row per constituency, area and

@@ -556,6 +556,39 @@ fetch_ea_constituency_mp <- function() {
 
 
 # -----------------------------------------------------------------------------
+# fetch_area_constituency_links()
+#
+# Every flood warning area and flood alert area with each constituency it overlaps and the MP, for the Exports tab. The share is
+# intersection area over area (0 to 1). One row per area and constituency, slivers included; the tab filters.
+# -----------------------------------------------------------------------------
+
+fetch_area_constituency_links <- function() {
+  db_query(sprintf("
+    SELECT
+      l.ea_area_code,
+      a.ea_area_name,
+      a.area_kind,
+      a.type_text,
+      a.county,
+      a.river_or_sea,
+      l.constituency_id,
+      l.constituency_name,
+      l.intersection_pct AS share_of_area_in_constituency,
+      m.name             AS mp_name,
+      m.party            AS mp_party,
+      m.email            AS mp_email
+    FROM %s l
+    JOIN (
+      SELECT ea_area_code, ea_area_name, type_text, county, river_or_sea, 'Flood warning' AS area_kind FROM %s
+      UNION ALL
+      SELECT ea_area_code, ea_area_name, type_text, county, river_or_sea, 'Flood alert'   AS area_kind FROM %s
+    ) a ON a.ea_area_code = l.ea_area_code
+    LEFT JOIN %s m ON m.constituency_name = l.constituency_name
+  ", TBL_EA_CONSTITUENCY_LOOKUP, TBL_EA_FWA, TBL_EA_FAA, TBL_MP_CONTACTS))
+}
+
+
+# -----------------------------------------------------------------------------
 # fetch_pipeline_health()
 #
 # One row per health check plus an `overall` row (job 22). Backs the status
