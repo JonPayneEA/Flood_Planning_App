@@ -905,3 +905,33 @@ test_that("rain_cumulative carries the total across missing intervals and flags 
   expect_equal(none$cum, c(0, 0, 0)); expect_true(all(none$missing))
   expect_equal(nrow(rain_cumulative(bars, 900L, t0, t0 + 3600)), 5L)   # quarter-hour grid
 })
+
+
+test_that("the export tables hold the rows and columns the Exports tab promises", {
+  expect_equal(nation_label(c("E14000001", "W07000002", "S14000003", "N06000004", "DEMO-C001")), c("England", "Wales", "Scotland", "Northern Ireland", ""))
+
+  links <- data.table(ea_area_code = c("A1", "A1", "A2"), ea_area_name = c("River A", "River A", "Coast B"),
+                      area_kind = c("Flood warning", "Flood warning", "Flood alert"), type_text = c("Flood Warning Fluvial", "Flood Warning Fluvial", "Flood Alert Tidal"),
+                      county = "Kent", river_or_sea = c("A", "A", "Sea"), constituency_id = c("E1", "E2", "E1"), constituency_name = c("One", "Two", "One"),
+                      share_of_area_in_constituency = c(0.60, 0.004, 0.25), mp_name = c("Ann", "Bo", "Ann"), mp_party = "X", mp_email = c("a@x", "b@x", "a@x"))
+  d <- exp_links_table(links, min_pct = 0.01)
+  expect_equal(nrow(d), 2L)                                                         # the 0.4 per cent sliver is left out by default
+  expect_equal(nrow(exp_links_table(links, include_all = TRUE, min_pct = 0.01)), 3L)
+  expect_true(all(c("Area code", "Kind", "Constituency", "MP email") %in% names(d)))
+  expect_equal(d[["Share of the area in the constituency (%)"]][d$`Area code` == "A1"], 60)
+  expect_equal(nrow(exp_links_table(NULL)), 0L)
+
+  sit <- data.table(constituency_id = c("W07000002", "E14000001"), constituency_name = c("Zed", "Abbey"), mp_name = c(NA, "Ann Lee"), mp_party = c(NA, "X"),
+                    mp_email = c(NA, "ann@x"), mp_phone = c(NA, "020"))
+  c2 <- exp_constituency_table(sit)
+  expect_equal(c2$Constituency, c("Abbey", "Zed")); expect_equal(c2$Nation, c("England", "Wales"))
+  expect_equal(c2$MP[2], "(vacant or unmatched)")
+
+  b <- data.table(statement_id = 4812L, constituency_id = c("E1", "E2"), constituency_name = c("One", "Two"), mp_name = c("Ann", "Bo"), mp_email = c("a@x", NA),
+                  worst_rank = c(3L, 4L), worst_level = c("Medium", "High"), worst_date = c("2026-10-28", "2026-10-27"), is_escalation = c(TRUE, FALSE),
+                  has_active_warning = c(FALSE, TRUE), subject = c("s1", "s2"), body = c("b1\nline", "b2"), status = "draft", reviewed_by = NA)
+  e <- exp_email_table(b)
+  expect_equal(e$Constituency, c("Two", "One"))                                      # the highest risk first
+  expect_equal(e$`Warning in force`, c("Yes", "No")); expect_equal(e$Escalated, c("No", "Yes"))
+  expect_true(all(c("To (MP email)", "Subject", "Body", "Status") %in% names(e)))
+})

@@ -621,6 +621,20 @@ fetch_ea_constituency_mp <- function() demo_memo("ea_constituency_mp", {
              mp_phone = g$table$mp_phone[m$target])
 })
 
+# The areas and the constituencies they overlap, with the area's name and kind, for the Exports tab.
+fetch_area_constituency_links <- function() demo_memo("area_constituency_links", {
+  ea <- demo_ea_areas()$table
+  lk <- fetch_ea_constituency_mp()
+  k <- match(lk$ea_area_code, ea$ea_area_code)
+  data.table(ea_area_code = lk$ea_area_code, ea_area_name = ea$ea_area_name[k],
+             area_kind = ifelse(ea$ea_area_type[k] == "flood_warning", "Flood warning", "Flood alert"),
+             type_text = ifelse(ea$ea_area_type[k] == "flood_warning", "Flood Warning Fluvial", "Flood Alert Fluvial"),
+             county = "Demo county", river_or_sea = sub(" at .*", "", ea$ea_area_name[k]),
+             constituency_id = lk$constituency_id, constituency_name = lk$constituency_name,
+             share_of_area_in_constituency = lk$constituency_overlap_pct,
+             mp_name = lk$mp_name, mp_party = lk$mp_party, mp_email = lk$mp_email)
+})
+
 fetch_pipeline_health <- function() demo_health(demo_current()$problem)
 
 fetch_changes <- function(statement_id) demo_changes_for(demo_current()$scenario, as.integer(statement_id))

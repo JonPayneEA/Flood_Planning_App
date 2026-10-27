@@ -387,3 +387,23 @@ test_that("the situation tab narrows by flood source and impact, and says what t
     expect_true(all(impact$fgs_worst_impact %in% c("Significant", "Extreme")))
   })
 })
+
+
+test_that("the Exports tab loads the area links on first open and offers the three files", {
+  testServer(demo_srv$server, {
+    do.call(session$setInputs, demo_inputs)
+    expect_false(exp_started())                                              # nothing is fetched until the tab is opened
+    session$setInputs(main_tabs = "Exports")
+    expect_true(exp_started())
+    expect_gt(nrow(exp_links()), 0L)
+    n_default <- nrow(exp_links())
+    session$setInputs(exp_all_overlaps = TRUE)
+    expect_gte(nrow(exp_links()), n_default)
+    expect_match(txt(output$exp_links_note), "rows:")
+    expect_equal(nrow(exp_cons()), nrow(situation_latest_clean()))           # every constituency, whatever the nations filter says
+    expect_match(txt(output$exp_cons_note), "constituencies")
+    expect_gt(nrow(exp_mail()), 0L)
+    expect_match(txt(output$exp_mail_note), "drafts")
+    expect_true(all(c("To (MP email)", "Subject", "Body") %in% names(exp_mail())))
+  })
+})
