@@ -811,6 +811,19 @@ fetch_rt_readings <- function(measure_uris, days, sum_uris = character()) {
   }))
 }
 
+# Invented thresholds for the demonstration's level measures: an action level and a response level a little above the usual
+# range, so the lines show on the chart and a storm crosses them.
+fetch_fw_thresholds <- function(measure_uris) {
+  reg <- demo_rt_register()[measure_uri %in% measure_uris & parameter %in% "level"]
+  if (nrow(reg) == 0L) return(data.table(measure_uri = character(), type = character(), purpose = character(), season = character(),
+                                         value = numeric(), unit_name = character(), unit_match = character()))
+  rbindlist(lapply(seq_len(nrow(reg)), function(i) {
+    set.seed(sum(utf8ToInt(reg$measure_uri[i])))
+    data.table(measure_uri = reg$measure_uri[i], type = c("ACTCON", "RES"), purpose = "FW", season = "All",
+               value = round(c(1.2, 1.7) + runif(1, 0, 0.1), 2), unit_name = "m", unit_match = c("exact", "converted"))
+  }))
+}
+
 # Two years of invented warnings and alerts, heavier where the demo's storms fall.
 # Invented warnings and how the FGS covered them: two years, heavier in winter. The earliest covering
 # statement comes more often before the warning for serious polygons than for Very Low ones.

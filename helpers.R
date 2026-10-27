@@ -751,6 +751,18 @@ rt_panels <- function(readings, chosen) {
        label_of = stats::setNames(m$measure_label, m$measure_uri))
 }
 
+# The threshold lines for one measure as a table (value and hover label), from fetch_fw_thresholds(). The label is the file's own
+# Type and Purpose (RES / FW, ACTCON / FW) and the value, starred where job 28 moved it to the gauge's datum with z.
+rt_threshold_lines <- function(thr, uri) {
+  if (is.null(thr) || nrow(thr) == 0L) return(data.table::data.table(value = numeric(), label = character()))
+  d <- data.table::as.data.table(thr)[measure_uri == uri & is.finite(value)]
+  if (nrow(d) == 0L) return(data.table::data.table(value = numeric(), label = character()))
+  d <- unique(d, by = c("type", "purpose", "value"))
+  d[, label := sprintf("%s / %s threshold %s%s", rt_text(type), rt_text(purpose), format(round(value, 3), nsmall = 0, trim = TRUE),
+                      data.table::fifelse(rt_text(unit_match) == "converted", " (converted to this gauge's datum)", ""))]
+  d[order(value), .(value, label)]
+}
+
 # The shaded live band and the dashed archive | live line, as plotly layout shapes.
 rt_live_shapes <- function(boundary, start, now) {
   if (is.null(boundary) || boundary >= now) return(list())
@@ -1065,7 +1077,7 @@ empty_situation_message <- function(ranks, floor, other_filters = FALSE) {
 
 PIPELINE_TABLE_JOBS <- c(
   fgs_constituency_changes = 18L, constituency_flood_situation = 19L, mp_briefing_drafts = 20L,
-  fgs_constituency_exposure = 21L, pipeline_health = 22L, flood_warnings_current = 11L, ea_warning_episodes = 25L, ea_warning_fgs_coverage = 26L, ea_rt_measure_register = 9L, ea_rt_readings_all = 23L, ea_rt_latest = 23L, ea_rt_readings_bronze = 10L, fgs_constituency_mp_contacts = 14L,
+  fgs_constituency_exposure = 21L, pipeline_health = 22L, flood_warnings_current = 11L, ea_fw_threshold_gauge_links = 28L, ea_warning_episodes = 25L, ea_warning_fgs_coverage = 26L, ea_rt_measure_register = 9L, ea_rt_readings_all = 23L, ea_rt_latest = 23L, ea_rt_readings_bronze = 10L, fgs_constituency_mp_contacts = 14L,
   flood_warning_constituency_contacts = 13L, fgs_constituency_intersections = 7L,
   fgs_ea_area_intersections = 7L, ea_area_constituency_lookup = 6L)
 

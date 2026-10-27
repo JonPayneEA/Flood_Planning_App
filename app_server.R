@@ -2441,6 +2441,30 @@ server <- function(input, output, session) {
     list(readings = readings, chosen = reg[measure_uri %in% uris], days = days, boundary = boundary, now = now)
   }, ignoreNULL = FALSE)
 
+  # The flood warning thresholds for the measures on the chart, read only while the tick is on. They live in the restricted schema, so
+  # a failure (no access, job 28 not run) is explained under the chart rather than raised.
+  rt_thr <- reactive({
+    if (!isTRUE(input$rt_thresholds)) return(NULL)
+    d <- rt_data(); uris <- unique(d$readings$measure_uri)
+    if (length(uris) == 0L) return(NULL)
+    tryCatch(list(ok = TRUE, thr = fetch_fw_thresholds(uris)), error = function(e) {
+      message("[", format(Sys.time(), "%H:%M:%S"), "] fetch_fw_thresholds failed: ", substr(conditionMessage(e), 1L, 160L))
+      list(ok = FALSE, thr = NULL)
+    })
+  })
+
+  output$rt_thr_note <- renderUI({
+    t <- rt_thr()
+    if (is.null(t)) return(NULL)
+    if (!t$ok) return(tags$p(class = "text-muted",
+      "Thresholds are not available. They are held in the restricted schema, so the app may not have access, or notebook 28 has not run."))
+    n_m <- length(unique(t$thr$measure_uri))
+    if (nrow(t$thr) == 0L) return(tags$p(class = "app-caption", "No flood warning thresholds are linked to these measures."))
+    tags$p(class = "app-caption", sprintf("Red dashed lines: %d flood warning threshold%s on %d of %d measure%s. Labels give the type and purpose from the thresholds file.",
+                                          nrow(t$thr), if (nrow(t$thr) == 1L) "" else "s", n_m, length(unique(rt_data()$readings$measure_uri)),
+                                          if (length(unique(rt_data()$readings$measure_uri)) == 1L) "" else "s"))
+  })
+
   # ---------------------------------------------------------------------------
   # Rain gauges tab.
   #
@@ -2711,6 +2735,17 @@ server <- function(input, output, session) {
           p <- plotly::add_lines(p, x = g$date_time, y = g$value, name = panels$label_of[[uri]],
                                  line = list(color = cols[(match(uri, uris) - 1L) %% length(cols) + 1L], width = 1.6),
                                  hovertemplate = paste0("%{y} ", u, "<extra>", panels$label_of[[uri]], "</extra>"))
+        }
+        thr <- rt_thr()
+        if (!is.null(thr) && isTRUE(thr$ok)) {                               # a red dashed line across the panel for each threshold
+          for (uri in uris[panels$unit_of[uris] == u]) {
+            tl <- rt_threshold_lines(thr$thr, uri)
+            for (j in seq_len(nrow(tl))) {
+              p <- plotly::add_lines(p, x = c(start, d$now), y = rep(tl$value[j], 2L), name = tl$label[j], showlegend = FALSE,
+                                     line = list(color = "#D4351C", width = 1.5, dash = "dash"), hoverinfo = "text",
+                                     text = sprintf("%s: %s %s", tl$label[j], tl$value[j], u))
+            }
+          }
         }
         plotly::layout(p, yaxis = app_plot_axis(u, grid = TRUE, tickformat = ".3~g", nticks = 6), showlegend = TRUE)
       })
