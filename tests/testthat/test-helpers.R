@@ -944,5 +944,6 @@ test_that("threshold lines are listed per measure with a label, once each, and s
   expect_equal(l$value, c(1.29, 1.94))                                    # sorted by value, the repeat dropped
   expect_match(l$label[2], "RES / FW threshold 1.94 \\(converted")
   expect_false(grepl("converted", l$label[1]))
+  expect_equal(l$short, c("ACTCON / FW 1.29", "RES / FW 1.94*"))          # the text written on the line; a star where converted
   expect_equal(nrow(rt_threshold_lines(thr, "nothing")), 0L); expect_equal(nrow(rt_threshold_lines(NULL, "u1")), 0L)
 })
