@@ -937,13 +937,19 @@ test_that("the export tables hold the rows and columns the Exports tab promises"
 })
 
 
-test_that("threshold lines are listed per measure with a label, once each, and starred when converted", {
-  thr <- data.table(measure_uri = c("u1", "u1", "u1", "u2"), type = c("ACTCON", "RES", "RES", "RES"), purpose = "FW", season = "All",
-                    value = c(1.29, 1.94, 1.94, 5.5), unit_name = "m", unit_match = c("exact", "converted", "converted", "exact"))
+test_that("a threshold line is named from the label prefix and the target area, once each, and starred when converted", {
+  thr <- data.table(measure_uri = c("u1", "u1", "u1", "u2", "u3"), type = c("ACTCON", "RES", "RES", "RES", "RES"), purpose = "FW", season = "All",
+                    label_prefix = c("ACTCON FW", "RES FW", "RES FW", "RES FW", NA), target_area = c("065FWF3007", "065FWF3007", "065FWF3007", "061FWF23Ewen", NA),
+                    value = c(1.29, 1.94, 1.94, 5.5, 2.2), unit_name = "m", unit_match = c("exact", "converted", "converted", "exact", "exact"))
   l <- rt_threshold_lines(thr, "u1")
   expect_equal(l$value, c(1.29, 1.94))                                    # sorted by value, the repeat dropped
-  expect_match(l$label[2], "RES / FW threshold 1.94 \\(converted")
+  expect_equal(l$short, c("ACTCON FW 065FWF3007", "RES FW 065FWF3007*"))    # prefix and target area; a star where converted
+  expect_match(l$label[2], "RES FW 065FWF3007: 1.94 \\(converted")
   expect_false(grepl("converted", l$label[1]))
-  expect_equal(l$short, c("ACTCON / FW 1.29", "RES / FW 1.94*"))          # the text written on the line; a star where converted
+  expect_equal(rt_threshold_lines(thr, "u3")$short, "RES FW")             # no prefix and no area: Type and Purpose stand in
   expect_equal(nrow(rt_threshold_lines(thr, "nothing")), 0L); expect_equal(nrow(rt_threshold_lines(NULL, "u1")), 0L)
+  expect_equal(rt_threshold_lines(thr, "u1", res_only = TRUE)$short, "RES FW 065FWF3007*")           # the RES filter drops ACTCON
+  expect_equal(nrow(rt_threshold_lines(thr, "u1", res_only = FALSE)), 2L)
+  old <- thr[, .(measure_uri, type, purpose, season, value, unit_name, unit_match)]   # a links table from before the prefix was carried
+  expect_equal(rt_threshold_lines(old, "u2")$short, "RES FW")
 })

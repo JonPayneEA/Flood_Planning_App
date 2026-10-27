@@ -423,6 +423,9 @@ test_that("Hydrometrics reads thresholds only when ticked, and explains when it 
     expect_true(t$ok); expect_gt(nrow(t$thr), 0L)
     expect_match(txt(output$rt_thr_note), "Red dashed lines")
     expect_gt(nrow(rt_threshold_lines(t$thr, lv)), 0L)
+    session$setInputs(rt_thr_res_only = TRUE)                                  # only the RES thresholds
+    expect_match(txt(output$rt_thr_note), "RES threshold")
+    expect_lt(nrow(rt_threshold_lines(t$thr, lv, TRUE)), nrow(rt_threshold_lines(t$thr, lv)))
   })
   expect_equal(demo_srv$warehouse_calls, 0L)
 })

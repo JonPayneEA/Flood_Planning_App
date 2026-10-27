@@ -753,16 +753,22 @@ rt_panels <- function(readings, chosen) {
 
 # The threshold lines for one measure as a table (value, hover label and the short label written on the line), from fetch_fw_thresholds(). The label is the file's own
 # Type and Purpose (RES / FW, ACTCON / FW) and the value, starred where job 28 moved it to the gauge's datum with z.
-rt_threshold_lines <- function(thr, uri) {
+rt_threshold_lines <- function(thr, uri, res_only = FALSE) {
   none <- data.table::data.table(value = numeric(), label = character(), short = character())
   if (is.null(thr) || nrow(thr) == 0L) return(none)
   d <- data.table::as.data.table(thr)[measure_uri == uri & is.finite(value)]
+  if (isTRUE(res_only)) d <- d[toupper(trimws(rt_text(type))) == "RES"]          # only the RES thresholds: where impacts are expected
   if (nrow(d) == 0L) return(none)
-  d <- unique(d, by = c("type", "purpose", "value"))
+  for (cn in c("label_prefix", "target_area", "unit_match")) if (!(cn %in% names(d))) d[, (cn) := NA_character_]
+  # The name of a line: the file's label description prefix and the target area id (RES FW 065FWF3007). Without a prefix, Type and Purpose
+  # stand in; without a target area, the prefix is used alone.
+  prefix <- data.table::fifelse(nzchar(rt_text(d$label_prefix)), rt_text(d$label_prefix), trimws(paste(rt_text(d$type), rt_text(d$purpose))))
+  d[, name := trimws(paste(prefix, rt_text(target_area)))]
+  d <- unique(d, by = c("name", "value"))
   conv <- rt_text(d$unit_match) == "converted"
-  d[, label := sprintf("%s / %s threshold %s%s", rt_text(type), rt_text(purpose), format(round(value, 3), nsmall = 0, trim = TRUE),
+  d[, label := sprintf("%s: %s%s", name, format(round(value, 3), nsmall = 0, trim = TRUE),
                       data.table::fifelse(conv, " (converted to this gauge's datum)", ""))]
-  d[, short := sprintf("%s / %s %s%s", rt_text(type), rt_text(purpose), format(round(value, 3), nsmall = 0, trim = TRUE), data.table::fifelse(conv, "*", ""))]
+  d[, short := paste0(name, data.table::fifelse(conv, "*", ""))]
   d[order(value), .(value, label, short)]
 }
 

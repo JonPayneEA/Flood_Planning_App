@@ -816,10 +816,11 @@ fetch_rt_readings <- function(measure_uris, days, sum_uris = character()) {
 fetch_fw_thresholds <- function(measure_uris) {
   reg <- demo_rt_register()[measure_uri %in% measure_uris & parameter %in% "level"]
   if (nrow(reg) == 0L) return(data.table(measure_uri = character(), type = character(), purpose = character(), season = character(),
-                                         value = numeric(), unit_name = character(), unit_match = character()))
+                                         label_prefix = character(), target_area = character(), value = numeric(), unit_name = character(), unit_match = character()))
   rbindlist(lapply(seq_len(nrow(reg)), function(i) {
     set.seed(sum(utf8ToInt(reg$measure_uri[i])))
     data.table(measure_uri = reg$measure_uri[i], type = c("ACTCON", "RES"), purpose = "FW", season = "All",
+               label_prefix = c("ACTCON FW", "RES FW"), target_area = sprintf("DEMO-FWA-%03d", i),
                value = round(c(1.2, 1.7) + runif(1, 0, 0.1), 2), unit_name = "m", unit_match = c("exact", "converted"))
   }))
 }

@@ -600,19 +600,21 @@ fetch_area_constituency_links <- function() {
 # (linked or linked_chosen). Read only when the Hydrometrics tick is on; an error (no access, job 28 not run) is for the caller to explain.
 fetch_fw_thresholds <- function(measure_uris) {
   uris <- gsub("[^A-Za-z0-9:/._#-]", "", as.character(measure_uris)); uris <- uris[nzchar(uris)]
-  if (length(uris) == 0L) return(data.table(measure_uri = character(), type = character(), purpose = character(), season = character(),
-                                            value = numeric(), unit_name = character(), unit_match = character()))
+  empty <- data.table(measure_uri = character(), type = character(), purpose = character(), season = character(), label_prefix = character(),
+                      target_area = character(), value = numeric(), unit_name = character(), unit_match = character())
+  if (length(uris) == 0L) return(empty)
+  # SELECT * so a links table built before the label prefix was carried (job 28) still reads; the missing columns are filled in below.
   d <- as.data.table(db_query(sprintf("
-    SELECT DISTINCT measure_uri, type, purpose, season,
-           CAST(value_in_measure_unit AS DOUBLE) AS value, unit_name, unit_match
+    SELECT *
     FROM %s
     WHERE link_status IN ('linked', 'linked_chosen')
       AND measure_uri IN (%s)
       AND value_in_measure_unit IS NOT NULL
-    ORDER BY measure_uri, value
   ", TBL_FW_THRESHOLDS, paste0("'", uris, "'", collapse = ", "))))
-  if (nrow(d)) d[, value := as.numeric(value)]
-  d[]
+  for (cn in c("type", "purpose", "season", "label_prefix", "target_area", "unit_name", "unit_match")) if (!(cn %in% names(d))) d[, (cn) := NA_character_]
+  if (nrow(d) == 0L) return(empty)
+  d <- d[, .(measure_uri, type, purpose, season, label_prefix, target_area, value = as.numeric(value_in_measure_unit), unit_name, unit_match)]
+  unique(d)[order(measure_uri, value)]
 }
 
 fetch_pipeline_health <- function() {
