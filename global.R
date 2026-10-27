@@ -127,6 +127,8 @@ if (length(missing_vars) > 0L) {
 
 CAT <- Sys.getenv("FGS_CATALOG", unset = if (DEMO_MODE) "demo" else "")
 SCH <- Sys.getenv("FGS_SCHEMA",  unset = if (DEMO_MODE) "demo" else "")
+# The restricted schema holds the thresholds. Only the threshold lines on Hydrometrics read from it, and only when ticked.
+RESTRICTED_SCH <- Sys.getenv("FGS_RESTRICTED_SCHEMA", unset = if (DEMO_MODE) "demo" else "flood_forecasting_restricted")
 
 TBL_STATEMENTS      <- paste(CAT, SCH, "fgs_statements",                 sep = ".")
 TBL_RISK_POLYGONS   <- paste(CAT, SCH, "fgs_risk_polygons",              sep = ".")
@@ -161,6 +163,7 @@ TBL_RT_ALL      <- paste(CAT, SCH, "ea_rt_readings_all",      sep = ".")  # 23 (
 TBL_RT_LATEST   <- paste(CAT, SCH, "ea_rt_latest",            sep = ".")  # 23 (the newest reading of each measure)
 TBL_RT_BRONZE   <- paste(CAT, SCH, "ea_rt_readings_bronze",   sep = ".")  # 10 (the archive; its last day marks where live begins)
 TBL_WARNING_FGS <- paste(CAT, SCH, "ea_warning_fgs_coverage", sep = ".")  # 26 (each warning, and whether and when an FGS polygon covered it)
+TBL_FW_THRESHOLDS <- paste(CAT, RESTRICTED_SCH, "ea_fw_threshold_gauge_links", sep = ".")  # 28 (restricted: Observed flood warning thresholds linked to gauge measures)
 TBL_WARNING_EPISODES <- paste(CAT, SCH, "ea_warning_episodes",      sep = ".")  # 25 (each alert or warning from issue to withdrawal)
 
 

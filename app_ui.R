@@ -952,11 +952,13 @@ make_hydrometrics_tab <- function() tags$div(
     selectizeInput("rt_measures", "Measures (up to 8)", choices = NULL, multiple = TRUE, width = "620px",
                    options = list(maxItems = RT_MAX_MEASURES, placeholder = "Pick a station to start")),
     selectInput("rt_days", "How far back", choices = RT_WINDOWS, selected = 3L, width = "180px"),
+    checkboxInput("rt_thresholds", "Show flood warning thresholds, where available", FALSE),
     actionButton("rt_refresh", "Refresh", icon = icon("rotate"), class = "btn-sm btn-outline-secondary")
   ),
   uiOutput("rt_message"),
   if (requireNamespace("plotly", quietly = TRUE)) plotly::plotlyOutput("rt_plot", height = "auto")
   else tags$p(class = "text-muted", "The plotly package is not installed on this server, so the chart cannot be drawn."),
+  uiOutput("rt_thr_note"),
   uiOutput("rt_summary"),
   tags$details(
     class = "app-details",

@@ -48,12 +48,12 @@ GUIDE_TABLES <- data.frame(
             "ea_area_constituency_lookup", "mp_contact_details",
             "fgs_constituency_changes", "fgs_changes_log", "constituency_flood_situation", "mp_briefing_drafts",
             "fgs_constituency_exposure", "pipeline_health", "ea_warning_episodes",
-            "ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_readings_bronze", "ea_warning_fgs_coverage", "ea_rt_measures_mapped", "ea_rt_latest", "flood_warnings_current"),
-  notebook = c("01", "01", "07", "07", "03", "03", "05", "06", "04", "18", "18", "19", "20", "21", "22", "25", "09", "23", "10", "26", "16", "23", "11"),
+            "ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_readings_bronze", "ea_warning_fgs_coverage", "ea_rt_measures_mapped", "ea_rt_latest", "flood_warnings_current", "ea_fw_threshold_gauge_links"),
+  notebook = c("01", "01", "07", "07", "03", "03", "05", "06", "04", "18", "18", "19", "20", "21", "22", "25", "09", "23", "10", "26", "16", "23", "11", "28"),
   refresh = c("Each FGS issue or amendment", "Each FGS issue or amendment", "Each FGS issue", "Each FGS issue",
               "Weekly", "Weekly", "Quarterly, or after an election", "Weekly and quarterly", "Weekly",
               "Every poll", "Every poll", "Every poll", "Every poll", "Daily", "Every poll", "Every poll",
-              "Weekly", "Every 15 minutes", "Daily", "Daily", "When the mapping file changes", "Every 15 minutes", "Every poll"),
+              "Weekly", "Every 15 minutes", "Daily", "Daily", "When the mapping file changes", "Every 15 minutes", "Every poll", "Manual, when the mapping or thresholds change"),
   holds = c("One row per statement: the headline and the forecast text.",
             "One row per risk polygon, flood source and day, with impact, likelihood and risk level.",
             "Each FGS shape that overlaps an EA flood warning or alert area.",
@@ -76,7 +76,8 @@ GUIDE_TABLES <- data.frame(
             "Each alert and warning, and whether and when an FGS polygon covered it.",
             "The measure register with each measure's real gauge name, FFFS id and WISKI id, where the telemetry mapping matched it. Optional.",
             "The newest reading of each measure, from the live tail.",
-            "One row per EA area with an alert, warning or severe warning in force now, from the live feed."),
+            "One row per EA area with an alert, warning or severe warning in force now, from the live feed.",
+            "Observed flood warning thresholds linked to gauge measures, in each measure's own unit. Held in the restricted schema; read only when the Hydrometrics tick is on."),
   stringsAsFactors = FALSE
 )
 
@@ -377,13 +378,14 @@ guide_products <- function(s) {
     list(
       id = "hydrometrics", title = "Hydrometrics", where = "Hydrometrics",
       answers = "What have river levels, flows and rainfall been doing at the Environment Agency's gauges?",
-      tables = c("ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_readings_bronze", "ea_rt_measures_mapped"),
+      tables = c("ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_readings_bronze", "ea_rt_measures_mapped", "ea_fw_threshold_gauge_links"),
       steps = c(
         "The measure register lists every measure: a level, flow or rainfall series at a station. Where the telemetry mapping has matched a measure, a rain gauge the API calls only \"Rainfall station\" takes its real name, and the label carries its WISKI and FFFS ids, so you can search by either. The five drop-downs (EA area, river, parameter, station and FFFS ID) narrow each other, so a choice never leads to an empty list. Pick an FFFS ID, the key the thresholds use, to go straight to that gauge's measures; a gauge with two measures of one kind (a rain gauge's instantaneous and total readings, or a tide gauge in two datums) shows both.",
         "Choose up to eight measures and how far back to look, from 1 day to everything held. Readings are fetched only for those measures and that window, from one series that joins the daily archive to the live tail.",
         "Up to about 15 days every reading is drawn. Beyond that the warehouse summarises each measure to about 1,500 points, so a long window stays quick: level and flow are the mean of the readings in each point, and rainfall is the total. A short window shows the detail.",
         "Each unit gets its own panel, because metres and cubic metres a second do not share an axis.",
-        "The dashed line is midnight at the end of the last archived day. The shaded band to its right is the live tail, which the daily archive has not yet picked up."
+        "The dashed line is midnight at the end of the last archived day. The shaded band to its right is the live tail, which the daily archive has not yet picked up.",
+        "Tick \"Show flood warning thresholds\" to draw a red dashed line across the panel for each Observed flood warning threshold linked to a chosen measure (notebook 28). A line is in the measure's own unit: where the thresholds file gave it on another datum, notebook 28 has moved it to the gauge's datum, and the label says so. The label is the file's Type and Purpose, for example RES / FW. Thresholds are restricted, so the app needs access to that schema; without it, or before notebook 28 has run, the tick says they are not available."
       ),
       read = c(
         "Times are UTC. Hover for the value of every line at that time.",

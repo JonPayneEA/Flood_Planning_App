@@ -935,3 +935,14 @@ test_that("the export tables hold the rows and columns the Exports tab promises"
   expect_equal(e$`Warning in force`, c("Yes", "No")); expect_equal(e$Escalated, c("No", "Yes"))
   expect_true(all(c("To (MP email)", "Subject", "Body", "Status") %in% names(e)))
 })
+
+
+test_that("threshold lines are listed per measure with a label, once each, and starred when converted", {
+  thr <- data.table(measure_uri = c("u1", "u1", "u1", "u2"), type = c("ACTCON", "RES", "RES", "RES"), purpose = "FW", season = "All",
+                    value = c(1.29, 1.94, 1.94, 5.5), unit_name = "m", unit_match = c("exact", "converted", "converted", "exact"))
+  l <- rt_threshold_lines(thr, "u1")
+  expect_equal(l$value, c(1.29, 1.94))                                    # sorted by value, the repeat dropped
+  expect_match(l$label[2], "RES / FW threshold 1.94 \\(converted")
+  expect_false(grepl("converted", l$label[1]))
+  expect_equal(nrow(rt_threshold_lines(thr, "nothing")), 0L); expect_equal(nrow(rt_threshold_lines(NULL, "u1")), 0L)
+})

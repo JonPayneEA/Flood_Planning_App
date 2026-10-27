@@ -595,6 +595,26 @@ fetch_area_constituency_links <- function() {
 # badge in the header. The table is rebuilt on every poll, so it is tiny.
 # -----------------------------------------------------------------------------
 
+# fetch_fw_thresholds(): the Observed flood warning thresholds linked to these measures (job 28, restricted schema), in each measure's own
+# unit: value_in_measure_unit, which job 28 has moved to the gauge's datum where the file's unit differed. Only links the job made
+# (linked or linked_chosen). Read only when the Hydrometrics tick is on; an error (no access, job 28 not run) is for the caller to explain.
+fetch_fw_thresholds <- function(measure_uris) {
+  uris <- gsub("[^A-Za-z0-9:/._#-]", "", as.character(measure_uris)); uris <- uris[nzchar(uris)]
+  if (length(uris) == 0L) return(data.table(measure_uri = character(), type = character(), purpose = character(), season = character(),
+                                            value = numeric(), unit_name = character(), unit_match = character()))
+  d <- as.data.table(db_query(sprintf("
+    SELECT DISTINCT measure_uri, type, purpose, season,
+           CAST(value_in_measure_unit AS DOUBLE) AS value, unit_name, unit_match
+    FROM %s
+    WHERE link_status IN ('linked', 'linked_chosen')
+      AND measure_uri IN (%s)
+      AND value_in_measure_unit IS NOT NULL
+    ORDER BY measure_uri, value
+  ", TBL_FW_THRESHOLDS, paste0("'", uris, "'", collapse = ", "))))
+  if (nrow(d)) d[, value := as.numeric(value)]
+  d[]
+}
+
 fetch_pipeline_health <- function() {
   db_query(sprintf("
     SELECT check_name, status, value, detail, checked_at

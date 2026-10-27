@@ -11,6 +11,7 @@ demo_srv <- local({
   assign("AUTO_REFRESH_SECONDS", 0, envir = env)
   assign("CACHE_TTL_SECONDS", 0, envir = env)
   old <- setwd(app_root); on.exit(setwd(old))
+  source("theme.R", local = env)                       # the app sources it before the server; warning_icon() and the palette live there
   source("guide.R", local = env)
   source("app_server.R", local = env)                  # sources data.R, which sources demo.R
   env$warehouse_calls <- 0L
@@ -305,6 +306,7 @@ test_that("POC look-back switches off completely with FGS_POC_FEATURES=0", {
   for (n in ls(consts, all.names = TRUE)) assign(n, get(n, consts), envir = src)
   assign("DEMO_MODE", TRUE, envir = src); assign("AUTO_REFRESH_SECONDS", 0, envir = src); assign("CACHE_TTL_SECONDS", 0, envir = src)
   assign("POC_FEATURES", FALSE, envir = src)
+  source("theme.R", local = src)
   source("guide.R", local = src)
   source("app_server.R", local = src)
   testServer(src$server, {
@@ -406,4 +408,21 @@ test_that("the Exports tab loads the area links on first open and offers the thr
     expect_match(txt(output$exp_mail_note), "drafts")
     expect_true(all(c("To (MP email)", "Subject", "Body") %in% names(exp_mail())))
   })
+})
+
+
+test_that("Hydrometrics reads thresholds only when ticked, and explains when it cannot", {
+  testServer(demo_srv$server, {
+    do.call(session$setInputs, demo_inputs)
+    session$setInputs(main_tabs = "Hydrometrics")
+    lv <- rt_reg()[parameter == "level"]$measure_uri[1L]
+    session$setInputs(rt_days = 3L, rt_measures = lv)
+    expect_null(rt_thr())                                                    # nothing is read while the tick is off
+    session$setInputs(rt_thresholds = TRUE)
+    t <- rt_thr()
+    expect_true(t$ok); expect_gt(nrow(t$thr), 0L)
+    expect_match(txt(output$rt_thr_note), "Red dashed lines")
+    expect_gt(nrow(rt_threshold_lines(t$thr, lv)), 0L)
+  })
+  expect_equal(demo_srv$warehouse_calls, 0L)
 })
