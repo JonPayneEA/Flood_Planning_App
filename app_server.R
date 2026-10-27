@@ -2460,7 +2460,7 @@ server <- function(input, output, session) {
       "Thresholds are not available. They are held in the restricted schema, so the app may not have access, or notebook 28 has not run."))
     n_m <- length(unique(t$thr$measure_uri))
     if (nrow(t$thr) == 0L) return(tags$p(class = "app-caption", "No flood warning thresholds are linked to these measures."))
-    tags$p(class = "app-caption", sprintf("Red dashed lines: %d flood warning threshold%s on %d of %d measure%s. Labels give the type and purpose from the thresholds file.",
+    tags$p(class = "app-caption", sprintf("Red dashed lines: %d flood warning threshold%s on %d of %d measure%s. Each line is labelled with the type and purpose from the thresholds file and its value; a star means the value was moved to this gauge's datum.",
                                           nrow(t$thr), if (nrow(t$thr) == 1L) "" else "s", n_m, length(unique(rt_data()$readings$measure_uri)),
                                           if (length(unique(rt_data()$readings$measure_uri)) == 1L) "" else "s"))
   })
@@ -2740,10 +2740,11 @@ server <- function(input, output, session) {
         if (!is.null(thr) && isTRUE(thr$ok)) {                               # a red dashed line across the panel for each threshold
           for (uri in uris[panels$unit_of[uris] == u]) {
             tl <- rt_threshold_lines(thr$thr, uri)
-            for (j in seq_len(nrow(tl))) {
-              p <- plotly::add_lines(p, x = c(start, d$now), y = rep(tl$value[j], 2L), name = tl$label[j], showlegend = FALSE,
-                                     line = list(color = "#D4351C", width = 1.5, dash = "dash"), hoverinfo = "text",
-                                     text = sprintf("%s: %s %s", tl$label[j], tl$value[j], u))
+            for (j in seq_len(nrow(tl))) {                                   # the label is written at the right-hand end, above the line
+              p <- plotly::add_trace(p, type = "scatter", mode = "lines+text", x = c(start, d$now), y = rep(tl$value[j], 2L), name = tl$label[j], showlegend = FALSE,
+                                     line = list(color = "#D4351C", width = 1.5, dash = "dash"), text = c("", tl$short[j]), textposition = "top left",
+                                     textfont = list(color = "#D4351C", size = 12), hoverinfo = "text",
+                                     hovertext = sprintf("%s: %s %s", tl$label[j], tl$value[j], u))
             }
           }
         }
