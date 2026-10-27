@@ -2458,11 +2458,14 @@ server <- function(input, output, session) {
     if (is.null(t)) return(NULL)
     if (!t$ok) return(tags$p(class = "text-muted",
       "Thresholds are not available. They are held in the restricted schema, so the app may not have access, or notebook 28 has not run."))
-    n_m <- length(unique(t$thr$measure_uri))
+    shown <- t$thr
+    if (isTRUE(input$rt_thr_res_only)) shown <- shown[toupper(trimws(rt_text(type))) == "RES"]
+    uris_on <- unique(rt_data()$readings$measure_uri)
     if (nrow(t$thr) == 0L) return(tags$p(class = "app-caption", "No flood warning thresholds are linked to these measures."))
-    tags$p(class = "app-caption", sprintf("Red dashed lines: %d flood warning threshold%s on %d of %d measure%s. Each line is named from the thresholds file's label prefix and target area, for example RES FW 065FWF3007; hover for the value. A star means the value was moved to this gauge's datum.",
-                                          nrow(t$thr), if (nrow(t$thr) == 1L) "" else "s", n_m, length(unique(rt_data()$readings$measure_uri)),
-                                          if (length(unique(rt_data()$readings$measure_uri)) == 1L) "" else "s"))
+    if (nrow(shown) == 0L) return(tags$p(class = "app-caption", "No RES thresholds are linked to these measures. Untick \"Only the RES thresholds\" to see the others."))
+    tags$p(class = "app-caption", sprintf("Red dashed lines: %d %sthreshold%s on %d of %d measure%s. Each line is named from the thresholds file's label prefix and target area, for example RES FW 065FWF3007; hover for the value. A star means the value was moved to this gauge's datum.",
+                                          nrow(shown), if (isTRUE(input$rt_thr_res_only)) "RES " else "flood warning ", if (nrow(shown) == 1L) "" else "s",
+                                          length(unique(shown$measure_uri)), length(uris_on), if (length(uris_on) == 1L) "" else "s"))
   })
 
   # ---------------------------------------------------------------------------
@@ -2739,7 +2742,7 @@ server <- function(input, output, session) {
         thr <- rt_thr()
         if (!is.null(thr) && isTRUE(thr$ok)) {                               # a red dashed line across the panel for each threshold
           for (uri in uris[panels$unit_of[uris] == u]) {
-            tl <- rt_threshold_lines(thr$thr, uri)
+            tl <- rt_threshold_lines(thr$thr, uri, isTRUE(input$rt_thr_res_only))
             for (j in seq_len(nrow(tl))) {                                   # the label is written at the right-hand end, above the line
               p <- plotly::add_trace(p, type = "scatter", mode = "lines+text", x = c(start, d$now), y = rep(tl$value[j], 2L), name = tl$label[j], showlegend = FALSE,
                                      line = list(color = "#D4351C", width = 1.5, dash = "dash"), text = c("", tl$short[j]), textposition = "top left",

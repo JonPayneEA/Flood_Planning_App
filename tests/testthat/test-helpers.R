@@ -948,6 +948,8 @@ test_that("a threshold line is named from the label prefix and the target area, 
   expect_false(grepl("converted", l$label[1]))
   expect_equal(rt_threshold_lines(thr, "u3")$short, "RES FW")             # no prefix and no area: Type and Purpose stand in
   expect_equal(nrow(rt_threshold_lines(thr, "nothing")), 0L); expect_equal(nrow(rt_threshold_lines(NULL, "u1")), 0L)
+  expect_equal(rt_threshold_lines(thr, "u1", res_only = TRUE)$short, "RES FW 065FWF3007*")           # the RES filter drops ACTCON
+  expect_equal(nrow(rt_threshold_lines(thr, "u1", res_only = FALSE)), 2L)
   old <- thr[, .(measure_uri, type, purpose, season, value, unit_name, unit_match)]   # a links table from before the prefix was carried
   expect_equal(rt_threshold_lines(old, "u2")$short, "RES FW")
 })

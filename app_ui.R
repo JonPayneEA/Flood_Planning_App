@@ -953,6 +953,7 @@ make_hydrometrics_tab <- function() tags$div(
                    options = list(maxItems = RT_MAX_MEASURES, placeholder = "Pick a station to start")),
     selectInput("rt_days", "How far back", choices = RT_WINDOWS, selected = 3L, width = "180px"),
     checkboxInput("rt_thresholds", "Show flood warning thresholds, where available", FALSE),
+    conditionalPanel("input.rt_thresholds", checkboxInput("rt_thr_res_only", "Only the RES thresholds", FALSE)),
     actionButton("rt_refresh", "Refresh", icon = icon("rotate"), class = "btn-sm btn-outline-secondary")
   ),
   uiOutput("rt_message"),

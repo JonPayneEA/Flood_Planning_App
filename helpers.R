@@ -753,10 +753,11 @@ rt_panels <- function(readings, chosen) {
 
 # The threshold lines for one measure as a table (value, hover label and the short label written on the line), from fetch_fw_thresholds(). The label is the file's own
 # Type and Purpose (RES / FW, ACTCON / FW) and the value, starred where job 28 moved it to the gauge's datum with z.
-rt_threshold_lines <- function(thr, uri) {
+rt_threshold_lines <- function(thr, uri, res_only = FALSE) {
   none <- data.table::data.table(value = numeric(), label = character(), short = character())
   if (is.null(thr) || nrow(thr) == 0L) return(none)
   d <- data.table::as.data.table(thr)[measure_uri == uri & is.finite(value)]
+  if (isTRUE(res_only)) d <- d[toupper(trimws(rt_text(type))) == "RES"]          # only the RES thresholds: where impacts are expected
   if (nrow(d) == 0L) return(none)
   for (cn in c("label_prefix", "target_area", "unit_match")) if (!(cn %in% names(d))) d[, (cn) := NA_character_]
   # The name of a line: the file's label description prefix and the target area id (RES FW 065FWF3007). Without a prefix, Type and Purpose
