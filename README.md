@@ -403,7 +403,7 @@ nations filter says, and open in Excel (UTF-8 with a byte order mark).
 ### Thresholds on River levels and flows
 
 The tick "Show flood warning thresholds, where available" draws a red dashed line across the panel for each Observed flood warning
-threshold linked to a chosen measure, labelled with the thresholds file's Type and Purpose (for example RES / FW). The values come
+threshold linked to a chosen measure, named from the thresholds file's label description prefix and target area id (for example RES FW 065FWF3007). The values come
 from `ea_fw_threshold_gauge_links` (notebook 28) in the RESTRICTED schema, in each measure's own unit; a value that notebook 28
 moved to the gauge's datum says so in its label. They are read only while the tick is on. The identity the app runs as needs SELECT
 on that table (`FGS_RESTRICTED_SCHEMA`, default `flood_forecasting_restricted`); without it, or before notebook 28 has run, the tick

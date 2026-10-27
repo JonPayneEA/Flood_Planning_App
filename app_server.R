@@ -2460,7 +2460,7 @@ server <- function(input, output, session) {
       "Thresholds are not available. They are held in the restricted schema, so the app may not have access, or notebook 28 has not run."))
     n_m <- length(unique(t$thr$measure_uri))
     if (nrow(t$thr) == 0L) return(tags$p(class = "app-caption", "No flood warning thresholds are linked to these measures."))
-    tags$p(class = "app-caption", sprintf("Red dashed lines: %d flood warning threshold%s on %d of %d measure%s. Each line is labelled with the type and purpose from the thresholds file and its value; a star means the value was moved to this gauge's datum.",
+    tags$p(class = "app-caption", sprintf("Red dashed lines: %d flood warning threshold%s on %d of %d measure%s. Each line is named from the thresholds file's label prefix and target area, for example RES FW 065FWF3007; hover for the value. A star means the value was moved to this gauge's datum.",
                                           nrow(t$thr), if (nrow(t$thr) == 1L) "" else "s", n_m, length(unique(rt_data()$readings$measure_uri)),
                                           if (length(unique(rt_data()$readings$measure_uri)) == 1L) "" else "s"))
   })
