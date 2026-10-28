@@ -47,6 +47,9 @@ test_that("no demo fetcher reaches for the warehouse", {
     big <- ae$area_id[which.max(ae$sites)]
     st <- demo_env$fetch_area_sites(big)
     expect_equal(nrow(st), ae$sites[ae$area_id == big]); expect_false(is.unsorted(rev(st$rofrs_rank)))
+    geo <- demo_env$fetch_area_geographies(big)
+    expect_true(all(names(RESPONDER_GEOGRAPHIES) %in% geo$geography))
+    for (gg in unique(geo$geography)) expect_equal(sum(geo[geography == gg]$share_of_area_people), 1, tolerance = 0.01)
     ov <- demo_env$fetch_area_overlaps(ae$area_id[1L])
     expect_true(all(c("area_id_a", "area_id_b", "people", "name_a", "name_b") %in% names(ov)))
     expect_no_error(demo_env$fetch_warning_episodes(demo_env$fetch_warning_history()$constituency_id[1L]))

@@ -813,6 +813,30 @@ fetch_area_sites <- function(area_id) {
              site_type = type, band = c("None", "Very Low", "Low", "Medium", "High")[rank + 1L], rofrs_rank = as.integer(rank))
 }
 
+# Invented responders for a demo area: a few of each geography, sharing the area's people.
+fetch_area_geographies <- function(area_id = NULL) {
+  d <- demo_area_exposure()
+  ids <- if (is.null(area_id)) d$area_id else area_id
+  rows <- lapply(ids, function(id) {
+    i <- match(id, d$area_id)
+    if (is.na(i)) return(NULL)
+    set.seed(sum(utf8ToInt(id)))
+    geos <- c(local_authority_district = "District", county_or_unitary = "County", police_force_area = "Police", constituency = "Constituency", region = "Region", ward = "Ward")
+    rbindlist(lapply(names(geos), function(g) {
+      k <- if (g == "region") 1L else if (g == "ward") 4L else sample(1:3, 1L)
+      w <- diff(c(0, sort(runif(k - 1L)), 1))
+      data.table(kind = d$kind[i], area_id = id, geography = g, code = sprintf("D%s%d", substr(g, 1, 2), seq_len(k)),
+                 name = sprintf("Demo %s %s", geos[[g]], LETTERS[seq_len(k)]), addresses = round(d$addresses[i] * w), people = round(d$people[i] * w),
+                 households = round(d$households[i] * w), over65 = round(d$over65[i] * w), people_rs_high_medium = round(d$people_rs_high_medium[i] * w),
+                 share_of_area_people = round(w, 4))
+    }))
+  })
+  out <- rbindlist(rows)
+  if (nrow(out) == 0L) return(data.table(kind = character(), area_id = character(), geography = character(), code = character(), name = character(),
+                                          addresses = numeric(), people = numeric(), households = numeric(), over65 = numeric(), people_rs_high_medium = numeric(), share_of_area_people = numeric()))
+  out[order(kind, area_id, geography, -people)]
+}
+
 fetch_area_overlaps <- function(area_id) {
   d <- demo_area_exposure()
   i <- match(area_id, d$area_id)
