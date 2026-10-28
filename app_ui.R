@@ -1067,7 +1067,7 @@ make_areas_tab <- function() tags$div(
     selectInput("areas_kind", "Kind", choices = c("Flood warning and alert" = "both", "Flood warning" = "flood_warning", "Flood alert" = "flood_alert"), width = "220px"),
     selectInput("areas_county", "County", choices = c("All" = ""), width = "200px"),
     selectInput("areas_source", "Flood source", choices = c("Rivers and the sea" = "any", "Fluvial (rivers)" = "fluvial", "Coastal" = "coastal"), width = "200px"),
-    selectInput("areas_sort", "Sort by", choices = c("People at risk" = "people_rs_high_medium", "Share at risk" = "share_people_high_medium", "People" = "people",
+    selectInput("areas_sort", "Sort by", choices = c("Risk score" = "risk_score", "People at risk" = "people_rs_high_medium", "Share at risk" = "share_people_high_medium", "People" = "people",
                                                     "Households at High or Medium" = "households_rs_high_medium", "Critical sites" = "sites", "Area name" = "area_name"), width = "230px"),
     textInput("areas_search", "Search", placeholder = "Area name", width = "200px"),
     downloadButton("download_areas", "Download CSV", class = "btn-primary")

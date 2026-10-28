@@ -1583,6 +1583,22 @@ bookmark_noise <- function(input_names) {
 }
 
 
+# Columns the area pages read that an older ea_area_exposure may not have yet. Missing ones are added empty (NA), so a page built before the
+# column existed still draws, and says nothing rather than failing.
+AREA_OPTIONAL_COLUMNS <- c("risk_score", "risk_score_max", "grid_cells")
+ensure_area_columns <- function(x) {
+  x <- data.table::as.data.table(x)
+  for (cn in setdiff(AREA_OPTIONAL_COLUMNS, names(x))) data.table::set(x, j = cn, value = NA_real_)
+  x
+}
+
+# The score bar in the Warning areas table: the number, and a bar from pale to deep magenta that fills with the score (0 to 100). "-" when blank.
+score_bar_html <- function(score) {
+  s <- suppressWarnings(as.numeric(score))
+  w <- pmin(pmax(ifelse(is.na(s), 0, s), 0), 100)
+  ifelse(is.na(s), "-", sprintf("<div class=\"score-cell\"><b>%.1f</b><div class=\"score-bar\"><i style=\"width:%.0f%%\"></i></div></div>", s, w))
+}
+
 # ---- Who is in the areas in force now -----------------------------------------------------------------------------------
 # `f` is the areas in force (flood_area_id, severity_level 1 severe, 2 warning, 3 alert), `ex` the exposure table (kind, area_id, people,
 # households, people_rs_high_medium) and `pairs` the pairs of areas of one kind that share people (kind, area_id_a, area_id_b, people).

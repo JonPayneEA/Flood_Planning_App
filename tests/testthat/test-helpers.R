@@ -1028,6 +1028,15 @@ test_that("shareable links drop table and map mechanics but keep real filters an
 })
 
 
+test_that("older exposure tables get the area score columns empty, and the score bar fills with the score", {
+  x <- ensure_area_columns(data.frame(area_id = "A", people = 5))
+  expect_true(all(c("risk_score", "risk_score_max", "grid_cells") %in% names(x))); expect_true(is.na(x$risk_score))
+  y <- ensure_area_columns(data.frame(area_id = "A", risk_score = 31.2))
+  expect_equal(y$risk_score, 31.2)
+  b <- score_bar_html(c(31.24, NA, 140))
+  expect_match(b[1L], "<b>31.2</b>"); expect_match(b[1L], "width:31%"); expect_equal(b[2L], "-"); expect_match(b[3L], "width:100%")
+})
+
 test_that("the in-force summary counts warnings against warnings, takes shared people off once, and tolerates missing figures", {
   f <- data.frame(flood_area_id = c("W1", "W2", "S1", "A1", "A9"), severity_level = c(2L, 2L, 1L, 3L, 3L))
   ex <- data.frame(kind = c("flood_warning", "flood_warning", "flood_warning", "flood_alert"), area_id = c("W1", "W2", "S1", "A1"),
