@@ -1118,7 +1118,7 @@ make_area_detail_tab <- function() tags$div(
       tags$h2("Constituencies"),
       uiOutput("area_cons"))),
   tags$h2("Who responds"),
-  tags$p(class = "app-caption", "The police forces, authorities and regions this area lies in, with the people in each. A person is counted once in each table, so each table adds up to the area's people. Fire and rescue and combined authorities are not here yet."),
+  tags$p(class = "app-caption", "The police forces, authorities and regions this area lies in, with the people in each. A person is counted once in each table, so each table adds up to the area's people, except combined authorities, which cover only part of England: people outside one are not listed."),
   uiOutput("area_responders"),
   tags$h2("The same area by flood band"),
   tags$p(class = "app-caption", "The map can show the NaFRA2 bands on their own, without the score."),

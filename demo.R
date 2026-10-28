@@ -821,10 +821,12 @@ fetch_area_geographies <- function(area_id = NULL) {
     i <- match(id, d$area_id)
     if (is.na(i)) return(NULL)
     set.seed(sum(utf8ToInt(id)))
-    geos <- c(local_authority_district = "District", county_or_unitary = "County", police_force_area = "Police", constituency = "Constituency", region = "Region", ward = "Ward")
+    geos <- c(local_authority_district = "District", county_or_unitary = "County", police_force_area = "Police", fire_and_rescue_authority = "Fire", combined_authority = "Combined",
+              constituency = "Constituency", region = "Region", ward = "Ward")
     rbindlist(lapply(names(geos), function(g) {
       k <- if (g == "region") 1L else if (g == "ward") 4L else sample(1:3, 1L)
       w <- diff(c(0, sort(runif(k - 1L)), 1))
+      if (g == "combined_authority") w <- w * 0.6                     # a combined authority covers only part of England
       data.table(kind = d$kind[i], area_id = id, geography = g, code = sprintf("D%s%d", substr(g, 1, 2), seq_len(k)),
                  name = sprintf("Demo %s %s", geos[[g]], LETTERS[seq_len(k)]), addresses = round(d$addresses[i] * w), people = round(d$people[i] * w),
                  households = round(d$households[i] * w), over65 = round(d$over65[i] * w), people_rs_high_medium = round(d$people_rs_high_medium[i] * w),

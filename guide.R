@@ -84,7 +84,7 @@ GUIDE_TABLES <- data.frame(
             "Per constituency: people, people at risk, and how many of each a warning or alert area covers. Restricted schema.",
             "One row per 100 m cell of England: people, deprivation, rivers and sea band shares, critical sites and a 0 to 100 risk score. Restricted schema; read only for the part of the map in view.",
             "Each critical site inside each warning or alert area, with its rivers and sea band. Restricted schema; read for the area being viewed.",
-            "Each warning or alert area split by the police force, district, county, ward, constituency and region it lies in, with the people in each. Restricted schema; read for the area being viewed."),
+            "Each warning or alert area split by the police force, fire and rescue authority, combined authority, district, county, ward, constituency and region it lies in, with the people in each. Restricted schema; read for the area being viewed."),
   stringsAsFactors = FALSE
 )
 
@@ -422,7 +422,7 @@ guide_products <- function(s) {
         "Areas of one kind overlap. Gross counts everyone inside the area. Unique counts only people in no other area of that kind. Split shares each person equally between the areas they are in, so split figures add up to the true total.",
         "Select an area for its figures, the 100 m grid inside it, its people by band, the named critical sites in a High or Medium band, and the areas that share people with it.",
         "On the Forecast map, tick Risk grid and zoom in to street level: each 100 m cell is coloured by its risk score, the rivers and sea band weighted by people, deprivation and critical sites. Only the cells in view with a score at or above the slider are read, the highest first, up to a cap.",
-        "Who responds lists the police forces, districts, counties, constituencies and regions the area lies in. Every address point carries each of these codes from the National Statistics UPRN Lookup, so the area's people are split among them. Each table adds up to the area's people. Fire and rescue and combined authorities are not in the lookup and are planned. Wards are in the export only.",
+        "Who responds lists the police forces, fire and rescue authorities, combined authorities, districts, counties, constituencies and regions the area lies in. Every address point carries each of these codes from the National Statistics UPRN Lookup, so the area's people are split among them. Each table adds up to the area's people. Fire and rescue authorities and combined authorities are not in that lookup, so they are reached another way: the fire authority from the boundary file, through the output area each address is in, and the combined authority from the district it is in. Combined authorities cover only part of England, so that table can add up to less than the area's people. Wards are in the export only.",
         "The coverage panel counts every person once and shows how many of those in a High or Medium band sit in no warning area, and in no alert area. The constituency view gives the same split for each constituency."
       ),
       read = c(

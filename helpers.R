@@ -1554,7 +1554,8 @@ grid_band_colour <- function(haz) {
 
 # The geographies responders work to, in the order the area detail page lists them, with the heading each gets. Ward is in the export only:
 # an area can touch dozens, which would swamp the page.
-RESPONDER_GEOGRAPHIES <- c(police_force_area = "Police force", local_authority_district = "District or unitary authority",
+RESPONDER_GEOGRAPHIES <- c(police_force_area = "Police force", fire_and_rescue_authority = "Fire and rescue authority",
+                           combined_authority = "Combined authority", local_authority_district = "District or unitary authority",
                            county_or_unitary = "County or unitary authority", constituency = "Constituency", region = "Region")
 
 
