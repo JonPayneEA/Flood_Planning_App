@@ -950,6 +950,12 @@ fetch_area_geographies <- function(area_id = NULL) {
   ", TBL_AREA_GEOGRAPHIES, where))
 }
 
+# fetch_area_overlap_pairs(): every pair of areas of one kind that share people (a few thousand rows), for working out the people in a set of
+#   areas without counting a shared person twice.
+fetch_area_overlap_pairs <- function() {
+  db_query(sprintf("SELECT kind, area_id_a, area_id_b, addresses, people FROM %s", TBL_AREA_OVERLAPS))
+}
+
 fetch_area_overlaps <- function(area_id) {
   id <- gsub("[^A-Za-z0-9_.-]", "", as.character(area_id))
   db_query(sprintf("
@@ -1520,6 +1526,7 @@ fetch_area_shape                   <- with_cache(fetch_area_shape,              
 fetch_area_constituency_links      <- with_cache(fetch_area_constituency_links,      "area_cons_links", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_area_sites                   <- with_cache(fetch_area_sites,                   "area_sites", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_area_geographies              <- with_cache(fetch_area_geographies,              "area_geographies", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
+fetch_area_overlap_pairs            <- with_cache(fetch_area_overlap_pairs,            "area_pairs", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_area_overlaps                <- with_cache(fetch_area_overlaps,                "area_overlaps", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_area_coverage                <- with_cache(fetch_area_coverage,                "area_coverage", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_constituency_exposure        <- with_cache(fetch_constituency_exposure,        "const_exposure", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
