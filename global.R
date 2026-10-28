@@ -164,6 +164,8 @@ TBL_RT_LATEST   <- paste(CAT, SCH, "ea_rt_latest",            sep = ".")  # 23 (
 TBL_RT_BRONZE   <- paste(CAT, SCH, "ea_rt_readings_bronze",   sep = ".")  # 10 (the archive; its last day marks where live begins)
 TBL_WARNING_FGS <- paste(CAT, SCH, "ea_warning_fgs_coverage", sep = ".")  # 26 (each warning, and whether and when an FGS polygon covered it)
 TBL_FW_THRESHOLDS <- paste(CAT, RESTRICTED_SCH, "ea_fw_threshold_gauge_links", sep = ".")  # 28 (restricted: Observed flood warning thresholds linked to gauge measures)
+TBL_AREA_EXPOSURE <- paste(CAT, RESTRICTED_SCH, "ea_area_exposure",         sep = ".")  # 35 (restricted: people, households and bands inside each warning or alert area)
+TBL_AREA_OVERLAPS <- paste(CAT, RESTRICTED_SCH, "ea_area_overlaps",         sep = ".")  # 35 (restricted: pairs of areas of one kind that share people)
 TBL_WARNING_EPISODES <- paste(CAT, SCH, "ea_warning_episodes",      sep = ".")  # 25 (each alert or warning from issue to withdrawal)
 
 

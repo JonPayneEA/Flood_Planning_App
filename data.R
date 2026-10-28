@@ -890,6 +890,43 @@ fetch_warnings_in_force <- function() {
 
 
 # -----------------------------------------------------------------------------
+# Warning area exposure (ea_area_exposure and ea_area_overlaps, FGS_Notebooks job 35; restricted schema)
+#
+# fetch_area_exposure(): one row per flood warning area and flood alert area: people, households,
+#   the rivers and sea bands, Flood Zones, the unique and split counts that cope with overlap, and the
+#   sites inside. Rivers and sea only.
+# fetch_area_overlaps(): the areas of the same kind that share people with one area.
+#   The id comes from a browser input, so it is reduced to safe characters before the SQL.
+# -----------------------------------------------------------------------------
+
+fetch_area_exposure <- function() {
+  db_query(sprintf("
+    SELECT
+      kind, area_id, area_name, type_text, area_source, river_or_sea, county, area_km2,
+      addresses, people, households, over65,
+      people_rs_very_low, people_rs_low, people_rs_medium, people_rs_high, people_rs_high_medium, share_people_high_medium,
+      people_fz3, people_imd_1_2, share_people_imd_1_2,
+      people_unique, people_split, people_shared, share_people_shared,
+      sites, sites_health, sites_education, sites_emergency, sites_utilities, sites_rs_high_medium
+    FROM %s
+  ", TBL_AREA_EXPOSURE))
+}
+
+fetch_area_overlaps <- function(area_id) {
+  id <- gsub("[^A-Za-z0-9_.-]", "", as.character(area_id))
+  db_query(sprintf("
+    SELECT o.kind, o.area_id_a, o.area_id_b, o.addresses, o.people,
+           a.area_name AS name_a, b.area_name AS name_b
+    FROM %s o
+    LEFT JOIN %s a ON a.kind = o.kind AND a.area_id = o.area_id_a
+    LEFT JOIN %s b ON b.kind = o.kind AND b.area_id = o.area_id_b
+    WHERE o.area_id_a = '%s' OR o.area_id_b = '%s'
+    ORDER BY o.people DESC
+  ", TBL_AREA_OVERLAPS, TBL_AREA_EXPOSURE, TBL_AREA_EXPOSURE, id, id))
+}
+
+
+# -----------------------------------------------------------------------------
 # Hydrometrics (Environment Agency real-time data)
 #
 # fetch_rt_register(): one row per measure (what is measured, where, on which river), with the real
@@ -1372,6 +1409,8 @@ fetch_coverage_summary             <- with_cache(fetch_coverage_summary,        
 fetch_coverage_warnings            <- with_cache(fetch_coverage_warnings,            "cov_warnings", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_coverage_detail              <- with_cache(fetch_coverage_detail,              "cov_detail", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_coverage_span                <- with_cache(fetch_coverage_span,                "cov_span", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
+fetch_area_exposure                <- with_cache(fetch_area_exposure,                "area_exposure", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
+fetch_area_overlaps                <- with_cache(fetch_area_overlaps,                "area_overlaps", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_rt_register                  <- with_cache(fetch_rt_register,                  "rt_register", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_rt_boundary                  <- with_cache(fetch_rt_boundary,                  "rt_boundary", ttl = min(CACHE_TTL_SECONDS, 300))
 fetch_data_signature               <- with_cache(fetch_data_signature,               "signature", ttl = 0)

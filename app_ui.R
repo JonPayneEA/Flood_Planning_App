@@ -1041,6 +1041,38 @@ make_overview_tab <- function() tags$div(
 
 
 # -----------------------------------------------------------------------------
+# Warning areas tab.
+#
+# One row per flood warning area and flood alert area, with the people and households inside it and how many of them sit in a High or
+# Medium rivers and sea band (FGS_Notebooks job 35). Pick a row for the figures, the overlap with other areas and the sites inside.
+# Rivers and the sea only: surface water is not counted.
+# -----------------------------------------------------------------------------
+
+make_areas_tab <- function() tags$div(
+  class = "areas-page",
+  tags$h1(class = "app-title", "Warning areas"),
+  tags$p(class = "app-lead", "Who lives inside each flood warning area and flood alert area, and how many of them are in a High or Medium band for flooding from rivers and the sea."),
+  uiOutput("areas_note"),
+  tags$div(
+    class = "filter-row",
+    selectInput("areas_kind", "Kind of area", choices = c("Flood warning areas" = "flood_warning", "Flood alert areas" = "flood_alert"), width = "240px"),
+    selectInput("areas_source", "Flood source", choices = c("Any" = "any", "Fluvial (rivers)" = "fluvial", "Coastal" = "coastal"), width = "220px"),
+    downloadButton("download_areas", "Export CSV", class = "btn-sm btn-outline-secondary")
+  ),
+  DT::dataTableOutput("areas_table"),
+  tags$h2(class = "sit-briefing-h", "The selected area"),
+  uiOutput("area_detail"),
+  tags$h3("Areas that share people with it"),
+  DT::dataTableOutput("area_overlaps"),
+  tags$details(class = "app-details", tags$summary("How the figures are made"), tags$p(
+    "Each address point is placed in the areas whose boundary contains it, and its people are the Census 2021 output area total shared equally among the points in that output area. ",
+    "People are everyone inside the area. Areas overlap, so a person can be in more than one: add the figures for one kind of area only after reading the unique and split columns, and never add warning areas to alert areas. ",
+    "At risk means a High or Medium band in the rivers and sea risk map. Surface water is not counted, because the Environment Agency does not issue warnings for it. ",
+    "Until AddressBase Premium is available the points come from the National Statistics UPRN Lookup, so counts are of addresses, not of buildings or businesses."))
+)
+
+
+# -----------------------------------------------------------------------------
 # Exports tab.
 #
 # Three lists to take away as CSV: the flood warning and flood alert areas linked to constituencies, every constituency with its
@@ -1137,6 +1169,7 @@ ui <- function(request) {
     ),
 
     tabPanel("Constituency situation", make_situation_tab()),
+    tabPanel("Warning areas",          make_areas_tab()),
     tabPanel("Exposure history",       make_exposure_tab()),
     tabPanel("Warning history",        make_warning_history_tab()),
     tabPanel("Warnings vs FGS",        make_coverage_tab()),

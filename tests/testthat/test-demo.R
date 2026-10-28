@@ -29,6 +29,13 @@ test_that("no demo fetcher reaches for the warehouse", {
       expect_no_error(demo_env[[fn]]())
     }
     expect_no_error(demo_env$fetch_exposure(12))
+    ae <- demo_env$fetch_area_exposure()
+    expect_true(all(c("kind", "area_id", "people", "people_rs_high_medium", "people_unique", "people_split", "share_people_shared") %in% names(ae)))
+    expect_true(all(ae$people_rs_high_medium <= ae$people) && all(ae$people_unique <= ae$people))
+    expect_true(all(ae$people_rs_very_low + ae$people_rs_low + ae$people_rs_medium + ae$people_rs_high <= ae$people))
+    expect_true(all(c("flood_warning", "flood_alert") %in% ae$kind))
+    ov <- demo_env$fetch_area_overlaps(ae$area_id[1L])
+    expect_true(all(c("area_id_a", "area_id_b", "people", "name_a", "name_b") %in% names(ov)))
     expect_no_error(demo_env$fetch_warning_episodes(demo_env$fetch_warning_history()$constituency_id[1L]))
     sp <- demo_env$fetch_coverage_span()
     cs <- demo_env$fetch_coverage_summary(sp$first, sp$last, "any")

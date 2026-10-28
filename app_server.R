@@ -2281,6 +2281,100 @@ server <- function(input, output, session) {
           cat = cat, start_raw = start_time, end_raw = end_time, stale = as.logical(stale_open))]
   })
 
+  # ---- Warning areas (FGS_Notebooks job 35) --------------------------------------------------------------
+  areas_started <- reactive(identical(input$main_tabs, "Warning areas"))
+
+  areas_all <- reactive({
+    req(areas_started())
+    safe_fetch(fetch_area_exposure)
+  })
+
+  areas_table_data <- reactive({
+    x <- areas_all()
+    req(x, input$areas_kind, input$areas_source)
+    x <- as.data.table(x)[kind == input$areas_kind]
+    if (input$areas_source != "any") x <- x[grepl(input$areas_source, area_source, fixed = TRUE)]
+    x[order(-people_rs_high_medium, area_name)]
+  })
+
+  output$areas_note <- renderUI({
+    loaded <- if (areas_started()) areas_all() else NULL            # read first: a missing table is recorded once a fetch fails
+    if ("ea_area_exposure" %in% names(data_gaps())) return(tags$p(class = "text-muted", gap_text("ea_area_exposure", "Warning areas")))
+    if (areas_started() && is.null(loaded)) return(tags$p(class = "text-muted", "Warning area figures could not be loaded."))
+    NULL
+  })
+
+  areas_display <- function(x) {
+    x[, .(Area = area_name, River_or_sea = river_or_sea, County = county, Source = tools::toTitleCase(area_source),
+          People = round(people), Households = round(households),
+          `At risk (High or Medium)` = round(people_rs_high_medium),
+          `Share at risk` = sprintf("%.0f%%", 100 * share_people_high_medium),
+          `In Flood Zone 3` = round(people_fz3),
+          `Shared with another area` = sprintf("%.0f%%", 100 * share_people_shared),
+          `Critical sites` = sites, id = area_id)]
+  }
+
+  output$areas_table <- DT::renderDataTable({
+    x <- areas_table_data()
+    if (nrow(x) == 0L) return(DT::datatable(data.frame(Note = "No areas to show."), rownames = FALSE, selection = "none", options = list(dom = "t")))
+    tbl <- areas_display(x)
+    setnames(tbl, "River_or_sea", "River or sea")
+    DT::datatable(tbl, rownames = FALSE, selection = "single",
+                  options = list(pageLength = 15, scrollX = TRUE, dom = "ftip", order = list(list(6L, "desc")),
+                                 columnDefs = list(list(visible = FALSE, targets = ncol(tbl) - 1L)),
+                                 language = list(info = "Showing _START_ to _END_ of _TOTAL_ areas"))) |>
+      DT::formatRound(c("People", "Households", "At risk (High or Medium)", "In Flood Zone 3"), digits = 0, mark = ",")
+  })
+
+  area_selected <- reactive({
+    row <- input$areas_table_rows_selected
+    if (is.null(row)) return(NULL)
+    tbl <- areas_table_data()
+    if (row > nrow(tbl)) NULL else tbl[row]
+  })
+
+  output$area_detail <- renderUI({
+    a <- area_selected()
+    if (is.null(a)) return(tags$p(class = "text-muted", "Select an area in the table for its figures."))
+    n <- function(v) format(round(v), big.mark = ",")
+    bands <- c(`Very Low` = a$people_rs_very_low, Low = a$people_rs_low, Medium = a$people_rs_medium, High = a$people_rs_high)
+    tags$div(
+      tags$h3(a$area_name),
+      tags$p(class = "app-caption", sprintf("%s, %s. %s km2.", a$type_text, tools::toTitleCase(a$area_source), format(a$area_km2, nsmall = 1))),
+      tags$ul(
+        tags$li(sprintf("%s people live in %s households (%s addresses).", n(a$people), n(a$households), n(a$addresses))),
+        tags$li(sprintf("%s people (%.0f%%) are in a High or Medium band for rivers and the sea; %s are in Flood Zone 3.",
+                        n(a$people_rs_high_medium), 100 * a$share_people_high_medium, n(a$people_fz3))),
+        tags$li(sprintf("By band: %s.", paste(sprintf("%s %s", names(bands), n(bands)), collapse = ", "))),
+        tags$li(sprintf("%s people (%.0f%%) are also in another area of this kind. Counted once across overlapping areas this area has %s; split evenly it has %s.",
+                        n(a$people_shared), 100 * a$share_people_shared, n(a$people_unique), n(a$people_split))),
+        tags$li(sprintf("%s over 65s; %.0f%% of people live in the most deprived fifth of England.", n(a$over65), 100 * a$share_people_imd_1_2)),
+        tags$li(sprintf("%s critical sites: %s health, %s education, %s emergency, %s utilities; %s in a High or Medium band.",
+                        a$sites, a$sites_health, a$sites_education, a$sites_emergency, a$sites_utilities, a$sites_rs_high_medium)))
+    )
+  })
+
+  output$area_overlaps <- DT::renderDataTable({
+    a <- area_selected()
+    if (is.null(a)) return(DT::datatable(data.frame(Note = "Select an area above."), rownames = FALSE, selection = "none", options = list(dom = "t")))
+    o <- safe_fetch(fetch_area_overlaps, a$area_id)
+    if (is.null(o) || nrow(o) == 0L) return(DT::datatable(data.frame(Note = "No other area of this kind shares people with it."), rownames = FALSE, selection = "none", options = list(dom = "t")))
+    o <- as.data.table(o)
+    o[, Other := fifelse(area_id_a == a$area_id, name_b, name_a)]
+    DT::datatable(o[, .(`Overlapping area` = Other, People = round(people), Addresses = round(addresses))], rownames = FALSE, selection = "none",
+                  options = list(pageLength = 10, dom = "tip"))
+  })
+
+  output$download_areas <- downloadHandler(
+    filename = function() sprintf("warning_areas_%s_%s.csv", input$areas_kind, format(Sys.Date(), "%Y%m%d")),
+    content = function(file) {
+      x <- areas_table_data()
+      if (nrow(x) == 0L) { write.csv(data.frame(), file, row.names = FALSE); return(invisible()) }
+      tbl <- areas_display(x); tbl[, id := NULL]
+      write.csv(tbl, file, row.names = FALSE, na = "")
+    }
+  )
+
   output$cov_list_note <- renderUI({
     x <- cov_list()
     if (!is.null(x) && nrow(x) >= COV_LIST_LIMIT) {
