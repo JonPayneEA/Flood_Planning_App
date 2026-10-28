@@ -796,6 +796,21 @@ fetch_area_shape <- function(area_id) {
   sf::st_sf(ea_area_code = area_id, geometry = sf::st_geometry(a$geom4326)[i], crs = 4326)
 }
 
+# Invented sites for a demo area: as many as its count says, with a band each.
+fetch_area_sites <- function(area_id) {
+  d <- demo_area_exposure()
+  i <- match(area_id, d$area_id)
+  r <- d[i]
+  none <- data.table(site_id = character(), name = character(), site_group = character(), site_type = character(), band = character(), rofrs_rank = integer())
+  if (is.na(i) || r$sites == 0L) return(none)
+  set.seed(sum(utf8ToInt(area_id)))
+  type <- sample(c("Hospital", "Care home", "School", "Electricity", "Fire and rescue", "GP surgery"), r$sites, TRUE)
+  rank <- sort(sample(0:4, r$sites, TRUE, prob = c(.15, .15, .2, .25, .25)), decreasing = TRUE)
+  data.table(site_id = sprintf("demo:%s:%d", area_id, seq_len(r$sites)), name = sprintf("Demo %s %d", tolower(type), seq_len(r$sites)),
+             site_group = c(Hospital = "health", `Care home` = "health", School = "education", Electricity = "utilities", `Fire and rescue` = "emergency", `GP surgery` = "health")[type],
+             site_type = type, band = c("None", "Very Low", "Low", "Medium", "High")[rank + 1L], rofrs_rank = as.integer(rank))
+}
+
 fetch_area_overlaps <- function(area_id) {
   d <- demo_area_exposure()
   i <- match(area_id, d$area_id)

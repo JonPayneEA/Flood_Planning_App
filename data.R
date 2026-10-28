@@ -927,6 +927,17 @@ fetch_area_shape <- function(area_id) {
   sf::st_sf(dt, geometry = geom, crs = 4326)
 }
 
+# fetch_area_sites(): the critical sites inside one area, worst rivers and sea band first (job 35's ea_area_sites).
+fetch_area_sites <- function(area_id) {
+  id <- gsub("[^A-Za-z0-9_.-]", "", as.character(area_id))
+  db_query(sprintf("
+    SELECT site_id, name, site_group, site_type, band, rofrs_rank
+    FROM %s
+    WHERE area_id = '%s'
+    ORDER BY rofrs_rank DESC, name
+  ", TBL_AREA_SITES, id))
+}
+
 fetch_area_overlaps <- function(area_id) {
   id <- gsub("[^A-Za-z0-9_.-]", "", as.character(area_id))
   db_query(sprintf("
@@ -1469,6 +1480,7 @@ fetch_coverage_span                <- with_cache(fetch_coverage_span,           
 fetch_area_exposure                <- with_cache(fetch_area_exposure,                "area_exposure", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_area_shape                   <- with_cache(fetch_area_shape,                   "area_shape", group = "geometry")
 fetch_area_constituency_links      <- with_cache(fetch_area_constituency_links,      "area_cons_links", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
+fetch_area_sites                   <- with_cache(fetch_area_sites,                   "area_sites", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_area_overlaps                <- with_cache(fetch_area_overlaps,                "area_overlaps", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_area_coverage                <- with_cache(fetch_area_coverage,                "area_coverage", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_constituency_exposure        <- with_cache(fetch_constituency_exposure,        "const_exposure", ttl = max(CACHE_TTL_SECONDS, 0) * 6)

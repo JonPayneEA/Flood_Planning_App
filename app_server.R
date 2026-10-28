@@ -1414,7 +1414,7 @@ server <- function(input, output, session) {
     "refresh_data", "show_health", "goto_constituency", "exp_pick", "nav_to",
     "rv_reviewed", "rv_sent", "rv_rejected", "demo_reset",
     "area_row_click", "download_ea_areas", "download_situation",
-    "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas", "download_areas", "download_const_exp", "download_exp_bands", "download_area_cells", "area_open", "area_pick", "areas_search",
+    "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas", "download_areas", "download_const_exp", "download_exp_bands", "download_area_cells", "download_area_sites", "area_open", "area_pick", "areas_search",
     "situation_table_rows_selected", "situation_table_row_last_clicked",
     "situation_table_cell_clicked", "situation_table_rows_current",
     "situation_table_rows_all", "situation_table_state", "situation_table_search",
@@ -2457,11 +2457,31 @@ server <- function(input, output, session) {
 
   output$area_sites <- renderUI({
     a <- tryCatch(area_sel(), error = function(e) NULL); req(a)
-    tags$div(
-      tags$p(sprintf("%s critical sites: %s health, %s education, %s emergency, %s utilities. %s are in a High or Medium band.",
-                     a$sites, a$sites_health, a$sites_education, a$sites_emergency, a$sites_utilities, a$sites_rs_high_medium)),
-      tags$p(class = "app-caption", "The list of named sites is not in the exposure table yet. It needs the pipeline to write the sites inside each area."))
+    summary <- tags$p(sprintf("%s critical sites: %s health, %s education, %s emergency, %s utilities. %s are in a High or Medium band.",
+                              a$sites, a$sites_health, a$sites_education, a$sites_emergency, a$sites_utilities, a$sites_rs_high_medium))
+    s <- area_sites_data()
+    if (is.null(s)) return(tags$div(summary, tags$p(class = "app-caption", "The list of named sites is not available yet (pipeline notebook 35 writes it).")))
+    s <- as.data.table(s)[rofrs_rank >= 3L]
+    if (nrow(s) == 0L) return(tags$div(summary, tags$p(class = "app-caption", "None of them is in a High or Medium band.")))
+    rows <- lapply(seq_len(min(nrow(s), 15L)), function(i)
+      tags$tr(tags$td(s$name[i]), tags$td(s$site_type[i]), tags$td(HTML(band_chip(s$band[i])))))
+    tags$div(summary,
+             tags$table(tags$thead(tags$tr(tags$th("Site"), tags$th("Type"), tags$th("Band"))), tags$tbody(rows)),
+             if (nrow(s) > 15L) tags$p(class = "app-caption", sprintf("The first 15 of %d sites in a High or Medium band. Download the sites for the rest.", nrow(s))),
+             downloadButton("download_area_sites", "Download this area's critical sites", class = "btn-sm btn-outline-secondary"))
   })
+
+  # The sites inside the chosen area, or NULL when the pipeline table is missing (no banner: the page says so).
+  area_sites_data <- reactive({
+    req(input$area_pick)
+    tryCatch(fetch_area_sites(input$area_pick), error = function(e) NULL)
+  })
+  output$download_area_sites <- downloadHandler(
+    filename = function() sprintf("area_%s_critical_sites_%s.csv", gsub("[^A-Za-z0-9_.-]", "", input$area_pick %||% "none"), format(Sys.Date(), "%Y%m%d")),
+    content = function(file) {
+      s <- area_sites_data()
+      data.table::fwrite(if (is.null(s)) data.table() else as.data.table(s)[, .(Site = name, Type = site_type, Group = site_group, Band = band)], file, bom = TRUE)
+    })
 
   area_cons_names <- reactive({
     l <- tryCatch(fetch_area_constituency_links(), error = function(e) NULL)

@@ -44,6 +44,9 @@ test_that("no demo fetcher reaches for the warehouse", {
     expect_true(all(ce$people_high_medium_not_in_warning_area >= 0) && all(ce$people_rs_high_medium <= ce$people))
     expect_true(all(c("households_rs_high_medium", "households_rs_high", "households_rs_low") %in% names(ae)))
     if (requireNamespace("sf", quietly = TRUE)) expect_s3_class(demo_env$fetch_area_shape(ae$area_id[1L]), "sf")
+    big <- ae$area_id[which.max(ae$sites)]
+    st <- demo_env$fetch_area_sites(big)
+    expect_equal(nrow(st), ae$sites[ae$area_id == big]); expect_false(is.unsorted(rev(st$rofrs_rank)))
     ov <- demo_env$fetch_area_overlaps(ae$area_id[1L])
     expect_true(all(c("area_id_a", "area_id_b", "people", "name_a", "name_b") %in% names(ov)))
     expect_no_error(demo_env$fetch_warning_episodes(demo_env$fetch_warning_history()$constituency_id[1L]))

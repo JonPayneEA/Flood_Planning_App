@@ -167,6 +167,7 @@ TBL_FW_THRESHOLDS <- paste(CAT, RESTRICTED_SCH, "ea_fw_threshold_gauge_links", s
 TBL_AREA_EXPOSURE <- paste(CAT, RESTRICTED_SCH, "ea_area_exposure",         sep = ".")  # 35 (restricted: people, households and bands inside each warning or alert area)
 TBL_AREA_OVERLAPS <- paste(CAT, RESTRICTED_SCH, "ea_area_overlaps",         sep = ".")  # 35 (restricted: pairs of areas of one kind that share people)
 TBL_EXPOSURE_GRID <- paste(CAT, RESTRICTED_SCH, "exposure_grid_100m",       sep = ".")  # 34 (restricted: one row per 100 m cell with people, bands, critical sites and the risk score)
+TBL_AREA_SITES    <- paste(CAT, RESTRICTED_SCH, "ea_area_sites",            sep = ".")  # 35 (restricted: each critical site inside each area, with its rivers and sea band)
 TBL_AREA_COVERAGE <- paste(CAT, RESTRICTED_SCH, "ea_area_coverage",         sep = ".")  # 35 (restricted: people covered by any warning area, any alert area, and in all)
 TBL_CONST_EXPOSURE <- paste(CAT, RESTRICTED_SCH, "constituency_flood_exposure", sep = ".")  # 35 (restricted: people by constituency, and how many a warning or alert area covers)
 TBL_WARNING_EPISODES <- paste(CAT, SCH, "ea_warning_episodes",      sep = ".")  # 25 (each alert or warning from issue to withdrawal)
