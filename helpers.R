@@ -831,18 +831,6 @@ clears_threshold <- function(pct, minimum) {
   is.na(pct) | pct >= minimum
 }
 
-# One popup line per warning or alert area code from the exposure table: people inside and the share at risk from rivers and the sea.
-# An empty string where the table has no row, so the popup is unchanged when the figures are not built yet.
-area_exposure_popup <- function(codes, exposure) {
-  if (is.null(exposure) || nrow(exposure) == 0L) return(rep("", length(codes)))
-  i <- match(codes, exposure$area_id)
-  out <- sprintf("<br>People inside: %s<br>At risk from rivers and the sea (High or Medium): %s (%.0f%%)",
-                 formatC(round(exposure$people[i]), format = "d", big.mark = ","), formatC(round(exposure$people_rs_high_medium[i]), format = "d", big.mark = ","),
-                 100 * exposure$share_people_high_medium[i])
-  out[is.na(i)] <- ""
-  out
-}
-
 intersection_label <- function(pct) {
   ifelse(is.na(pct), "crossed by a coastal line", paste0(round(pct * 100), "%"))
 }
@@ -1426,7 +1414,7 @@ rain_series_colour <- function(i) {
 GRID_MIN_ZOOM  <- 13L      # below this a viewport holds too many cells to read or draw
 GRID_CELL_LIMIT <- 4000L
 GRID_BREAKS    <- c(0, 10, 25, 50, 75, 100.0001)
-GRID_COLOURS   <- c("#FFF3B0", "#FDBF6F", "#F46D43", "#D73027", "#7F0000")
+GRID_COLOURS   <- c("#FAE9F3", "#E3A9CB", "#BE5B9A", "#9A2A78", "#7A0E5A")
 GRID_LABELS    <- c("Under 10", "10 to 25", "25 to 50", "50 to 75", "75 to 100")
 
 # The British National Grid box that holds a longitude and latitude box, so the warehouse can be asked by easting and northing.
@@ -1459,4 +1447,84 @@ grid_popup <- function(cells) {
          "Rivers and sea band (0 to 4): ", formatC(cells$haz_rs, format = "f", digits = 1), "<br>",
          "Deprivation decile: ", ifelse(is.na(cells$imd_decile) | cells$imd_decile == 0, "unknown", cells$imd_decile), " (1 is most deprived)<br>",
          "Critical sites: ", n(cells$critical_sites))
+}
+
+
+# NULL-default operator (base R has it from 4.4).
+if (!exists("%||%", mode = "function")) `%||%` <- function(a, b) if (is.null(a)) b else a
+
+# ---- Warning areas: the bands, the bar, the popup ----------------------------------------------------------------------
+# Rivers and sea bands (NaFRA2) in the order the page draws them, darkest first.
+FLOOD_BANDS <- data.frame(
+  band   = c("High", "Medium", "Low", "Very Low"),
+  col    = c("rs_high", "rs_medium", "rs_low", "rs_very_low"),
+  fill   = c("#053D7E", "#2F6FB5", "#91BCE6", "#CFE3F6"),
+  text   = c("#FFFFFF", "#FFFFFF", "#0B0C0C", "#0B0C0C"),
+  range  = c("over 3.3% a year", "1 to 3.3%", "0.1 to 1%", "under 0.1%"),
+  stringsAsFactors = FALSE)
+
+band_chip <- function(band) {
+  i <- match(band, FLOOD_BANDS$band)
+  sprintf("<span class=\"band-chip\" style=\"background:%s;color:%s\">%s</span>", FLOOD_BANDS$fill[i], FLOOD_BANDS$text[i], band)
+}
+
+# A stacked bar of a row's people by band, as a share of its people (the rest live outside every band). `x` has people and people_rs_*.
+band_bar_html <- function(x) {
+  tot <- pmax(as.numeric(x$people), 1)
+  segs <- vapply(seq_len(nrow(x)), function(i) {
+    w <- vapply(FLOOD_BANDS$col, function(cc) 100 * as.numeric(x[[paste0("people_", cc)]][i]) / tot[i], numeric(1))
+    w[is.na(w)] <- 0
+    paste0("<div class=\"band-bar\" role=\"img\" aria-label=\"", paste(sprintf("%s %.0f%%", FLOOD_BANDS$band, w), collapse = ", "), "\">",
+           paste(sprintf("<i style=\"width:%.2f%%;background:%s\"></i>", w, FLOOD_BANDS$fill), collapse = ""), "</div>")
+  }, character(1))
+  segs
+}
+
+# A link that opens an area's detail page (the server handles input$area_open).
+area_open_link <- function(id, label) {
+  sprintf("<a href=\"#\" onclick=\"Shiny.setInputValue('area_open','%s',{priority:'event'});return false;\">%s</a>",
+          gsub("[^A-Za-z0-9_.-]", "", id), htmltools::htmlEscape(label))
+}
+
+# Constituency names per area code, joined, from the area to constituency links (the overlaps at or above the app's minimum).
+area_constituency_names <- function(links, min_pct = get0("TARGET_AREA_MIN_PCT", ifnotfound = 0.01)) {
+  if (is.null(links) || nrow(links) == 0L) return(character())
+  l <- as.data.frame(links)
+  l <- l[is.na(l$share_of_area_in_constituency) | l$share_of_area_in_constituency >= min_pct, , drop = FALSE]
+  l <- l[order(-l$share_of_area_in_constituency), , drop = FALSE]
+  vapply(split(l$constituency_name, l$ea_area_code), function(v) paste(unique(v), collapse = ", "), character(1))
+}
+
+# The map popup block for warning or alert areas: the figures from the exposure table, in the layout of the design. One string per code,
+# empty where the table has no row, so the popup is unchanged when the figures are not built yet.
+area_exposure_popup <- function(codes, exposure, constituencies = NULL) {
+  if (is.null(exposure) || nrow(exposure) == 0L) return(rep("", length(codes)))
+  i <- match(codes, exposure$area_id)
+  n <- function(v) ifelse(is.na(v), "none", formatC(round(v), format = "d", big.mark = ","))
+  row <- function(k, v) sprintf("<tr><td>%s</td><td class=\"n\">%s</td></tr>", k, v)
+  cons <- if (is.null(constituencies)) rep(NA_character_, length(codes)) else unname(constituencies[codes])
+  out <- paste0(
+    "<table class=\"popup-figs\">",
+    row("People", sprintf("<b>%s</b>", n(exposure$people[i]))),
+    row("Aged 65 or over", n(exposure$over65[i])),
+    row("In High or Medium bands (rivers and sea)", sprintf("<b>%s</b> people, <b>%s</b> households", n(exposure$people_rs_high_medium[i]), n(exposure$households_rs_high_medium[i]))),
+    row("Critical sites", sprintf("<b>%s</b> (%s in High or Medium)", n(exposure$sites[i]), n(exposure$sites_rs_high_medium[i]))),
+    ifelse(is.na(cons) | !nzchar(cons), "", row("Constituencies", htmltools::htmlEscape(cons))),
+    "</table>", "<div>", ifelse(is.na(i), "", area_open_link(codes, "Open the area detail")), "</div>")
+  out[is.na(i)] <- ""
+  out
+}
+
+# The cells whose centre lies inside a shape (sf, longitude and latitude). `cells` has the corner columns from grid_cell_corners().
+cells_in_shape <- function(cells, shape) {
+  if (nrow(cells) == 0L) return(cells)
+  pts <- sf::st_as_sf(data.frame(x = (cells$lng1 + cells$lng2) / 2, y = (cells$lat1 + cells$lat2) / 2), coords = c("x", "y"), crs = 4326)
+  hit <- lengths(suppressMessages(sf::st_intersects(pts, sf::st_union(sf::st_make_valid(sf::st_geometry(shape)))))) > 0L
+  cells[hit, , drop = FALSE]
+}
+
+# Colours for the flood band view of a cell: the rivers and sea band from 0 (none) to 4 (High).
+grid_band_colour <- function(haz) {
+  cols <- c("#F3F2F1", FLOOD_BANDS$fill[c(4L, 3L, 2L, 1L)])
+  cols[pmin(pmax(round(as.numeric(haz)), 0L), 4L) + 1L]
 }

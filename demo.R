@@ -740,7 +740,10 @@ demo_area_exposure <- function() demo_memo("area_exposure", demo_with_seed(3517,
     over65 = as.integer(round(people * runif(n, .12, .28))),
     people_rs_very_low = pmax(0L, people - hm - as.integer(round((people - hm) * .4))),
     people_rs_low = as.integer(round((people - hm) * .4)), people_rs_medium = hm - high, people_rs_high = high,
-    people_rs_high_medium = hm, share_people_high_medium = round(hm / pmax(people, 1L), 4),
+    people_rs_high_medium = hm, households_rs_high_medium = as.integer(round(hm / 2.4)),
+    households_rs_high = as.integer(round(high / 2.4)), households_rs_medium = as.integer(round((hm - high) / 2.4)),
+    households_rs_low = as.integer(round((people - hm) * .4 / 2.4)), households_rs_very_low = as.integer(round(pmax(0L, people - hm - (people - hm) * .4) / 2.4)),
+    share_people_high_medium = round(hm / pmax(people, 1L), 4),
     people_fz3 = as.integer(round(hm * .6)), people_imd_1_2 = as.integer(round(people * runif(n, .1, .4))),
     share_people_imd_1_2 = NA_real_,
     people_unique = people - shared, people_split = people - as.integer(round(shared / 2)),
@@ -785,6 +788,13 @@ fetch_constituency_exposure <- function() demo_with_seed(3519, {
              people_rs_high_medium_in_warning_area = w, people_rs_high_medium_in_alert_area = a,
              people_high_medium_not_in_warning_area = hm - w, people_high_medium_not_in_alert_area = hm - a)
 })
+
+fetch_area_shape <- function(area_id) {
+  a <- demo_ea_areas()
+  i <- match(area_id, a$table$ea_area_code)
+  if (is.na(i)) return(NULL)
+  sf::st_sf(ea_area_code = area_id, geometry = sf::st_geometry(a$geom4326)[i], crs = 4326)
+}
 
 fetch_area_overlaps <- function(area_id) {
   d <- demo_area_exposure()

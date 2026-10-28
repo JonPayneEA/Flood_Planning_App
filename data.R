@@ -905,11 +905,26 @@ fetch_area_exposure <- function() {
       kind, area_id, area_name, type_text, area_source, river_or_sea, county, area_km2,
       addresses, people, households, over65,
       people_rs_very_low, people_rs_low, people_rs_medium, people_rs_high, people_rs_high_medium, share_people_high_medium,
+      households_rs_very_low, households_rs_low, households_rs_medium, households_rs_high, households_rs_high_medium,
       people_fz3, people_imd_1_2, share_people_imd_1_2,
       people_unique, people_split, people_shared, share_people_shared,
       sites, sites_health, sites_education, sites_emergency, sites_utilities, sites_rs_high_medium
     FROM %s
   ", TBL_AREA_EXPOSURE))
+}
+
+# fetch_area_shape(): one warning or alert area's boundary (sf, longitude and latitude), for the area detail map. NULL when not found.
+fetch_area_shape <- function(area_id) {
+  id <- gsub("[^A-Za-z0-9_.-]", "", as.character(area_id))
+  dt <- db_query(sprintf("
+    SELECT ea_area_code, geometry FROM %s WHERE ea_area_code = '%s' AND geometry IS NOT NULL
+    UNION ALL
+    SELECT ea_area_code, geometry FROM %s WHERE ea_area_code = '%s' AND geometry IS NOT NULL
+  ", TBL_EA_FWA, id, TBL_EA_FAA, id))
+  if (nrow(dt) == 0L) return(NULL)
+  geom <- geojsonsf::geojson_sfc(dt$geometry)
+  dt[, geometry := NULL]
+  sf::st_sf(dt, geometry = geom, crs = 4326)
 }
 
 fetch_area_overlaps <- function(area_id) {
@@ -1452,6 +1467,8 @@ fetch_coverage_warnings            <- with_cache(fetch_coverage_warnings,       
 fetch_coverage_detail              <- with_cache(fetch_coverage_detail,              "cov_detail", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_coverage_span                <- with_cache(fetch_coverage_span,                "cov_span", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_area_exposure                <- with_cache(fetch_area_exposure,                "area_exposure", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
+fetch_area_shape                   <- with_cache(fetch_area_shape,                   "area_shape", group = "geometry")
+fetch_area_constituency_links      <- with_cache(fetch_area_constituency_links,      "area_cons_links", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_area_overlaps                <- with_cache(fetch_area_overlaps,                "area_overlaps", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_area_coverage                <- with_cache(fetch_area_coverage,                "area_coverage", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_constituency_exposure        <- with_cache(fetch_constituency_exposure,        "const_exposure", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
