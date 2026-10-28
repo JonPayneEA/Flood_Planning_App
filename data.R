@@ -980,17 +980,43 @@ fetch_constituency_exposure <- function() {
 # fetch_risk_grid(): the 100 m cells inside a longitude and latitude box with a score at or above min_score, highest first, at most
 #   `limit` of them. Read from exposure_grid_100m by easting and northing. Only for a map in view: the table holds all of England.
 
-fetch_risk_grid <- function(west, south, east, north, min_score = 10, limit = GRID_CELL_LIMIT) {
+# step is the cell size to read at, in metres. At more than 100 the cells are grouped into larger squares: people and critical sites add up,
+# the worst band and the highest score win, and the most deprived decile is kept. fetch_risk_grid_count() says how many 100 m cells a box holds,
+# so the caller can choose a step that keeps the map light.
+fetch_risk_grid <- function(west, south, east, north, min_score = 10, limit = GRID_CELL_LIMIT, step = 100) {
   b <- bbox_to_bng(west, south, east, north)
+  step <- as.integer(step)
+  if (step <= 100L) {
+    return(db_query(sprintf("
+      SELECT easting, northing, people, imd_decile, haz_rs, critical_sites, pop_pct, risk_score
+      FROM %s
+      WHERE easting BETWEEN %.0f AND %.0f
+        AND northing BETWEEN %.0f AND %.0f
+        AND risk_score >= %.2f
+      ORDER BY risk_score DESC
+      LIMIT %d
+    ", TBL_EXPOSURE_GRID, b$xmin, b$xmax, b$ymin, b$ymax, as.numeric(min_score), as.integer(limit))))
+  }
   db_query(sprintf("
-    SELECT easting, northing, people, imd_decile, haz_rs, critical_sites, pop_pct, risk_score
+    SELECT CAST(FLOOR(easting / %d) * %d AS BIGINT) AS easting, CAST(FLOOR(northing / %d) * %d AS BIGINT) AS northing,
+           SUM(people) AS people, MIN(NULLIF(imd_decile, 0)) AS imd_decile, MAX(haz_rs) AS haz_rs,
+           SUM(critical_sites) AS critical_sites, MAX(pop_pct) AS pop_pct, MAX(risk_score) AS risk_score
     FROM %s
     WHERE easting BETWEEN %.0f AND %.0f
       AND northing BETWEEN %.0f AND %.0f
-      AND risk_score >= %.2f
+    GROUP BY 1, 2
+    HAVING MAX(risk_score) >= %.2f
     ORDER BY risk_score DESC
     LIMIT %d
-  ", TBL_EXPOSURE_GRID, b$xmin, b$xmax, b$ymin, b$ymax, as.numeric(min_score), as.integer(limit)))
+  ", step, step, step, step, TBL_EXPOSURE_GRID, b$xmin, b$xmax, b$ymin, b$ymax, as.numeric(min_score), as.integer(limit)))
+}
+
+fetch_risk_grid_count <- function(west, south, east, north) {
+  b <- bbox_to_bng(west, south, east, north)
+  as.numeric(db_query(sprintf("
+    SELECT COUNT(*) AS n FROM %s
+    WHERE easting BETWEEN %.0f AND %.0f AND northing BETWEEN %.0f AND %.0f
+  ", TBL_EXPOSURE_GRID, b$xmin, b$xmax, b$ymin, b$ymax))$n[1L])
 }
 
 

@@ -1414,7 +1414,7 @@ server <- function(input, output, session) {
     "refresh_data", "show_health", "goto_constituency", "exp_pick", "nav_to",
     "rv_reviewed", "rv_sent", "rv_rejected", "demo_reset",
     "area_row_click", "download_ea_areas", "download_situation",
-    "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas", "download_areas", "download_const_exp", "download_exp_bands", "download_area_cells", "download_area_sites", "area_open", "area_pick", "areas_search",
+    "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas", "download_areas", "download_const_exp", "download_exp_bands", "download_area_cells", "download_area_sites", "area_open", "areas_open_selected", "area_pick", "areas_search",
     "situation_table_rows_selected", "situation_table_row_last_clicked",
     "situation_table_cell_clicked", "situation_table_rows_current",
     "situation_table_rows_all", "situation_table_state", "situation_table_search",
@@ -1721,9 +1721,11 @@ server <- function(input, output, session) {
     if (!isTRUE(input$layer_risk_grid)) return()
     g <- tryCatch(grid_cells(), error = function(e) NULL)
     if (is.null(g) || is.null(g$cells) || nrow(g$cells) == 0L) return()
-    cells <- grid_cell_corners(g$cells)
-    leaflet::addRectangles(proxy, lng1 = cells$lng1, lat1 = cells$lat1, lng2 = cells$lng2, lat2 = cells$lat2, group = "risk_grid",
-                           stroke = FALSE, fillColor = grid_colour(cells$risk_score), fillOpacity = 0.7, popup = grid_popup(cells))
+    cells <- grid_cells_sf(g$cells)
+    fill <- grid_colour(cells$risk_score)
+    # a hairline in the cell's own colour closes the seams between neighbours
+    leaflet::addPolygons(proxy, data = cells, group = "risk_grid", stroke = TRUE, weight = 0.6, color = fill, opacity = 0.7,
+                         fillColor = fill, fillOpacity = 0.7, popup = grid_popup(cells))
     leaflet::addLegend(proxy, position = "bottomleft", colors = GRID_COLOURS, labels = GRID_LABELS, layerId = "risk_grid_legend",
                        title = "Risk score<br>(rivers and sea)", opacity = 0.85)
   })
@@ -2390,11 +2392,62 @@ server <- function(input, output, session) {
   output$areas_table <- DT::renderDataTable({
     x <- areas_table_data()
     if (nrow(x) == 0L) return(DT::datatable(data.frame(Note = "No areas to show."), rownames = FALSE, selection = "none", options = list(dom = "t")))
-    DT::datatable(areas_display(x), rownames = FALSE, selection = "none", escape = FALSE,
+    DT::datatable(areas_display(x), rownames = FALSE, selection = "single", escape = FALSE,
                   options = list(pageLength = 15, scrollX = TRUE, dom = "tip", order = list(),
                                  columnDefs = list(list(orderable = FALSE, targets = c(0L, 4L))),
                                  language = list(info = "Showing _START_ to _END_ of _TOTAL_ areas"))) |>
       DT::formatRound(c("People", "Aged 65+", "Households at High or Medium"), digits = 0, mark = ",")
+  })
+
+  # The row selected in the table: its written description and the areas that share people with it sit below the table.
+  areas_selected <- reactive({
+    row <- input$areas_table_rows_selected
+    if (is.null(row)) return(NULL)
+    tbl <- areas_table_data()
+    if (row > nrow(tbl)) NULL else tbl[row]
+  })
+
+  # The written description of an area, from its exposure row. Used under the table and on the detail page.
+  area_description <- function(a) {
+    n <- function(v) formatC(round(as.numeric(v)), format = "d", big.mark = ",")
+    bands <- c(`Very Low` = a$people_rs_very_low, Low = a$people_rs_low, Medium = a$people_rs_medium, High = a$people_rs_high)
+    tags$div(
+      tags$h3(a$area_name),
+      tags$p(class = "app-caption", sprintf("%s, %s. %s km2.", a$type_text, tools::toTitleCase(a$area_source), format(a$area_km2, nsmall = 1))),
+      tags$ul(
+        tags$li(sprintf("%s people live in %s households (%s addresses).", n(a$people), n(a$households), n(a$addresses))),
+        tags$li(sprintf("%s people (%.0f%%) are in a High or Medium band for rivers and the sea; %s are in Flood Zone 3.",
+                        n(a$people_rs_high_medium), 100 * a$share_people_high_medium, n(a$people_fz3))),
+        tags$li(sprintf("By band: %s.", paste(sprintf("%s %s", names(bands), n(bands)), collapse = ", "))),
+        tags$li(sprintf("%s people (%.0f%%) are also in another area of this kind. Counted once across overlapping areas this area has %s; split evenly it has %s.",
+                        n(a$people_shared), 100 * a$share_people_shared, n(a$people_unique), n(a$people_split))),
+        tags$li(sprintf("%s over 65s; %.0f%% of people live in the most deprived fifth of England.", n(a$over65), 100 * a$share_people_imd_1_2)),
+        tags$li(sprintf("%s critical sites: %s health, %s education, %s emergency, %s utilities; %s in a High or Medium band.",
+                        a$sites, a$sites_health, a$sites_education, a$sites_emergency, a$sites_utilities, a$sites_rs_high_medium))),
+      tags$p(actionLink("areas_open_selected", "Open the full area detail with the maps and critical sites")))
+  }
+
+  output$areas_description <- renderUI({
+    a <- areas_selected()
+    if (is.null(a)) return(tags$p(class = "text-muted", "Select a row in the table for a written description of the area."))
+    area_description(a)
+  })
+
+  overlaps_table <- function(a) {
+    if (is.null(a)) return(DT::datatable(data.frame(Note = "Select an area above."), rownames = FALSE, selection = "none", options = list(dom = "t")))
+    o <- safe_fetch(fetch_area_overlaps, a$area_id)
+    if (is.null(o) || nrow(o) == 0L) return(DT::datatable(data.frame(Note = "No other area of this kind shares people with it."), rownames = FALSE, selection = "none", options = list(dom = "t")))
+    o <- as.data.table(o)
+    o[, Other := fifelse(area_id_a == a$area_id, name_b, name_a)]
+    DT::datatable(o[, .(`Overlapping area` = Other, People = round(people), Addresses = round(addresses))], rownames = FALSE, selection = "none",
+                  options = list(pageLength = 10, dom = "tip"))
+  }
+  output$areas_overlaps <- DT::renderDataTable(overlaps_table(areas_selected()))
+
+  observeEvent(input$areas_open_selected, {
+    a <- areas_selected(); req(a)
+    updateTabsetPanel(session, "main_tabs", selected = "Area detail")
+    updateSelectizeInput(session, "area_pick", selected = a$area_id)
   })
 
   # An area link anywhere (table, map popup) opens its detail page.
@@ -2500,9 +2553,15 @@ server <- function(input, output, session) {
   area_cells <- reactive({
     shp <- area_shape(); req(shp)
     bb <- sf::st_bbox(shp)
-    d <- tryCatch(fetch_risk_grid(bb[["xmin"]], bb[["ymin"]], bb[["xmax"]], bb[["ymax"]], 0, 20000L), error = function(e) NULL)
+    # Read at 100 m where the box is small, and in larger squares (worst band wins) where it is not, so a big estuary is whole, not cut off.
+    n <- tryCatch(fetch_risk_grid_count(bb[["xmin"]], bb[["ymin"]], bb[["xmax"]], bb[["ymax"]]), error = function(e) NA_real_)
+    if (is.na(n)) return(NULL)
+    step <- grid_step_for(n)
+    d <- tryCatch(fetch_risk_grid(bb[["xmin"]], bb[["ymin"]], bb[["xmax"]], bb[["ymax"]], 0, 200000L, step), error = function(e) NULL)
     if (is.null(d)) return(NULL)
-    cells_in_shape(grid_cell_corners(as.data.frame(d)), shp)
+    out <- cells_in_shape(grid_cell_corners(as.data.frame(d), step), shp)
+    attr(out, "step") <- step
+    out
   })
 
   area_map <- function(mode) {
@@ -2514,8 +2573,9 @@ server <- function(input, output, session) {
     cells <- tryCatch(area_cells(), error = function(e) NULL)
     if (!is.null(cells) && nrow(cells) > 0L) {
       fill <- if (mode == "score") grid_colour(cells$risk_score) else grid_band_colour(cells$haz_rs)
-      m <- leaflet::addRectangles(m, lng1 = cells$lng1, lat1 = cells$lat1, lng2 = cells$lng2, lat2 = cells$lat2, stroke = FALSE,
-                                  fillColor = fill, fillOpacity = 0.85, popup = grid_popup(cells))
+      sq <- grid_cells_sf(cells, attr(cells, "step") %||% 100)
+      m <- leaflet::addPolygons(m, data = sq, stroke = TRUE, weight = 0.6, color = fill, opacity = 0.85, fillColor = fill, fillOpacity = 0.85,
+                                popup = grid_popup(sq))
     }
     m <- leaflet::addPolygons(m, data = shp, fill = FALSE, color = "#BE0553", weight = 2.5, dashArray = "6 5", opacity = 1)
     m <- leaflet::fitBounds(m, bb[["xmin"]], bb[["ymin"]], bb[["xmax"]], bb[["ymax"]])
@@ -2533,7 +2593,9 @@ server <- function(input, output, session) {
     if (is.null(input$area_pick) || !nzchar(input$area_pick)) return(NULL)
     if (is.null(cells)) return(tags$p(class = "text-muted", "The 100 m grid is not available (pipeline notebook 34)."))
     if (nrow(cells) == 0L) return(tags$p(class = "text-muted", "No grid cells inside this area."))
-    NULL
+    st <- attr(cells, "step") %||% 100
+    if (st > 100) tags$p(class = "text-muted small", sprintf("This area is large, so cells are shown as %s m squares: each takes the worst band and the highest score of the 100 m cells in it.", format(st, big.mark = ",")))
+    else NULL
   })
 
   output$download_area_cells <- downloadHandler(
@@ -2544,16 +2606,7 @@ server <- function(input, output, session) {
       data.table::fwrite(if (is.null(cells)) data.table() else as.data.table(cells)[, intersect(keep, names(cells)), with = FALSE], file, bom = TRUE)
     })
 
-  output$area_overlaps <- DT::renderDataTable({
-    a <- tryCatch(area_sel(), error = function(e) NULL)
-    if (is.null(a)) return(DT::datatable(data.frame(Note = "Choose an area above."), rownames = FALSE, selection = "none", options = list(dom = "t")))
-    o <- safe_fetch(fetch_area_overlaps, a$area_id)
-    if (is.null(o) || nrow(o) == 0L) return(DT::datatable(data.frame(Note = "No other area of this kind shares people with it."), rownames = FALSE, selection = "none", options = list(dom = "t")))
-    o <- as.data.table(o)
-    o[, Other := fifelse(area_id_a == a$area_id, name_b, name_a)]
-    DT::datatable(o[, .(`Overlapping area` = Other, People = round(people), Addresses = round(addresses))], rownames = FALSE, selection = "none",
-                  options = list(pageLength = 10, dom = "tip"))
-  })
+  output$area_overlaps <- DT::renderDataTable(overlaps_table(tryCatch(area_sel(), error = function(e) NULL)))
 
   output$areas_coverage <- renderUI({
     req(areas_started())

@@ -991,3 +991,15 @@ test_that("grid helpers: the BNG box holds the view, corners come back as a rect
   expect_equal(grid_colour(c(0, 9.9, 10, 49, 75, 100)), GRID_COLOURS[c(1, 1, 2, 3, 5, 5)])
   expect_match(grid_popup(data.frame(risk_score = 61.4, people = 1234, haz_rs = 3.5, imd_decile = 2, critical_sites = 1)), "Risk score 61 of 100.*1,234")
 })
+
+
+test_that("grid cells are true squares on the British National Grid, and the step keeps the cell count down", {
+  skip_if_not_installed("sf")
+  sq <- grid_cells_sf(data.frame(easting = c(430000, 430100), northing = 433000, risk_score = c(10, 20)), 100)
+  expect_s3_class(sq, "sf"); expect_equal(nrow(sq), 2L); expect_equal(as.character(sf::st_geometry_type(sq))[1L], "POLYGON")
+  expect_equal(sf::st_crs(sq)$epsg, 4326L)
+  shared <- sf::st_intersection(sf::st_transform(sq[1, ], 27700), sf::st_transform(sq[2, ], 27700))      # neighbours touch along one edge, no gap or overlap
+  expect_equal(as.numeric(sf::st_length(shared)), 100, tolerance = 1e-3)
+  expect_equal(nrow(grid_cells_sf(data.frame(easting = numeric(), northing = numeric()))), 0L)
+  expect_equal(grid_step_for(1000), 100); expect_equal(grid_step_for(40000), 200); expect_equal(grid_step_for(300000), 500); expect_equal(grid_step_for(1e9), 2000)
+})

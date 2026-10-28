@@ -756,7 +756,9 @@ demo_area_exposure <- function() demo_memo("area_exposure", demo_with_seed(3517,
 fetch_area_exposure <- function() copy(demo_area_exposure())
 
 # Invented cells for whatever the demo map shows: a smooth score field over the viewport, so the layer can be seen working.
-fetch_risk_grid <- function(west, south, east, north, min_score = 10, limit = GRID_CELL_LIMIT) {
+fetch_risk_grid_count <- function(west, south, east, north) 5000
+
+fetch_risk_grid <- function(west, south, east, north, min_score = 10, limit = GRID_CELL_LIMIT, step = 100) {
   b <- bbox_to_bng(west, south, east, north)
   e <- seq(floor(b$xmin / 100) * 100, b$xmax, by = 100); nn <- seq(floor(b$ymin / 100) * 100, b$ymax, by = 100)
   if (length(e) * length(nn) > 40000L) { e <- e[seq_len(200L)]; nn <- nn[seq_len(200L)] }
