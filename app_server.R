@@ -2591,20 +2591,7 @@ server <- function(input, output, session) {
     }
     g <- as.data.table(g)
     if (nrow(g) == 0L) return(tags$p(class = "text-muted", "No responder geographies found for this area."))
-    one <- function(geo, heading) {
-      x <- g[geography == geo]
-      if (nrow(x) == 0L) return(NULL)
-      x <- x[order(-people)]
-      tags$div(
-        tags$h3(heading),
-        tags$table(class = "responder-table",
-          tags$thead(tags$tr(tags$th("Name"), tags$th(class = "n", "People"), tags$th(class = "n", "Share of the area"), tags$th(class = "n", "At risk (High or Medium)"))),
-          tags$tbody(lapply(seq_len(min(nrow(x), 12L)), function(i)
-            tags$tr(tags$td(if (is.na(x$name[i]) || !nzchar(x$name[i])) x$code[i] else x$name[i]), tags$td(class = "n", area_n(x$people[i])),
-                    tags$td(class = "n", sprintf("%.0f%%", 100 * x$share_of_area_people[i])), tags$td(class = "n", area_n(x$people_rs_high_medium[i])))))),
-        if (nrow(x) > 12L) tags$p(class = "app-caption", sprintf("The first 12 of %d. The export has the rest.", nrow(x))))
-    }
-    do.call(tags$div, c(list(class = "responder-grid"), Map(one, names(RESPONDER_GEOGRAPHIES), unname(RESPONDER_GEOGRAPHIES))))
+    responder_tables_ui(g)
   })
 
   output$download_exp_responders <- downloadHandler(
