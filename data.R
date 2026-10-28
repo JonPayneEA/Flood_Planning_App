@@ -831,6 +831,18 @@ fetch_coverage_span <- function() {
 # the SQL as letters and digits only. end_time is NULL while an episode is open.
 # -----------------------------------------------------------------------------
 
+# fetch_area_episodes(): every alert or warning issued for one area (the same episodes as above, by area instead of by constituency), for the
+#   area detail page's warning issue history. end_time is NULL while an episode is open. The id reaches the SQL as safe characters only.
+fetch_area_episodes <- function(area_id) {
+  id <- gsub("[^A-Za-z0-9_.-]", "", as.character(area_id))
+  db_query(sprintf("
+    SELECT episode_id, ea_area_code, LOWER(area_type) AS ea_area_type, start_time, end_time, duration_minutes, peak_level, had_severe, stale_open
+    FROM %s
+    WHERE ea_area_code = '%s' AND LOWER(area_type) IN ('flood_alert', 'flood_warning')
+    ORDER BY start_time DESC
+  ", TBL_WARNING_EPISODES, id))
+}
+
 fetch_warning_episodes <- function(constituency_id) {
   cid <- gsub("[^A-Za-z0-9]", "", as.character(constituency_id))
   db_query(sprintf("
@@ -1518,6 +1530,7 @@ fetch_area_constituency_links      <- with_cache(fetch_area_constituency_links, 
 fetch_area_sites                   <- with_cache(fetch_area_sites,                   "area_sites", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_area_geographies              <- with_cache(fetch_area_geographies,              "area_geographies", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_area_overlap_pairs            <- with_cache(fetch_area_overlap_pairs,            "area_pairs", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
+fetch_area_episodes                <- with_cache(fetch_area_episodes,                "area_episodes", ttl = min(CACHE_TTL_SECONDS, 300))
 fetch_area_overlaps                <- with_cache(fetch_area_overlaps,                "area_overlaps", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_area_coverage                <- with_cache(fetch_area_coverage,                "area_coverage", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_constituency_exposure        <- with_cache(fetch_constituency_exposure,        "const_exposure", ttl = max(CACHE_TTL_SECONDS, 0) * 6)

@@ -1810,3 +1810,35 @@ responder_tables_ui <- function(g, top = 12L) {
   if (length(tables) == 0L) return(NULL)
   do.call(htmltools::tags$div, c(list(class = "responder-grid"), tables))
 }
+
+
+# ---- Warning issue history for one area ---------------------------------------------------------------------------------
+# `ep` is the area's episodes (start_time, end_time, duration_minutes, peak_level, had_severe, stale_open), as fetch_area_episodes() returns them.
+area_issue_summary <- function(ep, now = Sys.time()) {
+  empty <- list(total = 0L, last12 = 0L, severe = 0L, median_minutes = NA_real_, latest = as.POSIXct(NA, tz = "UTC"), in_force_since = as.POSIXct(NA, tz = "UTC"))
+  if (is.null(ep) || nrow(ep) == 0L) return(empty)
+  x <- data.table::as.data.table(ep)
+  start <- as.POSIXct(x$start_time, tz = "UTC"); end <- as.POSIXct(x$end_time, tz = "UTC")
+  stale <- is.na(end) & !is.na(x$stale_open) & as.logical(x$stale_open)
+  open <- is.na(end) & !stale
+  now <- as.POSIXct(now, tz = "UTC")
+  list(total = nrow(x), last12 = sum(as.Date(start) > as.Date(now) - 365L), severe = sum(as.logical(x$had_severe), na.rm = TRUE),
+       median_minutes = if (any(!is.na(x$duration_minutes))) stats::median(as.numeric(x$duration_minutes), na.rm = TRUE) else NA_real_,
+       latest = max(start), in_force_since = if (any(open)) min(start[open]) else as.POSIXct(NA, tz = "UTC"))
+}
+
+# Issues per calendar month for the last `months` months, split into alerts, warnings and severe warnings, with zero months kept so the chart has no gaps.
+issue_counts_by_month <- function(ep, now = Sys.time(), months = 36L) {
+  first <- seq(as.Date(format(as.Date(as.POSIXct(now, tz = "UTC")), "%Y-%m-01")), by = "-1 month", length.out = months)
+  grid <- data.table::CJ(month = rev(first), level = c("Flood alert", "Flood warning", "Severe flood warning"), sorted = FALSE)
+  grid[, n := 0L]
+  if (!is.null(ep) && nrow(ep) > 0L) {
+    x <- data.table::as.data.table(ep)
+    lv <- ifelse(as.logical(x$had_severe) %in% TRUE, "Severe flood warning", ifelse(x$ea_area_type == "flood_alert", "Flood alert", "Flood warning"))
+    m <- as.Date(format(as.POSIXct(x$start_time, tz = "UTC"), "%Y-%m-01"))
+    cnt <- data.table::data.table(month = m, level = lv)[, .N, by = .(month, level)]
+    grid <- merge(grid[, .(month, level)], cnt, by = c("month", "level"), all.x = TRUE)
+    grid[is.na(N), N := 0L]; data.table::setnames(grid, "N", "n")
+  }
+  grid[order(month, level)]
+}
