@@ -1439,7 +1439,7 @@ server <- function(input, output, session) {
     "refresh_data", "show_health", "goto_constituency", "exp_pick", "nav_to",
     "rv_reviewed", "rv_sent", "rv_rejected", "demo_reset",
     "area_row_click", "download_ea_areas", "download_situation",
-    "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas", "download_areas", "download_const_exp", "download_exp_bands", "download_area_cells", "download_area_sites", "download_exp_responders", "area_open", "areas_open_selected",
+    "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas", "download_areas", "download_const_exp", "download_exp_bands", "download_area_cells", "download_area_brief", "download_area_sites", "download_exp_responders", "area_open", "areas_open_selected",
     "situation_table_rows_selected", "situation_table_row_last_clicked",
     "situation_table_cell_clicked", "situation_table_rows_current",
     "situation_table_rows_all", "situation_table_state", "situation_table_search",
@@ -2669,6 +2669,16 @@ server <- function(input, output, session) {
     if (st > 100) tags$p(class = "text-muted small", sprintf("This area is large, so cells are shown as %s m squares: each takes the worst band and the highest score of the 100 m cells in it.", format(st, big.mark = ",")))
     else NULL
   })
+
+  output$download_area_brief <- downloadHandler(
+    filename = function() sprintf("area_brief_%s_%s.html", gsub("[^A-Za-z0-9_.-]", "", input$area_pick %||% "none"), format(Sys.Date(), "%Y%m%d")),
+    content = function(file) {
+      a <- as.data.frame(area_sel())
+      sites <- tryCatch(fetch_area_sites(a$area_id), error = function(e) NULL)
+      geos <- tryCatch(fetch_area_geographies(a$area_id), error = function(e) NULL)
+      cons <- tryCatch(unname(area_constituency_names(fetch_area_constituency_links())[a$area_id]), error = function(e) NA_character_)
+      writeLines(area_brief_html(a, sites, geos, if (length(cons) == 0L) NA_character_ else cons), file, useBytes = TRUE)
+    }, contentType = "text/html")
 
   output$download_area_cells <- downloadHandler(
     filename = function() sprintf("area_%s_cells_100m_%s.csv", gsub("[^A-Za-z0-9_.-]", "", input$area_pick %||% "none"), format(Sys.Date(), "%Y%m%d")),

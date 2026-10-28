@@ -1098,6 +1098,7 @@ make_area_detail_tab <- function() tags$div(
   class = "areas-page",
   tags$div(class = "filter-row",
            selectizeInput("area_pick", "Area", choices = NULL, width = "460px", options = list(placeholder = "Choose an area")),
+           downloadButton("download_area_brief", "Download a one-page brief", class = "btn-sm btn-primary"),
            downloadButton("download_area_cells", "Download this area's 100 m cells", class = "btn-sm btn-outline-secondary")),
   uiOutput("area_head"),
   uiOutput("area_kpis"),
