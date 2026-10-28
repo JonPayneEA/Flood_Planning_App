@@ -174,10 +174,11 @@ guide_products <- function(s) {
     list(
       id = "overview", title = "Overview", where = "Overview",
       answers = "What does the latest statement say, and where should I look first?",
-      tables = c("fgs_statements", "constituency_flood_situation", "fgs_constituency_changes", "mp_briefing_drafts", "pipeline_health", "flood_warnings_current"),
+      tables = c("fgs_statements", "constituency_flood_situation", "fgs_constituency_changes", "mp_briefing_drafts", "pipeline_health", "flood_warnings_current", "ea_area_exposure", "ea_area_overlaps"),
       steps = c(
         "The headline is the text of the latest statement, as issued.",
         "Warnings and alerts in force counts EA areas, once each however many constituencies they cover: flood alerts, flood warnings and severe flood warnings. Select a count to list the areas.",
+        "Who is in these areas (under the counts) adds up the people and households inside the warning areas and alert areas in force, from the address points, and how many of those people are in a High or Medium band for rivers and the sea. Warnings are counted against warnings and alerts against alerts. A person in two areas in force is counted once, and the figures are rounded to the nearest ten, because the counts are estimates. It is left out when the exposure tables are not built.",
         "Highest forecast risk is the highest worst risk of any constituency.",
         "Constituencies at Medium or above counts constituencies whose worst risk over the five days is rank 3 or 4. The figure for High counts rank 4.",
         "Escalated counts constituencies where the forecast rose against the previous statement, on any day or for any flood source. A new risk where there was none counts. So does a rise from Very Low to Low.",
@@ -187,7 +188,7 @@ guide_products <- function(s) {
         "Constituencies to watch lists up to eight constituencies at Low risk or above. They are ordered by worst risk, then severe warnings, then warnings, then escalation, then name."
       ),
       read = c(
-        "Counts are of constituencies. They are not counts of people, homes or businesses.",
+        "The counts in the cards are of areas and the constituencies are counts of constituencies. The people and households under the areas in force are in the paragraph beneath the cards, not in the cards.",
         "Click a row in a list to see that constituency on the map."
       ),
       limits = c(
@@ -421,6 +422,8 @@ guide_products <- function(s) {
         "Each point carries the rivers and sea band (NaFRA2) and Flood Zone at its position, so an area's people can be split by band. At risk means High or Medium.",
         "Areas of one kind overlap. Gross counts everyone inside the area. Unique counts only people in no other area of that kind. Split shares each person equally between the areas they are in, so split figures add up to the true total.",
         "Download a one-page brief on the Area detail page for a printable page of the figures, the band split, the critical sites in a High or Medium band, who responds and the constituencies. Open the file and print it or save it as a PDF from the browser. It is marked restricted.",
+
+        "The risk score in the table is the people-weighted average of the 100 m cell scores inside the area, so an area where many people live in flooded, deprived or critical cells scores high and an area of mostly dry land scores low. The detail page also gives the highest single cell. It is blank until job 35 has been run with the grid built.",
         "Select an area for its figures, the 100 m grid inside it, its people by band, the named critical sites in a High or Medium band, and the areas that share people with it.",
         "On the Forecast map, tick Risk grid and zoom in to street level: each 100 m cell is coloured by its risk score, the rivers and sea band weighted by people, deprivation and critical sites. Only the cells in view with a score at or above the slider are read, the highest first, up to a cap.",
         "Who responds lists the police forces, fire and rescue authorities, combined authorities, districts, counties, constituencies and regions the area lies in. Every address point carries each of these codes from the National Statistics UPRN Lookup, so the area's people are split among them. Each table adds up to the area's people. Fire and rescue authorities and combined authorities are not in that lookup, so they are reached another way: the fire authority from the boundary file, through the output area each address is in, and the combined authority from the district it is in. Combined authorities cover only part of England, so that table can add up to less than the area's people. Wards are in the export only.",

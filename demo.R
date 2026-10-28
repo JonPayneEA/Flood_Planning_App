@@ -730,7 +730,9 @@ demo_area_exposure <- function() demo_memo("area_exposure", demo_with_seed(3517,
   high <- as.integer(round(hm * runif(n, .15, .5)))
   shared <- as.integer(round(people * runif(n, 0, .25)))
   sites <- rpois(n, 6)
+  score <- round(pmin(95, 100 * hm / pmax(people, 1) * runif(n, 1.2, 2.6)), 2)
   data.table(
+    risk_score = score, risk_score_max = pmin(100, round(score * runif(n, 1.8, 3), 2)), grid_cells = as.integer(round(km2 * 100)),
     kind = ifelse(a$ea_area_type == "flood_warning", "flood_warning", "flood_alert"),
     area_id = a$ea_area_code, area_name = a$ea_area_name,
     type_text = ifelse(a$ea_area_type == "flood_warning", "Flood warning area", "Flood alert area"),
@@ -837,6 +839,17 @@ fetch_area_geographies <- function(area_id = NULL) {
   if (nrow(out) == 0L) return(data.table(kind = character(), area_id = character(), geography = character(), code = character(), name = character(),
                                           addresses = numeric(), people = numeric(), households = numeric(), over65 = numeric(), people_rs_high_medium = numeric(), share_of_area_people = numeric()))
   out[order(kind, area_id, geography, -people)]
+}
+
+fetch_area_overlap_pairs <- function() {
+  d <- demo_area_exposure()
+  rbindlist(lapply(unique(d$kind), function(k) {
+    x <- d[kind == k]
+    if (nrow(x) < 2L) return(NULL)
+    j <- c(2:nrow(x), 1L)
+    data.table(kind = k, area_id_a = x$area_id, area_id_b = x$area_id[j], addresses = round(pmin(x$people_shared, x$people[j]) / 2.4),
+               people = pmin(x$people_shared, x$people[j]))[area_id_a < area_id_b]
+  }))
 }
 
 fetch_area_overlaps <- function(area_id) {

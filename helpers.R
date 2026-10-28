@@ -1639,3 +1639,51 @@ area_brief_html <- function(a, sites = NULL, geos = NULL, cons = NA_character_, 
     "<p class=\"foot\">Rivers and the sea only: surface water is not counted. People are the Census 2021 output area total shared among the addresses in it, so small counts are estimates. ",
     "Areas of one kind overlap, so a person can be in more than one area. Prepared ", format(generated, "%d %b %Y %H:%M"), ".</p></body></html>")
 }
+
+# Columns the area pages read that an older ea_area_exposure may not have yet. Missing ones are added empty (NA), so a page built before the
+# column existed still draws, and says nothing rather than failing.
+AREA_OPTIONAL_COLUMNS <- c("risk_score", "risk_score_max", "grid_cells")
+ensure_area_columns <- function(x) {
+  x <- data.table::as.data.table(x)
+  for (cn in setdiff(AREA_OPTIONAL_COLUMNS, names(x))) data.table::set(x, j = cn, value = NA_real_)
+  x
+}
+
+# The score bar in the Warning areas table: the number, and a bar from pale to deep magenta that fills with the score (0 to 100). "-" when blank.
+score_bar_html <- function(score) {
+  s <- suppressWarnings(as.numeric(score))
+  w <- pmin(pmax(ifelse(is.na(s), 0, s), 0), 100)
+  ifelse(is.na(s), "-", sprintf("<div class=\"score-cell\"><b>%.1f</b><div class=\"score-bar\"><i style=\"width:%.0f%%\"></i></div></div>", s, w))
+}
+
+# ---- Who is in the areas in force now -----------------------------------------------------------------------------------
+# `f` is the areas in force (flood_area_id, severity_level 1 severe, 2 warning, 3 alert), `ex` the exposure table (kind, area_id, people,
+# households, people_rs_high_medium) and `pairs` the pairs of areas of one kind that share people (kind, area_id_a, area_id_b, people).
+# Warnings (severity 1 and 2) are counted against warning areas and alerts against alert areas, never added together. A person in two
+# areas in force would be counted twice by a plain sum, so the people shared between pairs that are both in force are taken off once. That is
+# exact for people in two areas and close for the rare person in three or more, hence "about". People at risk and households are scaled by the
+# same share, because the pairs hold people only.
+inforce_exposure_summary <- function(f, ex, pairs = NULL) {
+  empty <- data.frame(kind = character(), areas = integer(), matched = integer(), people = numeric(), households = numeric(),
+                      people_at_risk = numeric(), stringsAsFactors = FALSE)
+  if (is.null(f) || nrow(f) == 0L || is.null(ex) || nrow(ex) == 0L) return(empty)
+  f <- as.data.frame(f); ex <- as.data.frame(ex)
+  rows <- lapply(c("flood_warning", "flood_alert"), function(k) {
+    ids <- unique(f$flood_area_id[if (k == "flood_warning") f$severity_level %in% c(1L, 2L) else f$severity_level == 3L])
+    if (length(ids) == 0L) return(NULL)
+    e <- ex[ex$kind == k & ex$area_id %in% ids, , drop = FALSE]
+    gross <- sum(e$people, na.rm = TRUE)
+    shared <- 0
+    if (!is.null(pairs) && nrow(pairs) > 0L) {
+      p <- as.data.frame(pairs)
+      p <- p[p$kind == k & p$area_id_a %in% e$area_id & p$area_id_b %in% e$area_id, , drop = FALSE]
+      shared <- min(sum(p$people, na.rm = TRUE), gross)
+    }
+    keep <- if (gross > 0) (gross - shared) / gross else 1
+    data.frame(kind = k, areas = length(ids), matched = nrow(e), people = (gross - shared),
+               households = sum(e$households, na.rm = TRUE) * keep, people_at_risk = sum(e$people_rs_high_medium, na.rm = TRUE) * keep,
+               stringsAsFactors = FALSE)
+  })
+  out <- do.call(rbind, rows)
+  if (is.null(out)) empty else out
+}

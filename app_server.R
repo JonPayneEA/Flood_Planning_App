@@ -1218,8 +1218,33 @@ server <- function(input, output, session) {
     tagList(
       tags$p(class = "app-caption", "Areas with each in force now, counted once however many constituencies they cover. Select a count to list them."),
       tags$div(class = "ov-grid ov-inforce", card(3L, "flood alerts"), card(2L, "flood warnings"), card(1L, "severe flood warnings")),
+      uiOutput("ov_exposure"),
       list_ui
     )
+  })
+
+  # Who is under the areas in force now, from the exposure tables. Quiet when they are not built or cannot be read: no banner, no message.
+  ov_exposure_data <- reactive({
+    f <- inforce_rv(); req(f, nrow(f) > 0L)
+    ex <- tryCatch(fetch_area_exposure(), error = function(e) NULL)
+    pairs <- tryCatch(fetch_area_overlap_pairs(), error = function(e) NULL)
+    inforce_exposure_summary(f, ex, pairs)
+  })
+
+  output$ov_exposure <- renderUI({
+    s <- tryCatch(ov_exposure_data(), error = function(e) NULL)
+    if (is.null(s) || nrow(s) == 0L) return(NULL)
+    n <- function(v) formatC(round(as.numeric(v), -1L), format = "d", big.mark = ",")
+    line <- function(r) {
+      what <- if (r$kind == "flood_warning") "flood warning" else "flood alert"
+      tags$li(sprintf("In the %d %s area%s in force: about %s people in about %s households, of whom about %s are in a High or Medium band for rivers and the sea.%s",
+                      r$areas, what, if (r$areas == 1L) "" else "s", n(r$people), n(r$households), n(r$people_at_risk),
+                      if (r$matched < r$areas) sprintf(" Figures for %d of the %d areas are not held.", r$areas - r$matched, r$areas) else ""))
+    }
+    tags$div(class = "ov-exposure",
+      tags$h3("Who is in these areas"),
+      tags$ul(lapply(seq_len(nrow(s)), function(i) line(s[i, ]))),
+      tags$p(class = "app-caption", "Counted from the address points inside each area. Warnings are counted against warnings and alerts against alerts. People in more than one area are counted once, and the figures are rounded. Rivers and the sea only."))
   })
 
   output$ov_outlook <- renderUI({
@@ -2370,7 +2395,7 @@ server <- function(input, output, session) {
     if (nzchar(input$areas_county %||% "")) x <- x[county == input$areas_county]
     if (input$areas_source != "any") x <- x[grepl(input$areas_source, area_source, fixed = TRUE)]
     if (nzchar(trimws(input$areas_search %||% ""))) x <- x[grepl(trimws(input$areas_search), area_name, ignore.case = TRUE, fixed = TRUE)]
-    if (input$areas_sort == "area_name") x[order(area_name)] else x[order(-get(input$areas_sort), area_name)]
+    if (input$areas_sort == "area_name") x[order(area_name)] else x[order(-get(input$areas_sort), area_name, na.last = TRUE)]
   })
 
   output$areas_note <- renderUI({
@@ -2393,7 +2418,8 @@ server <- function(input, output, session) {
       `In most deprived 20%` = sprintf("%.0f%%", 100 * x$share_people_imd_1_2),
       `People by flood band` = band_bar_html(x),
       `Households at High or Medium` = round(x$households_rs_high_medium),
-      `Critical sites` = x$sites)
+      `Critical sites` = x$sites,
+      `Risk score` = score_bar_html(x$risk_score))
   }
 
   output$areas_table <- DT::renderDataTable({
@@ -2401,7 +2427,7 @@ server <- function(input, output, session) {
     if (nrow(x) == 0L) return(DT::datatable(data.frame(Note = "No areas to show."), rownames = FALSE, selection = "none", options = list(dom = "t")))
     DT::datatable(areas_display(x), rownames = FALSE, selection = "single", escape = FALSE,
                   options = list(pageLength = 15, scrollX = TRUE, dom = "tip", order = list(),
-                                 columnDefs = list(list(orderable = FALSE, targets = c(0L, 4L))),
+                                 columnDefs = list(list(orderable = FALSE, targets = c(0L, 5L, 8L))),
                                  language = list(info = "Showing _START_ to _END_ of _TOTAL_ areas"))) |>
       DT::formatRound(c("People", "Aged 65+", "Households at High or Medium"), digits = 0, mark = ",")
   })
@@ -2429,6 +2455,7 @@ server <- function(input, output, session) {
         tags$li(sprintf("%s people (%.0f%%) are also in another area of this kind. Counted once across overlapping areas this area has %s; split evenly it has %s.",
                         n(a$people_shared), 100 * a$share_people_shared, n(a$people_unique), n(a$people_split))),
         tags$li(sprintf("%s over 65s; %.0f%% of people live in the most deprived fifth of England.", n(a$over65), 100 * a$share_people_imd_1_2)),
+        if (!is.na(a$risk_score)) tags$li(sprintf("Risk score %.1f of 100 (the people-weighted average of the 100 m cells inside the area; the highest cell scores %.0f).", a$risk_score, a$risk_score_max)),
         tags$li(sprintf("%s critical sites: %s health, %s education, %s emergency, %s utilities; %s in a High or Medium band.",
                         a$sites, a$sites_health, a$sites_education, a$sites_emergency, a$sites_utilities, a$sites_rs_high_medium))),
       tags$p(actionLink("areas_open_selected", "Open the full area detail with the maps and critical sites")))

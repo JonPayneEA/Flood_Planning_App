@@ -900,17 +900,8 @@ fetch_warnings_in_force <- function() {
 # -----------------------------------------------------------------------------
 
 fetch_area_exposure <- function() {
-  db_query(sprintf("
-    SELECT
-      kind, area_id, area_name, type_text, area_source, river_or_sea, county, area_km2,
-      addresses, people, households, over65,
-      people_rs_very_low, people_rs_low, people_rs_medium, people_rs_high, people_rs_high_medium, share_people_high_medium,
-      households_rs_very_low, households_rs_low, households_rs_medium, households_rs_high, households_rs_high_medium,
-      people_fz3, people_imd_1_2, share_people_imd_1_2,
-      people_unique, people_split, people_shared, share_people_shared,
-      sites, sites_health, sites_education, sites_emergency, sites_utilities, sites_rs_high_medium
-    FROM %s
-  ", TBL_AREA_EXPOSURE))
+  # SELECT * so a table built before a column was added (the area risk score, added later) still reads; ensure_area_columns() fills the gaps.
+  ensure_area_columns(db_query(sprintf("SELECT * FROM %s", TBL_AREA_EXPOSURE)))
 }
 
 # fetch_area_shape(): one warning or alert area's boundary (sf, longitude and latitude), for the area detail map. NULL when not found.
@@ -948,6 +939,12 @@ fetch_area_geographies <- function(area_id = NULL) {
     %s
     ORDER BY kind, area_id, geography, people DESC
   ", TBL_AREA_GEOGRAPHIES, where))
+}
+
+# fetch_area_overlap_pairs(): every pair of areas of one kind that share people (a few thousand rows), for working out the people in a set of
+#   areas without counting a shared person twice.
+fetch_area_overlap_pairs <- function() {
+  db_query(sprintf("SELECT kind, area_id_a, area_id_b, addresses, people FROM %s", TBL_AREA_OVERLAPS))
 }
 
 fetch_area_overlaps <- function(area_id) {
@@ -1520,6 +1517,7 @@ fetch_area_shape                   <- with_cache(fetch_area_shape,              
 fetch_area_constituency_links      <- with_cache(fetch_area_constituency_links,      "area_cons_links", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_area_sites                   <- with_cache(fetch_area_sites,                   "area_sites", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_area_geographies              <- with_cache(fetch_area_geographies,              "area_geographies", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
+fetch_area_overlap_pairs            <- with_cache(fetch_area_overlap_pairs,            "area_pairs", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_area_overlaps                <- with_cache(fetch_area_overlaps,                "area_overlaps", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_area_coverage                <- with_cache(fetch_area_coverage,                "area_coverage", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_constituency_exposure        <- with_cache(fetch_constituency_exposure,        "const_exposure", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
