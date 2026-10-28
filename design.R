@@ -525,6 +525,8 @@ make_styleguide_tab <- function() {
 # Styles for the Warning areas pages: the band bar and chips, the figure tiles, the two-column detail and the popup table.
 areas_css <- function() {
   paste0(r"---(
+.ov-exposure { margin: 18px 0 8px; max-width: 60em; }
+.ov-exposure h3 { font-size: 19px; margin: 0 0 6px; }
 .band-bar { display: flex; height: 18px; width: 200px; background: #F3F2F1; }
 .band-bar i { display: block; height: 100%; }
 .band-chip { display: inline-block; padding: 1px 8px; font-size: 13px; font-weight: 700; }

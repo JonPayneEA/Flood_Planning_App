@@ -1036,3 +1036,19 @@ test_that("older exposure tables get the area score columns empty, and the score
   b <- score_bar_html(c(31.24, NA, 140))
   expect_match(b[1L], "<b>31.2</b>"); expect_match(b[1L], "width:31%"); expect_equal(b[2L], "-"); expect_match(b[3L], "width:100%")
 })
+
+test_that("the in-force summary counts warnings against warnings, takes shared people off once, and tolerates missing figures", {
+  f <- data.frame(flood_area_id = c("W1", "W2", "S1", "A1", "A9"), severity_level = c(2L, 2L, 1L, 3L, 3L))
+  ex <- data.frame(kind = c("flood_warning", "flood_warning", "flood_warning", "flood_alert"), area_id = c("W1", "W2", "S1", "A1"),
+                   people = c(1000, 500, 200, 4000), households = c(400, 200, 80, 1600), people_rs_high_medium = c(100, 50, 20, 400))
+  pairs <- data.frame(kind = c("flood_warning", "flood_warning", "flood_alert"), area_id_a = c("W1", "W1", "A1"), area_id_b = c("W2", "ZZ", "A2"), people = c(100, 999, 50))
+  s <- inforce_exposure_summary(f, ex, pairs)
+  w <- s[s$kind == "flood_warning", ]; a <- s[s$kind == "flood_alert", ]
+  expect_equal(w$areas, 3L); expect_equal(w$matched, 3L)
+  expect_equal(w$people, 1700 - 100)                          # 1,700 gross, W1 and W2 share 100; the pair with an area not in force is ignored
+  expect_equal(w$people_at_risk, 170 * (1600 / 1700))
+  expect_equal(a$areas, 2L); expect_equal(a$matched, 1L); expect_equal(a$people, 4000)
+  expect_equal(nrow(inforce_exposure_summary(f[0, ], ex, pairs)), 0L)
+  expect_equal(nrow(inforce_exposure_summary(f, NULL, pairs)), 0L)
+  expect_equal(inforce_exposure_summary(f[f$severity_level == 3L, ], ex, NULL)$people, 4000)
+})

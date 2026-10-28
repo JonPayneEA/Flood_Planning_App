@@ -841,6 +841,17 @@ fetch_area_geographies <- function(area_id = NULL) {
   out[order(kind, area_id, geography, -people)]
 }
 
+fetch_area_overlap_pairs <- function() {
+  d <- demo_area_exposure()
+  rbindlist(lapply(unique(d$kind), function(k) {
+    x <- d[kind == k]
+    if (nrow(x) < 2L) return(NULL)
+    j <- c(2:nrow(x), 1L)
+    data.table(kind = k, area_id_a = x$area_id, area_id_b = x$area_id[j], addresses = round(pmin(x$people_shared, x$people[j]) / 2.4),
+               people = pmin(x$people_shared, x$people[j]))[area_id_a < area_id_b]
+  }))
+}
+
 fetch_area_overlaps <- function(area_id) {
   d <- demo_area_exposure()
   i <- match(area_id, d$area_id)

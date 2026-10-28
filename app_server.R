@@ -1218,8 +1218,33 @@ server <- function(input, output, session) {
     tagList(
       tags$p(class = "app-caption", "Areas with each in force now, counted once however many constituencies they cover. Select a count to list them."),
       tags$div(class = "ov-grid ov-inforce", card(3L, "flood alerts"), card(2L, "flood warnings"), card(1L, "severe flood warnings")),
+      uiOutput("ov_exposure"),
       list_ui
     )
+  })
+
+  # Who is under the areas in force now, from the exposure tables. Quiet when they are not built or cannot be read: no banner, no message.
+  ov_exposure_data <- reactive({
+    f <- inforce_rv(); req(f, nrow(f) > 0L)
+    ex <- tryCatch(fetch_area_exposure(), error = function(e) NULL)
+    pairs <- tryCatch(fetch_area_overlap_pairs(), error = function(e) NULL)
+    inforce_exposure_summary(f, ex, pairs)
+  })
+
+  output$ov_exposure <- renderUI({
+    s <- tryCatch(ov_exposure_data(), error = function(e) NULL)
+    if (is.null(s) || nrow(s) == 0L) return(NULL)
+    n <- function(v) formatC(round(as.numeric(v), -1L), format = "d", big.mark = ",")
+    line <- function(r) {
+      what <- if (r$kind == "flood_warning") "flood warning" else "flood alert"
+      tags$li(sprintf("In the %d %s area%s in force: about %s people in about %s households, of whom about %s are in a High or Medium band for rivers and the sea.%s",
+                      r$areas, what, if (r$areas == 1L) "" else "s", n(r$people), n(r$households), n(r$people_at_risk),
+                      if (r$matched < r$areas) sprintf(" Figures for %d of the %d areas are not held.", r$areas - r$matched, r$areas) else ""))
+    }
+    tags$div(class = "ov-exposure",
+      tags$h3("Who is in these areas"),
+      tags$ul(lapply(seq_len(nrow(s)), function(i) line(s[i, ]))),
+      tags$p(class = "app-caption", "Counted from the address points inside each area. Warnings are counted against warnings and alerts against alerts. People in more than one area are counted once, and the figures are rounded. Rivers and the sea only."))
   })
 
   output$ov_outlook <- renderUI({
