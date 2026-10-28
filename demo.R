@@ -730,7 +730,9 @@ demo_area_exposure <- function() demo_memo("area_exposure", demo_with_seed(3517,
   high <- as.integer(round(hm * runif(n, .15, .5)))
   shared <- as.integer(round(people * runif(n, 0, .25)))
   sites <- rpois(n, 6)
+  score <- round(pmin(95, 100 * hm / pmax(people, 1) * runif(n, 1.2, 2.6)), 2)
   data.table(
+    risk_score = score, risk_score_max = pmin(100, round(score * runif(n, 1.8, 3), 2)), grid_cells = as.integer(round(km2 * 100)),
     kind = ifelse(a$ea_area_type == "flood_warning", "flood_warning", "flood_alert"),
     area_id = a$ea_area_code, area_name = a$ea_area_name,
     type_text = ifelse(a$ea_area_type == "flood_warning", "Flood warning area", "Flood alert area"),

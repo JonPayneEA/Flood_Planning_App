@@ -545,6 +545,10 @@ areas_css <- function() {
 .responder-table th { text-align: left; border-bottom: 2px solid #0B0C0C; padding: 6px 8px 6px 0; }
 .responder-table td { border-bottom: 1px solid #B1B4B6; padding: 7px 8px 7px 0; }
 .responder-table td.n, .responder-table th.n { text-align: right; }
+.score-cell { text-align: right; min-width: 80px; }
+.score-cell b { display: block; line-height: 1.1; }
+.score-bar { height: 10px; width: 80px; margin-left: auto; background: #F3F2F1; border: 1px solid #B1B4B6; }
+.score-bar i { display: block; height: 100%; background: linear-gradient(90deg, #E3A9CB, #7A0E5A); }
 @media (max-width: 900px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } .area-cols { grid-template-columns: 1fr; } }
 )---")
 }

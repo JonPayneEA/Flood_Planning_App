@@ -900,17 +900,8 @@ fetch_warnings_in_force <- function() {
 # -----------------------------------------------------------------------------
 
 fetch_area_exposure <- function() {
-  db_query(sprintf("
-    SELECT
-      kind, area_id, area_name, type_text, area_source, river_or_sea, county, area_km2,
-      addresses, people, households, over65,
-      people_rs_very_low, people_rs_low, people_rs_medium, people_rs_high, people_rs_high_medium, share_people_high_medium,
-      households_rs_very_low, households_rs_low, households_rs_medium, households_rs_high, households_rs_high_medium,
-      people_fz3, people_imd_1_2, share_people_imd_1_2,
-      people_unique, people_split, people_shared, share_people_shared,
-      sites, sites_health, sites_education, sites_emergency, sites_utilities, sites_rs_high_medium
-    FROM %s
-  ", TBL_AREA_EXPOSURE))
+  # SELECT * so a table built before a column was added (the area risk score, added later) still reads; ensure_area_columns() fills the gaps.
+  ensure_area_columns(db_query(sprintf("SELECT * FROM %s", TBL_AREA_EXPOSURE)))
 }
 
 # fetch_area_shape(): one warning or alert area's boundary (sf, longitude and latitude), for the area detail map. NULL when not found.

@@ -1581,3 +1581,20 @@ bookmark_noise <- function(input_names) {
   map <- grepl("_(bounds|center|zoom|click|shape_click|shape_mouseover|shape_mouseout|marker_click|marker_mouseover|marker_mouseout|groups|geojson_click)$", input_names)
   input_names[tbl | dt_search | map]
 }
+
+
+# Columns the area pages read that an older ea_area_exposure may not have yet. Missing ones are added empty (NA), so a page built before the
+# column existed still draws, and says nothing rather than failing.
+AREA_OPTIONAL_COLUMNS <- c("risk_score", "risk_score_max", "grid_cells")
+ensure_area_columns <- function(x) {
+  x <- data.table::as.data.table(x)
+  for (cn in setdiff(AREA_OPTIONAL_COLUMNS, names(x))) data.table::set(x, j = cn, value = NA_real_)
+  x
+}
+
+# The score bar in the Warning areas table: the number, and a bar from pale to deep magenta that fills with the score (0 to 100). "-" when blank.
+score_bar_html <- function(score) {
+  s <- suppressWarnings(as.numeric(score))
+  w <- pmin(pmax(ifelse(is.na(s), 0, s), 0), 100)
+  ifelse(is.na(s), "-", sprintf("<div class=\"score-cell\"><b>%.1f</b><div class=\"score-bar\"><i style=\"width:%.0f%%\"></i></div></div>", s, w))
+}
