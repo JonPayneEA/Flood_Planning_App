@@ -752,6 +752,20 @@ demo_area_exposure <- function() demo_memo("area_exposure", demo_with_seed(3517,
 
 fetch_area_exposure <- function() copy(demo_area_exposure())
 
+# Invented cells for whatever the demo map shows: a smooth score field over the viewport, so the layer can be seen working.
+fetch_risk_grid <- function(west, south, east, north, min_score = 10, limit = GRID_CELL_LIMIT) {
+  b <- bbox_to_bng(west, south, east, north)
+  e <- seq(floor(b$xmin / 100) * 100, b$xmax, by = 100); nn <- seq(floor(b$ymin / 100) * 100, b$ymax, by = 100)
+  if (length(e) * length(nn) > 40000L) { e <- e[seq_len(200L)]; nn <- nn[seq_len(200L)] }
+  d <- CJ(easting = e, northing = nn)
+  cx <- mean(range(d$easting)); cy <- mean(range(d$northing)); r <- max(diff(range(d$easting)), 1)
+  d[, risk_score := round(pmax(0, 90 * exp(-(((easting - cx)^2 + (northing - cy)^2) / (2 * (r / 4)^2))) * (0.6 + 0.4 * abs(sin(easting / 700 + northing / 900)))), 2)]
+  d[, `:=`(people = as.integer(round(risk_score * 1.5)), imd_decile = 1L + as.integer(floor(abs(cos(easting / 500)) * 9.99)),
+           haz_rs = round(pmin(4, risk_score / 20), 2), critical_sites = as.integer(risk_score > 70 & (easting %% 500 == 0)), pop_pct = round(risk_score / 100, 4))]
+  d <- d[risk_score >= min_score][order(-risk_score)]
+  head(d, limit)
+}
+
 fetch_area_coverage <- function() {
   d <- demo_area_exposure()
   tot <- sum(d$people) * 3; hm <- sum(d$people_rs_high_medium) * 3

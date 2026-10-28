@@ -951,6 +951,23 @@ fetch_constituency_exposure <- function() {
 }
 
 
+# fetch_risk_grid(): the 100 m cells inside a longitude and latitude box with a score at or above min_score, highest first, at most
+#   `limit` of them. Read from exposure_grid_100m by easting and northing. Only for a map in view: the table holds all of England.
+
+fetch_risk_grid <- function(west, south, east, north, min_score = 10, limit = GRID_CELL_LIMIT) {
+  b <- bbox_to_bng(west, south, east, north)
+  db_query(sprintf("
+    SELECT easting, northing, people, imd_decile, haz_rs, critical_sites, pop_pct, risk_score
+    FROM %s
+    WHERE easting BETWEEN %.0f AND %.0f
+      AND northing BETWEEN %.0f AND %.0f
+      AND risk_score >= %.2f
+    ORDER BY risk_score DESC
+    LIMIT %d
+  ", TBL_EXPOSURE_GRID, b$xmin, b$xmax, b$ymin, b$ymax, as.numeric(min_score), as.integer(limit)))
+}
+
+
 # -----------------------------------------------------------------------------
 # Hydrometrics (Environment Agency real-time data)
 #

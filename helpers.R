@@ -1100,7 +1100,7 @@ PIPELINE_TABLE_JOBS <- c(
   fgs_constituency_changes = 18L, constituency_flood_situation = 19L, mp_briefing_drafts = 20L,
   fgs_constituency_exposure = 21L, pipeline_health = 22L, flood_warnings_current = 11L, ea_fw_threshold_gauge_links = 28L, ea_warning_episodes = 25L, ea_warning_fgs_coverage = 26L, ea_rt_measure_register = 9L, ea_rt_readings_all = 23L, ea_rt_latest = 23L, ea_rt_readings_bronze = 10L, fgs_constituency_mp_contacts = 14L,
   flood_warning_constituency_contacts = 13L, fgs_constituency_intersections = 7L,
-  fgs_ea_area_intersections = 7L, ea_area_constituency_lookup = 6L, ea_area_exposure = 35L, ea_area_overlaps = 35L, ea_area_coverage = 35L, constituency_flood_exposure = 35L)
+  fgs_ea_area_intersections = 7L, ea_area_constituency_lookup = 6L, ea_area_exposure = 35L, ea_area_overlaps = 35L, ea_area_coverage = 35L, exposure_grid_100m = 34L, constituency_flood_exposure = 35L)
 
 missing_table_info <- function(msg) {
   msg <- paste(as.character(msg), collapse = " ")
@@ -1417,4 +1417,46 @@ rain_add_pick <- function(current, key, valid, max = RAIN_MAX_CHARTED) {
 rain_series_colour <- function(i) {
   pal <- get0("APP_SERIES", ifnotfound = c("#053D7E", "#BE0553", "#038CF4", "#475A70", "#7A2E8E", "#0B7A75", "#5B7FA6", "#8A5A00"))
   pal[(as.integer(i) - 1L) %% length(pal) + 1L]
+}
+
+
+# ---- Risk grid layer (exposure_grid_100m, FGS_Notebooks job 34) -----------------------------------------------------------
+# Cells are 100 m squares on the British National Grid; easting and northing are the south-west corner.
+
+GRID_MIN_ZOOM  <- 13L      # below this a viewport holds too many cells to read or draw
+GRID_CELL_LIMIT <- 4000L
+GRID_BREAKS    <- c(0, 10, 25, 50, 75, 100.0001)
+GRID_COLOURS   <- c("#FFF3B0", "#FDBF6F", "#F46D43", "#D73027", "#7F0000")
+GRID_LABELS    <- c("Under 10", "10 to 25", "25 to 50", "50 to 75", "75 to 100")
+
+# The British National Grid box that holds a longitude and latitude box, so the warehouse can be asked by easting and northing.
+bbox_to_bng <- function(west, south, east, north) {
+  pts <- sf::st_as_sf(data.frame(x = c(west, east, west, east), y = c(south, south, north, north)), coords = c("x", "y"), crs = 4326)
+  xy <- sf::st_coordinates(sf::st_transform(pts, 27700))
+  list(xmin = floor(min(xy[, 1L])), xmax = ceiling(max(xy[, 1L])), ymin = floor(min(xy[, 2L])), ymax = ceiling(max(xy[, 2L])))
+}
+
+# Adds the corners of each cell in longitude and latitude, for leaflet rectangles.
+grid_cell_corners <- function(cells) {
+  cells <- as.data.frame(cells)
+  if (nrow(cells) == 0L) return(cbind(cells, lng1 = numeric(), lat1 = numeric(), lng2 = numeric(), lat2 = numeric()))
+  sw <- sf::st_as_sf(data.frame(x = cells$easting, y = cells$northing), coords = c("x", "y"), crs = 27700)
+  ne <- sf::st_as_sf(data.frame(x = cells$easting + 100, y = cells$northing + 100), coords = c("x", "y"), crs = 27700)
+  a <- sf::st_coordinates(sf::st_transform(sw, 4326)); b <- sf::st_coordinates(sf::st_transform(ne, 4326))
+  cells$lng1 <- a[, 1L]; cells$lat1 <- a[, 2L]; cells$lng2 <- b[, 1L]; cells$lat2 <- b[, 2L]
+  cells
+}
+
+grid_colour <- function(score) {
+  i <- findInterval(as.numeric(score), GRID_BREAKS, rightmost.closed = FALSE)
+  GRID_COLOURS[pmin(pmax(i, 1L), length(GRID_COLOURS))]
+}
+
+grid_popup <- function(cells) {
+  n <- function(v) ifelse(is.na(v), "none", formatC(round(v), format = "d", big.mark = ","))
+  paste0("<strong>Risk score ", formatC(cells$risk_score, format = "f", digits = 0), " of 100</strong><br>",
+         "People: ", n(cells$people), "<br>",
+         "Rivers and sea band (0 to 4): ", formatC(cells$haz_rs, format = "f", digits = 1), "<br>",
+         "Deprivation decile: ", ifelse(is.na(cells$imd_decile) | cells$imd_decile == 0, "unknown", cells$imd_decile), " (1 is most deprived)<br>",
+         "Critical sites: ", n(cells$critical_sites))
 }

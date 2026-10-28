@@ -1681,6 +1681,54 @@ server <- function(input, output, session) {
 
 
   # ---------------------------------------------------------------------------
+  # Risk grid layer (100 m cells, FGS_Notebooks job 34).
+  #
+  # Only the cells in view are read, from zoom GRID_MIN_ZOOM, with a score at or above the slider, highest first up to GRID_CELL_LIMIT.
+  # The view is debounced so a pan reads once, when it settles. A missing table leaves the map as it was and says so in the sidebar.
+  # ---------------------------------------------------------------------------
+
+  grid_view <- debounce(reactive({
+    req(isTRUE(input$layer_risk_grid), input$live_map_bounds, input$live_map_zoom)
+    list(b = input$live_map_bounds, z = input$live_map_zoom, min = input$grid_min_score)
+  }), 700)
+
+  grid_cells <- reactive({
+    v <- grid_view()
+    if (v$z < GRID_MIN_ZOOM) return(list(status = "zoom"))
+    d <- tryCatch(fetch_risk_grid(v$b$west, v$b$south, v$b$east, v$b$north, v$min), error = function(e) e)
+    if (inherits(d, "error")) {
+      mi <- missing_table_info(conditionMessage(d))
+      return(list(status = if (is.null(mi)) "error" else "missing"))
+    }
+    list(status = if (nrow(d) >= GRID_CELL_LIMIT) "capped" else "ok", cells = as.data.table(d))
+  })
+
+  output$grid_note <- renderUI({
+    g <- tryCatch(grid_cells(), error = function(e) NULL)
+    msg <- if (is.null(g)) "Pan or zoom the map to load cells." else switch(g$status,
+      zoom    = sprintf("Zoom in to street level (zoom %d or closer) to see cells.", GRID_MIN_ZOOM),
+      missing = "The risk grid has not been built yet (pipeline notebook 34).",
+      error   = "The risk grid could not be loaded.",
+      capped  = sprintf("Showing the %s highest scoring cells in view. Zoom in or raise the score to see the rest.", format(GRID_CELL_LIMIT, big.mark = ",")),
+      ok      = sprintf("%s cells in view.", format(nrow(g$cells), big.mark = ",")))
+    tags$p(class = "text-muted small", msg)
+  })
+
+  observe({
+    proxy <- leaflet::clearGroup(leaflet::leafletProxy("live_map"), "risk_grid")
+    proxy <- leaflet::removeControl(proxy, "risk_grid_legend")
+    if (!isTRUE(input$layer_risk_grid)) return()
+    g <- tryCatch(grid_cells(), error = function(e) NULL)
+    if (is.null(g) || is.null(g$cells) || nrow(g$cells) == 0L) return()
+    cells <- grid_cell_corners(g$cells)
+    leaflet::addRectangles(proxy, lng1 = cells$lng1, lat1 = cells$lat1, lng2 = cells$lng2, lat2 = cells$lat2, group = "risk_grid",
+                           stroke = FALSE, fillColor = grid_colour(cells$risk_score), fillOpacity = 0.7, popup = grid_popup(cells))
+    leaflet::addLegend(proxy, position = "bottomleft", colors = GRID_COLOURS, labels = GRID_LABELS, layerId = "risk_grid_legend",
+                       title = "Risk score<br>(rivers and sea)", opacity = 0.85)
+  })
+
+
+  # ---------------------------------------------------------------------------
   # Jump to a constituency on the map (from the changes strip, the situation
   # table or the exposure history). Switches to the Interrogator, draws the
   # boundary and flies to it. Messages reach the browser in order, so the tab

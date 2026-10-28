@@ -606,6 +606,14 @@ make_sidebar <- function() tags$div(
   ),
 
   checkboxInput("layer_constituencies", "Constituencies", value = FALSE),
+  checkboxInput("layer_risk_grid", "Risk grid, 100 m (zoom in)", value = FALSE),
+  conditionalPanel(
+    condition = "input.layer_risk_grid == true",
+    tags$div(
+      style = "margin-left: 16px; margin-top: -4px;",
+      sliderInput("grid_min_score", "Show cells scoring at least", min = 0, max = 90, value = 10, step = 5, ticks = FALSE),
+      uiOutput("grid_note"))
+  ),
   checkboxInput("layer_const_risk",
                 "Constituency forecast risk (latest statement, worst of 5 days)",
                 value = FALSE),

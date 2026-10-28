@@ -34,6 +34,10 @@ test_that("no demo fetcher reaches for the warehouse", {
     expect_true(all(ae$people_rs_high_medium <= ae$people) && all(ae$people_unique <= ae$people))
     expect_true(all(ae$people_rs_very_low + ae$people_rs_low + ae$people_rs_medium + ae$people_rs_high <= ae$people))
     expect_true(all(c("flood_warning", "flood_alert") %in% ae$kind))
+    if (requireNamespace("sf", quietly = TRUE)) {
+      gr <- demo_env$fetch_risk_grid(-1.56, 53.79, -1.52, 53.82, 10, 500L)
+      expect_true(nrow(gr) > 0L && nrow(gr) <= 500L && all(gr$risk_score >= 10) && !is.unsorted(rev(gr$risk_score)))
+    }
     cv <- demo_env$fetch_area_coverage()
     expect_setequal(cv$kind, c("all", "flood_warning", "flood_alert"))
     ce <- demo_env$fetch_constituency_exposure()
