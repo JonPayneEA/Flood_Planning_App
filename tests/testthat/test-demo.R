@@ -58,6 +58,9 @@ test_that("no demo fetcher reaches for the warehouse", {
     expect_gt(nrow(epi), 0L)
     rows <- warning_episode_rows(cbind(data.table::as.data.table(epi), ea_area_name = "x"), as.Date("1900-01-01"), Sys.Date() + 1L)       # what the area page does
     expect_equal(nrow(rows), nrow(epi)); expect_true(all(c("Issued", "Ended", "Duration", "Highest level", "Severe") %in% names(rows)))
+    tbd <- demo_env$fetch_threshold_board()
+    expect_true(all(c("measure_uri", "target_area", "type", "value_in_measure_unit", "last_value", "last_time", "value_3h_ago") %in% names(tbd)))
+    expect_gt(nrow(threshold_board_rows(tbd, ae, within_m = 1)), 3L)
     ov <- demo_env$fetch_area_overlaps(ae$area_id[1L])
     expect_true(all(c("area_id_a", "area_id_b", "people", "name_a", "name_b") %in% names(ov)))
     expect_no_error(demo_env$fetch_warning_episodes(demo_env$fetch_warning_history()$constituency_id[1L]))

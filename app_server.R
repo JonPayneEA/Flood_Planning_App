@@ -1439,7 +1439,7 @@ server <- function(input, output, session) {
     "refresh_data", "show_health", "goto_constituency", "exp_pick", "nav_to",
     "rv_reviewed", "rv_sent", "rv_rejected", "demo_reset",
     "area_row_click", "download_ea_areas", "download_situation",
-    "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas", "download_areas", "download_const_exp", "download_exp_bands", "download_area_cells", "download_area_issues", "download_area_brief", "download_area_sites", "download_exp_responders", "area_open", "areas_open_selected",
+    "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas", "download_areas", "download_const_exp", "download_exp_bands", "download_area_cells", "download_tb", "download_area_issues", "download_area_brief", "download_area_sites", "download_exp_responders", "area_open", "areas_open_selected",
     "situation_table_rows_selected", "situation_table_row_last_clicked",
     "situation_table_cell_clicked", "situation_table_rows_current",
     "situation_table_rows_all", "situation_table_state", "situation_table_search",
@@ -2634,6 +2634,68 @@ server <- function(input, output, session) {
   output$download_area_issues <- downloadHandler(
     filename = function() sprintf("area_%s_issue_history_%s.csv", gsub("[^A-Za-z0-9_.-]", "", input$area_pick %||% "none"), format(Sys.Date(), "%Y%m%d")),
     content = function(file) data.table::fwrite(tryCatch(area_issue_rows(), error = function(e) data.table()), file, bom = TRUE))
+
+  # ---- Gauges near thresholds ----------------------------------------------------------------------------------------------
+  tb_open <- reactive(identical(input$main_tabs, "Gauges near thresholds"))
+
+  tb_raw <- reactive({
+    req(tb_open())
+    invalidateLater(120000, session)
+    safe_fetch(fetch_threshold_board)
+  })
+
+  tb_rows <- reactive({
+    raw <- tb_raw(); req(!is.null(raw))
+    ex <- tryCatch(fetch_area_exposure(), error = function(e) NULL)
+    threshold_board_rows(raw, ex, within_m = as.numeric(input$tb_within), rising_only = isTRUE(input$tb_rising))
+  })
+
+  output$tb_note <- renderUI({
+    raw <- if (tb_open()) tb_raw() else NULL
+    gap <- intersect(c("ea_fw_threshold_gauge_links", "ea_rt_latest", "ea_rt_readings_all", "ea_rt_measure_register"), names(data_gaps()))
+    if (length(gap)) return(tags$p(class = "text-muted", gap_text(gap[1L], "Gauges near thresholds")))
+    if (tb_open() && is.null(raw)) return(tags$p(class = "text-muted", "The thresholds and levels could not be loaded. The thresholds are in the restricted schema, so the app needs access to it."))
+    if (!is.null(raw) && nrow(raw) == 0L) return(tags$p(class = "text-muted", "No thresholds are linked to gauges yet (pipeline notebook 28)."))
+    NULL
+  })
+
+  output$tb_kpis <- renderUI({
+    x <- tryCatch(tb_rows(), error = function(e) NULL); req(x)
+    tile <- function(big, small) tags$div(tags$b(big), tags$span(small))
+    tags$div(class = "kpi-row",
+             tile(sum(x$status == "At or above"), "at or above their threshold"),
+             tile(sum(x$status == "Close and rising"), "close and rising"),
+             tile(sum(x$status == "Close"), "close, not rising"),
+             tile(formatC(round(sum(x$people_at_risk[x$status != "Close"], na.rm = TRUE), -1L), format = "d", big.mark = ","), "people at risk in those areas"),
+             tile(format(max(x$last_time, as.POSIXct("1970-01-01", tz = "UTC")), "%H:%M", tz = "UTC"), "newest reading (UTC)"))
+  })
+
+  tb_display <- function(x) {
+    data.table(
+      Area = vapply(seq_len(nrow(x)), function(i) area_open_link(x$area_id[i], x$area_name[i]), character(1)),
+      Gauge = ifelse(is.na(x$gauge), "", x$gauge), River = ifelse(is.na(x$river), "", x$river),
+      Status = x$status, `Level (m)` = round(x$last_value, 2), `Threshold (m)` = round(x$threshold, 2), `Headroom (m)` = round(x$headroom, 2),
+      Trend = trend_label(x$rate), `Time to threshold` = ifelse(is.na(x$eta_hours), "", duration_label(x$eta_hours * 60)),
+      `People at risk` = round(x$people_at_risk), Read = format(x$last_time, "%d %b %H:%M", tz = "UTC"))
+  }
+
+  output$tb_table <- DT::renderDataTable({
+    x <- tryCatch(tb_rows(), error = function(e) NULL)
+    if (is.null(x) || nrow(x) == 0L) return(DT::datatable(data.frame(Note = "No linked gauge is within that distance of its threshold."), rownames = FALSE, selection = "none", options = list(dom = "t")))
+    DT::datatable(tb_display(x), rownames = FALSE, selection = "none", escape = FALSE,
+                  options = list(pageLength = 15, dom = "ftip", scrollX = TRUE, order = list(), columnDefs = list(list(orderable = FALSE, targets = 0L)))) |>
+      DT::formatStyle("Status", fontWeight = DT::styleEqual(c("At or above", "Close and rising"), c("700", "600")),
+                      color = DT::styleEqual(c("At or above", "Close and rising", "Close"), c(APP_SEVERE_HEX, APP_WARNING_HEX, APP_PALETTE$ink))) |>
+      DT::formatRound("People at risk", digits = 0, mark = ",")
+  })
+
+  output$download_tb <- downloadHandler(
+    filename = function() sprintf("gauges_near_thresholds_%s.csv", format(Sys.time(), "%Y%m%d_%H%M")),
+    content = function(file) {
+      x <- tryCatch(tb_rows(), error = function(e) NULL)
+      d <- if (is.null(x) || nrow(x) == 0L) data.table() else tb_display(x)[, Area := x$area_name]
+      data.table::fwrite(d, file, bom = TRUE)
+    })
 
   output$area_responders <- renderUI({
     a <- tryCatch(area_sel(), error = function(e) NULL); req(a)

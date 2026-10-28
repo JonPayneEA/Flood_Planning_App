@@ -465,6 +465,29 @@ guide_products <- function(s) {
       )
     ),
     list(
+      id = "threshold-board", title = "Gauges near thresholds", where = "Gauges near thresholds",
+      answers = "Which flood warning areas have a linked gauge close to its warning threshold, and how many people are at risk below them?",
+      tables = c("ea_fw_threshold_gauge_links", "ea_rt_latest", "ea_rt_readings_all", "ea_rt_measure_register", "ea_area_exposure"),
+      steps = c(
+        "Notebook 28 links each Observed flood warning threshold to the gauge measure that records it. The page reads those links with the newest level of each linked gauge, from the live feed.",
+        "For each warning area and gauge, the lowest Response threshold is used, because that is the level at which impacts are expected. Where an area has no Response threshold, its lowest threshold of any kind is used.",
+        "Headroom is the threshold minus the newest level, in metres. Because it is a difference on one gauge, it needs no datum. Choose how close counts with Show gauges within.",
+        "The trend compares the newest level with the average two to four hours earlier. A level rising by more than 0.01 metres an hour is rising, and for those the page gives a straight-line time to the threshold.",
+        "Rows are ordered: at or above the threshold first, then close and rising by the soonest time to threshold, then close. Ties go to the area with more people at risk.",
+        "The people at risk are the people in the warning area who are in a High or Medium band for rivers and the sea. Select an area name to open its detail page."
+      ),
+      read = c(
+        "At or above means the newest level is at or over the lowest threshold used. It does not mean a warning has been issued.",
+        "Time to threshold is shown only for a rising level. It is not a forecast and ignores rain still to come."
+      ),
+      limits = c(
+        "Only thresholds that notebook 28 could link to a gauge appear. A threshold whose unit disagrees with the gauge's is never linked, so some areas are missing.",
+        "A reading older than three hours is left out, because a stale level would give false comfort.",
+        "The thresholds are in the restricted schema, so the app needs access to it."
+      )
+    ),
+
+    list(
       id = "rain-gauges", title = "Rain gauges", where = "Rain gauges",
       answers = "How much rain has each gauge caught in the last hour, 12 hours and 24 hours, and where is it falling?",
       tables = c("ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_latest", "ea_rt_measures_mapped"),

@@ -1842,3 +1842,55 @@ issue_counts_by_month <- function(ep, now = Sys.time(), months = 36L) {
   }
   grid[order(month, level)]
 }
+
+
+# ---- Gauges near thresholds ------------------------------------------------------------------------------------------------
+# `raw` is fetch_threshold_board(): one row per Observed flood warning threshold linked to a gauge measure, with the newest level (last_value,
+# last_time) and the level two to four hours ago (value_3h_ago). For each warning area and gauge the lowest Response (RES) threshold is the one that
+# matters; where an area has none, its lowest threshold of any type is used. Headroom is the threshold minus the level in metres, so it needs no
+# datum. A rate of rise comes from the two readings, in metres an hour, and an estimated time to the threshold only when the level is rising.
+# `ex` is the exposure table (area_id, area_name, people, people_rs_high_medium) so rows can be ranked by who is below them.
+threshold_board_rows <- function(raw, ex = NULL, now = Sys.time(), within_m = 1, rising_only = FALSE, stale_hours = 3) {
+  empty <- data.frame(area_id = character(), area_name = character(), gauge = character(), river = character(), last_value = numeric(), last_time = as.POSIXct(character(), tz = "UTC"),
+                      threshold = numeric(), label = character(), headroom = numeric(), rate = numeric(), eta_hours = numeric(), status = character(),
+                      people_at_risk = numeric(), people = numeric(), stringsAsFactors = FALSE)
+  if (is.null(raw) || nrow(raw) == 0L) return(empty)
+  x <- as.data.frame(raw, stringsAsFactors = FALSE)
+  for (cn in c("target_area", "type", "label_prefix", "gauge_station", "gauge_river")) if (!(cn %in% names(x))) x[[cn]] <- NA_character_
+  x$threshold <- as.numeric(x$value_in_measure_unit); x$last_value <- as.numeric(x$last_value); x$value_3h_ago <- as.numeric(x$value_3h_ago)
+  x$last_time <- as.POSIXct(x$last_time, tz = "UTC")
+  now <- as.POSIXct(now, tz = "UTC")
+  x <- x[!is.na(x$target_area) & nzchar(x$target_area) & !is.na(x$last_value) & !is.na(x$last_time) &
+         as.numeric(difftime(now, x$last_time, units = "hours")) <= stale_hours, , drop = FALSE]
+  if (nrow(x) == 0L) return(empty)
+  key <- paste(x$target_area, x$measure_uri, sep = "\r")
+  keep <- unlist(lapply(split(seq_len(nrow(x)), key), function(i) {
+    res <- i[!is.na(x$type[i]) & toupper(x$type[i]) == "RES"]
+    use <- if (length(res) > 0L) res else i
+    use[which.min(x$threshold[use])]
+  }))
+  y <- x[keep, , drop = FALSE]
+  y$headroom <- y$threshold - y$last_value
+  hrs <- 3
+  y$rate <- ifelse(is.na(y$value_3h_ago), NA_real_, (y$last_value - y$value_3h_ago) / hrs)
+  y$eta_hours <- ifelse(!is.na(y$rate) & y$rate > 0.01 & y$headroom > 0, y$headroom / y$rate, NA_real_)
+  rising <- !is.na(y$rate) & y$rate > 0.01
+  y$status <- ifelse(y$headroom <= 0, "At or above", ifelse(y$headroom <= within_m & rising, "Close and rising", ifelse(y$headroom <= within_m, "Close", "Further")))
+  y <- y[y$status != "Further", , drop = FALSE]
+  if (isTRUE(rising_only)) y <- y[y$status %in% c("At or above", "Close and rising"), , drop = FALSE]
+  if (nrow(y) == 0L) return(empty)
+  e <- if (is.null(ex)) NULL else as.data.frame(ex)
+  m <- if (is.null(e)) rep(NA_integer_, nrow(y)) else match(y$target_area, e$area_id)
+  out <- data.frame(area_id = y$target_area, area_name = ifelse(is.na(m), y$target_area, e$area_name[m]),
+                    gauge = y$gauge_station, river = y$gauge_river, last_value = y$last_value, last_time = y$last_time, threshold = y$threshold,
+                    label = ifelse(is.na(y$label_prefix), ifelse(is.na(y$type), "", y$type), y$label_prefix), headroom = y$headroom, rate = y$rate, eta_hours = y$eta_hours,
+                    status = y$status, people_at_risk = if (is.null(e)) NA_real_ else e$people_rs_high_medium[m], people = if (is.null(e)) NA_real_ else e$people[m],
+                    stringsAsFactors = FALSE)
+  rank <- c(`At or above` = 1L, `Close and rising` = 2L, Close = 3L)[out$status]
+  out[order(rank, ifelse(is.na(out$eta_hours), Inf, out$eta_hours), out$headroom, -ifelse(is.na(out$people_at_risk), 0, out$people_at_risk)), , drop = FALSE]
+}
+
+# "+0.12 m/h" with an arrow, or "steady", or a dash when there is no earlier reading.
+trend_label <- function(rate) {
+  ifelse(is.na(rate), "-", ifelse(rate > 0.01, sprintf("\u2191 %+.2f m/h", rate), ifelse(rate < -0.01, sprintf("\u2193 %+.2f m/h", rate), "steady")))
+}

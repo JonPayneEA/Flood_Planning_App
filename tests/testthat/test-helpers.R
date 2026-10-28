@@ -1130,3 +1130,26 @@ test_that("area issue summary and monthly counts: totals, severe, in force now, 
   expect_equal(sum(m$n), 3L)                                                                   # the January 2025 episode is outside the 12 months
   expect_equal(sum(issue_counts_by_month(NULL, now, 12L)$n), 0L)
 })
+
+
+test_that("the threshold board picks the lowest Response threshold, ranks at or above then close and rising, and drops stale readings", {
+  now <- as.POSIXct("2026-10-28 12:00", tz = "UTC")
+  raw <- data.frame(
+    measure_uri = c("m1", "m1", "m2", "m3", "m4", "m5", "m6"), target_area = c("A1", "A1", "A2", "A3", "A4", "A5", "A6"),
+    type = c("RES", "ACTCON", "RES", "RES", "ACTCON", "RES", "RES"), label_prefix = "RES FW",
+    value_in_measure_unit = c(3.0, 2.0, 2.5, 5.0, 4.0, 2.0, 2.0),
+    last_value = c(3.1, 3.1, 2.3, 4.9, 3.7, 0.9, 2.1), last_time = as.POSIXct(c("2026-10-28 11:50", "2026-10-28 11:50", "2026-10-28 11:40", "2026-10-28 11:45", "2026-10-28 11:30", "2026-10-28 11:30", "2026-10-28 06:00"), tz = "UTC"),
+    value_3h_ago = c(3.0, 3.0, 2.0, 4.6, 3.7, 0.9, 2.0), gauge_station = "g", gauge_river = "r", stringsAsFactors = FALSE)
+  ex <- data.frame(area_id = c("A1", "A2", "A3", "A4", "A5"), area_name = c("One", "Two", "Three", "Four", "Five"), people = 100, people_rs_high_medium = c(10, 50, 5, 30, 1))
+  r <- threshold_board_rows(raw, ex, now, within_m = 1)
+  expect_equal(r$area_id, c("A1", "A3", "A2", "A4"))                               # A5 is 1.1 m below: further; A6's reading is stale
+  expect_equal(r$status, c("At or above", "Close and rising", "Close and rising", "Close"))
+  expect_equal(r$threshold[r$area_id == "A1"], 3.0)                                  # RES (3.0) is used, not the lower ACTCON (2.0)
+  expect_equal(r$threshold[r$area_id == "A4"], 4.0)                                  # no RES threshold: the lowest of any type
+  a2 <- r[r$area_id == "A2", ]; expect_equal(a2$headroom, 0.2, tolerance = 1e-9); expect_equal(a2$rate, 0.1, tolerance = 1e-9); expect_equal(a2$eta_hours, 2, tolerance = 1e-9)
+  expect_equal(r$area_name[1L], "One"); expect_equal(r$people_at_risk[2L], 5)
+  expect_true(r$eta_hours[2L] < r$eta_hours[3L])                                      # sooner first among close and rising
+  expect_equal(threshold_board_rows(raw, ex, now, within_m = 1, rising_only = TRUE)$area_id, c("A1", "A3", "A2"))
+  expect_equal(nrow(threshold_board_rows(raw[0, ], ex, now)), 0L); expect_equal(nrow(threshold_board_rows(NULL, ex, now)), 0L)
+  expect_equal(trend_label(c(0.12, -0.2, 0.001, NA)), c("\u2191 +0.12 m/h", "\u2193 -0.20 m/h", "steady", "-"))
+})

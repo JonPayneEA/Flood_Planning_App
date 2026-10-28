@@ -1084,6 +1084,21 @@ fetch_area_episodes <- function(area_id) {
   out
 }
 
+# Invented threshold board rows: a dozen demo areas, each with a gauge, a threshold and a level somewhere near it.
+fetch_threshold_board <- function() {
+  d <- demo_area_exposure()
+  set.seed(42)
+  k <- sample(nrow(d), 14L)
+  thr <- round(runif(14L, 1.5, 4), 2)
+  head <- c(-0.2, 0.05, 0.1, 0.2, 0.3, 0.4, 0.6, 0.8, 1.1, 1.4, 1.8, 2.5, 0.15, 0.35)
+  last <- round(thr - head, 2)
+  now <- Sys.time()
+  data.table(measure_uri = sprintf("demo:measure:%d", 1:14), target_area = d$area_id[k], type = ifelse(seq_len(14L) %% 5 == 0, "ACTCON", "RES"), label_prefix = "RES FW",
+             value_in_measure_unit = thr, unit_name = "mAOD", unit_match = "match", link_status = "linked", last_value = last,
+             last_time = now - sample(c(300, 900, 1200, 600), 14L, TRUE), value_3h_ago = round(last - c(0.12, -0.05, 0.2, 0.0, 0.15, 0.1, 0.02, -0.1, 0.08, 0.05, 0, 0.3, 0.06, 0.25), 2),
+             gauge_station = sprintf("%s gauge", sub(" at .*", "", d$area_name[k])), gauge_river = sub(" at .*", "", d$area_name[k]))
+}
+
 fetch_warning_history <- function() demo_memo("warning_history", demo_with_seed(515, {
   lk <- fetch_ea_constituency_mp()[constituency_overlap_pct >= TARGET_AREA_MIN_PCT]
   ea <- demo_ea_areas()$table
