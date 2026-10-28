@@ -538,6 +538,11 @@ areas_css <- function() {
 .area-cols td, .popup-figs td { border-bottom: 1px solid #B1B4B6; padding: 7px 8px 7px 0; }
 .area-cols td.n, .area-cols th.n, .popup-figs td.n { text-align: right; }
 .popup-figs { min-width: 260px; margin-top: 6px; }
+.responder-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 10px 34px; }
+.responder-table { border-collapse: collapse; width: 100%; font-size: 15px; }
+.responder-table th { text-align: left; border-bottom: 2px solid #0B0C0C; padding: 6px 8px 6px 0; }
+.responder-table td { border-bottom: 1px solid #B1B4B6; padding: 7px 8px 7px 0; }
+.responder-table td.n, .responder-table th.n { text-align: right; }
 @media (max-width: 900px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } .area-cols { grid-template-columns: 1fr; } }
 )---")
 }

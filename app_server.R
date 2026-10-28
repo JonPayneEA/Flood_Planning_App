@@ -1414,7 +1414,7 @@ server <- function(input, output, session) {
     "refresh_data", "show_health", "goto_constituency", "exp_pick", "nav_to",
     "rv_reviewed", "rv_sent", "rv_rejected", "demo_reset",
     "area_row_click", "download_ea_areas", "download_situation",
-    "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas", "download_areas", "download_const_exp", "download_exp_bands", "download_area_cells", "download_area_sites", "area_open", "areas_open_selected", "area_pick", "areas_search",
+    "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas", "download_areas", "download_const_exp", "download_exp_bands", "download_area_cells", "download_area_sites", "download_exp_responders", "area_open", "areas_open_selected", "area_pick", "areas_search",
     "situation_table_rows_selected", "situation_table_row_last_clicked",
     "situation_table_cell_clicked", "situation_table_rows_current",
     "situation_table_rows_all", "situation_table_state", "situation_table_search",
@@ -2547,6 +2547,44 @@ server <- function(input, output, session) {
     if (length(nm) == 0L || is.na(nm)) return(tags$p(class = "text-muted", "No constituency links found for this area."))
     tags$p(nm)
   })
+
+  output$area_responders <- renderUI({
+    a <- tryCatch(area_sel(), error = function(e) NULL); req(a)
+    g <- tryCatch(fetch_area_geographies(a$area_id), error = function(e) e)
+    if (inherits(g, "error")) {
+      mi <- missing_table_info(conditionMessage(g))
+      return(tags$p(class = "text-muted", if (is.null(mi)) "Who responds could not be loaded." else gap_text("ea_area_geographies", "Who responds")))
+    }
+    g <- as.data.table(g)
+    if (nrow(g) == 0L) return(tags$p(class = "text-muted", "No responder geographies found for this area."))
+    one <- function(geo, heading) {
+      x <- g[geography == geo]
+      if (nrow(x) == 0L) return(NULL)
+      x <- x[order(-people)]
+      tags$div(
+        tags$h3(heading),
+        tags$table(class = "responder-table",
+          tags$thead(tags$tr(tags$th("Name"), tags$th(class = "n", "People"), tags$th(class = "n", "Share of the area"), tags$th(class = "n", "At risk (High or Medium)"))),
+          tags$tbody(lapply(seq_len(min(nrow(x), 12L)), function(i)
+            tags$tr(tags$td(if (is.na(x$name[i]) || !nzchar(x$name[i])) x$code[i] else x$name[i]), tags$td(class = "n", area_n(x$people[i])),
+                    tags$td(class = "n", sprintf("%.0f%%", 100 * x$share_of_area_people[i])), tags$td(class = "n", area_n(x$people_rs_high_medium[i])))))),
+        if (nrow(x) > 12L) tags$p(class = "app-caption", sprintf("The first 12 of %d. The export has the rest.", nrow(x))))
+    }
+    do.call(tags$div, c(list(class = "responder-grid"), Map(one, names(RESPONDER_GEOGRAPHIES), unname(RESPONDER_GEOGRAPHIES))))
+  })
+
+  output$download_exp_responders <- downloadHandler(
+    filename = function() sprintf("warning_areas_by_responder_%s.csv", format(Sys.Date(), "%Y%m%d")),
+    content = function(file) {
+      g <- tryCatch(fetch_area_geographies(NULL), error = function(e) NULL)
+      ex <- tryCatch(as.data.table(fetch_area_exposure()), error = function(e) NULL)
+      if (is.null(g) || nrow(g) == 0L) { data.table::fwrite(data.table(), file); return(invisible()) }
+      g <- as.data.table(g)
+      if (!is.null(ex)) g <- merge(g, ex[, .(kind, area_id, area_name = area_name)], by = c("kind", "area_id"), all.x = TRUE)
+      data.table::fwrite(g[, .(Kind = kind, `Area id` = area_id, Area = if ("area_name" %in% names(g)) area_name else NA_character_, Geography = geography, Code = code, Name = name,
+                               People = round(people), Households = round(households), `Aged 65+` = round(over65),
+                               `People at risk (High or Medium)` = round(people_rs_high_medium), `Share of the area's people` = share_of_area_people)], file, bom = TRUE)
+    })
 
   # The 100 m cells inside the area's boundary.
   area_shape <- reactive({ req(input$area_pick); tryCatch(fetch_area_shape(input$area_pick), error = function(e) NULL) })

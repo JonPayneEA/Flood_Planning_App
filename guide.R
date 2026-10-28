@@ -48,12 +48,12 @@ GUIDE_TABLES <- data.frame(
             "ea_area_constituency_lookup", "mp_contact_details",
             "fgs_constituency_changes", "fgs_changes_log", "constituency_flood_situation", "mp_briefing_drafts",
             "fgs_constituency_exposure", "pipeline_health", "ea_warning_episodes",
-            "ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_readings_bronze", "ea_warning_fgs_coverage", "ea_rt_measures_mapped", "ea_rt_latest", "flood_warnings_current", "ea_fw_threshold_gauge_links", "ea_area_exposure", "ea_area_overlaps", "ea_area_coverage", "constituency_flood_exposure", "exposure_grid_100m", "ea_area_sites"),
-  notebook = c("01", "01", "07", "07", "03", "03", "05", "06", "04", "18", "18", "19", "20", "21", "22", "25", "09", "23", "10", "26", "16", "23", "11", "28", "35", "35", "35", "35", "34", "35"),
+            "ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_readings_bronze", "ea_warning_fgs_coverage", "ea_rt_measures_mapped", "ea_rt_latest", "flood_warnings_current", "ea_fw_threshold_gauge_links", "ea_area_exposure", "ea_area_overlaps", "ea_area_coverage", "constituency_flood_exposure", "exposure_grid_100m", "ea_area_sites", "ea_area_geographies"),
+  notebook = c("01", "01", "07", "07", "03", "03", "05", "06", "04", "18", "18", "19", "20", "21", "22", "25", "09", "23", "10", "26", "16", "23", "11", "28", "35", "35", "35", "35", "34", "35", "35"),
   refresh = c("Each FGS issue or amendment", "Each FGS issue or amendment", "Each FGS issue", "Each FGS issue",
               "Weekly", "Weekly", "Quarterly, or after an election", "Weekly and quarterly", "Weekly",
               "Every poll", "Every poll", "Every poll", "Every poll", "Daily", "Every poll", "Every poll",
-              "Weekly", "Every 15 minutes", "Daily", "Daily", "When the mapping file changes", "Every 15 minutes", "Every poll", "Manual, when the mapping or thresholds change", "Manual, when the hazard maps or address points change", "Manual, with the table above", "Manual, with the table above", "Manual, with the table above", "Manual, after notebooks 30 to 33", "Manual, with the table above"),
+              "Weekly", "Every 15 minutes", "Daily", "Daily", "When the mapping file changes", "Every 15 minutes", "Every poll", "Manual, when the mapping or thresholds change", "Manual, when the hazard maps or address points change", "Manual, with the table above", "Manual, with the table above", "Manual, with the table above", "Manual, after notebooks 30 to 33", "Manual, with the table above", "Manual, with the table above"),
   holds = c("One row per statement: the headline and the forecast text.",
             "One row per risk polygon, flood source and day, with impact, likelihood and risk level.",
             "Each FGS shape that overlaps an EA flood warning or alert area.",
@@ -83,7 +83,8 @@ GUIDE_TABLES <- data.frame(
             "People in England, and in a High or Medium band, covered by any warning area, by any alert area and by neither. Restricted schema.",
             "Per constituency: people, people at risk, and how many of each a warning or alert area covers. Restricted schema.",
             "One row per 100 m cell of England: people, deprivation, rivers and sea band shares, critical sites and a 0 to 100 risk score. Restricted schema; read only for the part of the map in view.",
-            "Each critical site inside each warning or alert area, with its rivers and sea band. Restricted schema; read for the area being viewed."),
+            "Each critical site inside each warning or alert area, with its rivers and sea band. Restricted schema; read for the area being viewed.",
+            "Each warning or alert area split by the police force, district, county, ward, constituency and region it lies in, with the people in each. Restricted schema; read for the area being viewed."),
   stringsAsFactors = FALSE
 )
 
@@ -404,13 +405,14 @@ guide_products <- function(s) {
     list(
       id = "warning-areas", title = "Warning areas", where = "Warning areas",
       answers = "How many people and households live inside each flood warning area and flood alert area, and how many of them are in a High or Medium band for flooding from rivers and the sea?",
-      tables = c("ea_area_exposure", "ea_area_overlaps", "ea_area_coverage", "constituency_flood_exposure", "ea_area_sites"),
+      tables = c("ea_area_exposure", "ea_area_overlaps", "ea_area_coverage", "constituency_flood_exposure", "ea_area_sites", "ea_area_geographies"),
       steps = c(
         "Notebook 33 places every address in England as a point and gives it its share of the Census 2021 output area's people and households. Notebook 35 then finds which warning and alert area boundaries contain each point.",
         "Each point carries the rivers and sea band (NaFRA2) and Flood Zone at its position, so an area's people can be split by band. At risk means High or Medium.",
         "Areas of one kind overlap. Gross counts everyone inside the area. Unique counts only people in no other area of that kind. Split shares each person equally between the areas they are in, so split figures add up to the true total.",
         "Select an area for its figures, the 100 m grid inside it, its people by band, the named critical sites in a High or Medium band, and the areas that share people with it.",
         "On the Forecast map, tick Risk grid and zoom in to street level: each 100 m cell is coloured by its risk score, the rivers and sea band weighted by people, deprivation and critical sites. Only the cells in view with a score at or above the slider are read, the highest first, up to a cap.",
+        "Who responds lists the police forces, districts, counties, constituencies and regions the area lies in. Every address point carries each of these codes from the National Statistics UPRN Lookup, so the area's people are split among them. Each table adds up to the area's people. Fire and rescue and combined authorities are not in the lookup and are planned. Wards are in the export only.",
         "The coverage panel counts every person once and shows how many of those in a High or Medium band sit in no warning area, and in no alert area. The constituency view gives the same split for each constituency."
       ),
       read = c(
