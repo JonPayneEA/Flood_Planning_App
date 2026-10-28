@@ -1028,27 +1028,46 @@ test_that("shareable links drop table and map mechanics but keep real filters an
 })
 
 
-test_that("the area brief is a complete page, escapes names, and degrades when the lists are missing", {
-  a <- data.frame(area_id = "A1", area_name = "River <Ouse> & Foss", type_text = "Flood warning area", county = "North Yorkshire", risk_score = 31.24,
+brief_area <- function(...) {
+  a <- data.frame(area_id = "A1", area_name = "River Ouse in Ynys M\u00f4n", type_text = "Flood warning area", county = "North Yorkshire", risk_score = 31.24,
                   people = 18400, households = 8150, over65 = 3260, share_people_imd_1_2 = 0.12, sites = 14, people_rs_high_medium = 5400,
                   share_people_high_medium = 0.2935, households_rs_high_medium = 2140, people_shared = 900, people_rs_high = 1980, people_rs_medium = 3420,
                   people_rs_low = 5100, people_rs_very_low = 7900, households_rs_high = 930, households_rs_medium = 1210, households_rs_low = 2040, households_rs_very_low = 3300)
+  for (nm in names(list(...))) a[[nm]] <- list(...)[[nm]]
+  a
+}
+
+test_that("the area brief content has the figures, keeps high and medium sites only, and degrades when the lists are missing", {
   sites <- data.frame(name = c("Rowan Court", "Far school"), site_type = c("Care home", "School"), band = c("High", "None"), rofrs_rank = c(4L, 0L))
   geos <- data.frame(geography = c("police_force_area", "police_force_area", "region"), name = c("North Yorkshire Police", NA, "Yorkshire"), code = c("E23", "E99", "E12"), people = c(15000, 300, 18400))
-  h <- area_brief_html(a, sites, geos, "York Central, York Outer", generated = as.POSIXct("2026-10-28 12:00", tz = "UTC"))
-  expect_match(h, "<!doctype html>", fixed = TRUE); expect_match(h, "</html>$")
-  expect_false(grepl("<Ouse>", h, fixed = TRUE)); expect_match(h, "River &lt;Ouse&gt; &amp; Foss", fixed = TRUE)
-  expect_match(h, "18,400"); expect_match(h, "risk score 31.2 of 100"); expect_match(h, "Rowan Court"); expect_false(grepl("Far school", h, fixed = TRUE))
-  expect_match(h, "North Yorkshire Police \\(15,000\\); E99 \\(300\\)"); expect_match(h, "York Central, York Outer"); expect_match(h, "Restricted")
-  bare <- area_brief_html(a, NULL, NULL, NA_character_)
-  expect_match(bare, "named sites is not available"); expect_match(bare, "Who responds is not available"); expect_match(bare, "Not available")
+  k <- area_brief_content(brief_area(), sites, geos, "York Central, York Outer", generated = as.POSIXct("2026-10-28 12:00", tz = "UTC"))
+  expect_equal(k$kpis$value[1:2], c("18,400", "8,150")); expect_match(k$subtitle, "risk score 31.2 of 100"); expect_match(k$summary, "5,400 people \\(29%\\)")
+  expect_equal(k$sites$name, "Rowan Court")
+  expect_match(k$responders$who[k$responders$what == "Police force"], "North Yorkshire Police (15,000); E99 (300)", fixed = TRUE)
+  expect_equal(k$constituencies, "York Central, York Outer"); expect_equal(k$bands$band, c("High", "Medium", "Low", "Very Low"))
+  bare <- area_brief_content(brief_area(), NULL, NULL, NA_character_)
+  expect_match(bare$sites_note, "not available"); expect_match(bare$responders_note, "not available"); expect_equal(bare$constituencies, "Not available.")
+  expect_false(grepl("risk score", area_brief_content(brief_area(risk_score = NA_real_))$subtitle))
+  a2 <- brief_area(); a2$risk_score <- NULL                                                 # an exposure table built before the score existed
+  expect_false(grepl("risk score", area_brief_content(a2)$subtitle))
 })
 
-test_that("the area brief draws for an exposure table that has no risk score column yet", {
-  a <- data.frame(area_id = "A1", area_name = "X", type_text = "Flood alert area", county = NA_character_, people = 10, households = 4, over65 = 1, share_people_imd_1_2 = 0.1,
-                  sites = 0, people_rs_high_medium = 1, share_people_high_medium = 0.1, households_rs_high_medium = 1, people_shared = 0, people_rs_high = 1, people_rs_medium = 0,
-                  people_rs_low = 0, people_rs_very_low = 9, households_rs_high = 1, households_rs_medium = 0, households_rs_low = 0, households_rs_very_low = 3)
-  expect_false(grepl("risk score", area_brief_html(a), fixed = TRUE))
+test_that("the area brief is a one page PDF, including with accented names, long lists and nothing to list", {
+  sites <- data.frame(name = sprintf("Site number %d with a fairly long descriptive name", 1:40), site_type = "School", band = rep(c("High", "Medium"), 20), rofrs_rank = rep(c(4L, 3L), 20))
+  geos <- data.frame(geography = rep(names(RESPONDER_GEOGRAPHIES), each = 3), name = sprintf("Authority %d of the area", 1:21), code = sprintf("E%d", 1:21), people = 15000 / (1:21))
+  f <- tempfile(fileext = ".pdf"); on.exit(unlink(f), add = TRUE)
+  area_brief_pdf(f, area_brief_content(brief_area(), head(sites, 6), geos, "York Central, York Outer"))
+  raw <- readBin(f, "raw", file.size(f))
+  expect_equal(rawToChar(raw[1:4]), "%PDF"); expect_gt(file.size(f), 3000)
+  # page counts need pdfinfo (poppler); the checks that do not are above and below it
+  pages <- function(path) if (nzchar(Sys.which("pdfinfo"))) as.integer(sub("Pages:\\s+", "", grep("^Pages:", system2("pdfinfo", path, stdout = TRUE), value = TRUE))) else 1L
+  expect_equal(pages(f), 1L)
+  g <- tempfile(fileext = ".pdf"); on.exit(unlink(g), add = TRUE)
+  area_brief_pdf(g, area_brief_content(brief_area(), sites, geos, "x"))                 # 40 sites are cut to the first 18, still one page
+  expect_equal(pages(g), 1L)
+  h <- tempfile(fileext = ".pdf"); on.exit(unlink(h), add = TRUE)
+  area_brief_pdf(h, area_brief_content(brief_area(), NULL, NULL, NA_character_))
+  expect_equal(pages(h), 1L)
 })
 
 test_that("older exposure tables get the area score columns empty, and the score bar fills with the score", {

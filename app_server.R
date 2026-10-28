@@ -2671,14 +2671,14 @@ server <- function(input, output, session) {
   })
 
   output$download_area_brief <- downloadHandler(
-    filename = function() sprintf("area_brief_%s_%s.html", gsub("[^A-Za-z0-9_.-]", "", input$area_pick %||% "none"), format(Sys.Date(), "%Y%m%d")),
+    filename = function() sprintf("area_brief_%s_%s.pdf", gsub("[^A-Za-z0-9_.-]", "", input$area_pick %||% "none"), format(Sys.Date(), "%Y%m%d")),
     content = function(file) {
       a <- as.data.frame(area_sel())
       sites <- tryCatch(fetch_area_sites(a$area_id), error = function(e) NULL)
       geos <- tryCatch(fetch_area_geographies(a$area_id), error = function(e) NULL)
       cons <- tryCatch(unname(area_constituency_names(fetch_area_constituency_links())[a$area_id]), error = function(e) NA_character_)
-      writeLines(area_brief_html(a, sites, geos, if (length(cons) == 0L) NA_character_ else cons), file, useBytes = TRUE)
-    }, contentType = "text/html")
+      area_brief_pdf(file, area_brief_content(a, sites, geos, if (length(cons) == 0L) NA_character_ else cons))
+    }, contentType = "application/pdf")
 
   output$download_area_cells <- downloadHandler(
     filename = function() sprintf("area_%s_cells_100m_%s.csv", gsub("[^A-Za-z0-9_.-]", "", input$area_pick %||% "none"), format(Sys.Date(), "%Y%m%d")),

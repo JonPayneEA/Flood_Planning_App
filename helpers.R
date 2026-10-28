@@ -1584,60 +1584,156 @@ bookmark_noise <- function(input_names) {
 
 
 # ---- The one-page area brief ----------------------------------------------------------------------------------------------
-# A self-contained page for one warning or alert area, to print or save as PDF from the browser: the figures, the people by band, the critical
-# sites in a High or Medium band, who responds, and the constituencies. `a` is the area's row from the exposure table, `sites` its sites
-# (name, site_type, band, rofrs_rank; NULL when not built), `geos` its responder rows (geography, name, code, people; NULL when not built) and
-# `cons` its constituency names as one string. Everything is escaped. The page says it is restricted and what the figures are.
-area_brief_html <- function(a, sites = NULL, geos = NULL, cons = NA_character_, generated = Sys.time()) {
-  esc <- function(x) htmltools::htmlEscape(as.character(x))
+# A one-page PDF for one warning or alert area: the figures, the people by band, the critical sites in a High or Medium band, who responds, the
+# constituencies. area_brief_content() turns the area's rows into plain text (tested without drawing anything); area_brief_pdf() draws it with
+# the grid package that ships with R, so no extra package or browser is needed on the server. `a` is the area's row from the exposure table,
+# `sites` its sites (name, site_type, band, rofrs_rank; NULL when not built), `geos` its responder rows (geography, name, code, people; NULL when
+# not built) and `cons` its constituency names as one string.
+area_brief_content <- function(a, sites = NULL, geos = NULL, cons = NA_character_, generated = Sys.time()) {
   n <- function(v) ifelse(is.na(v), "none", formatC(round(as.numeric(v)), format = "d", big.mark = ","))
   pct <- function(v) sprintf("%.0f%%", 100 * as.numeric(v))
-  row <- function(...) paste0("<tr>", paste(sprintf("<td>%s</td>", c(...)), collapse = ""), "</tr>")
-  bands <- paste(vapply(seq_len(nrow(FLOOD_BANDS)), function(i) {
+  has <- function(col) length(a[[col]]) == 1L && !is.na(a[[col]])
+  bands <- do.call(rbind, lapply(seq_len(nrow(FLOOD_BANDS)), function(i) {
     cc <- FLOOD_BANDS$col[i]
-    paste0("<tr><td>", band_chip(FLOOD_BANDS$band[i]), " ", esc(FLOOD_BANDS$range[i]), "</td><td class=\"n\">", pct(a[[paste0("people_", cc)]] / max(a$people, 1)),
-           "</td><td class=\"n\">", n(a[[paste0("people_", cc)]]), "</td><td class=\"n\">", n(a[[paste0("households_", cc)]]), "</td></tr>")
-  }, character(1)), collapse = "")
-  sites_html <- if (is.null(sites)) "<p class=\"note\">The list of named sites is not available.</p>" else {
+    data.frame(band = FLOOD_BANDS$band[i], range = FLOOD_BANDS$range[i], share = pct(a[[paste0("people_", cc)]] / max(a$people, 1)),
+               people = n(a[[paste0("people_", cc)]]), households = n(a[[paste0("households_", cc)]]), stringsAsFactors = FALSE)
+  }))
+  site_rows <- NULL; sites_note <- NULL
+  if (is.null(sites)) sites_note <- "The list of named sites is not available."
+  else {
     s <- as.data.frame(sites); s <- s[!is.na(s$rofrs_rank) & s$rofrs_rank >= 3, , drop = FALSE]
-    if (nrow(s) == 0L) "<p>None of the critical sites is in a High or Medium band.</p>" else paste0(
-      "<table><thead><tr><th>Site</th><th>Type</th><th>Band</th></tr></thead><tbody>",
-      paste(vapply(seq_len(min(nrow(s), 25L)), function(i) row(esc(s$name[i]), esc(s$site_type[i]), band_chip(s$band[i])), character(1)), collapse = ""),
-      "</tbody></table>", if (nrow(s) > 25L) sprintf("<p class=\"note\">The first 25 of %d.</p>", nrow(s)) else "")
+    if (nrow(s) == 0L) sites_note <- "None of the critical sites is in a High or Medium band."
+    else {
+      k <- seq_len(min(nrow(s), 18L))
+      site_rows <- data.frame(name = s$name[k], type = s$site_type[k], band = s$band[k], stringsAsFactors = FALSE)
+      if (nrow(s) > 18L) sites_note <- sprintf("The first 18 of %d. The area page has them all.", nrow(s))
+    }
   }
-  resp_html <- if (is.null(geos) || nrow(geos) == 0L) "<p class=\"note\">Who responds is not available.</p>" else {
+  resp <- NULL; resp_note <- NULL
+  if (is.null(geos) || nrow(geos) == 0L) resp_note <- "Who responds is not available."
+  else {
     g <- as.data.frame(geos)
-    paste(vapply(names(RESPONDER_GEOGRAPHIES), function(geo) {
+    resp <- do.call(rbind, lapply(names(RESPONDER_GEOGRAPHIES), function(geo) {
       x <- g[g$geography == geo, , drop = FALSE]
-      if (nrow(x) == 0L) return("")
-      x <- x[order(-x$people), , drop = FALSE]; x <- x[seq_len(min(nrow(x), 5L)), , drop = FALSE]
+      if (nrow(x) == 0L) return(NULL)
+      x <- x[order(-x$people), , drop = FALSE]; x <- x[seq_len(min(nrow(x), 4L)), , drop = FALSE]
       nm <- ifelse(is.na(x$name) | !nzchar(x$name), x$code, x$name)
-      sprintf("<tr><td>%s</td><td>%s</td></tr>", esc(RESPONDER_GEOGRAPHIES[[geo]]), esc(paste0(nm, " (", n(x$people), ")", collapse = "; ")))
-    }, character(1)), collapse = "") |> (\(r) paste0("<table><tbody>", r, "</tbody></table>"))()
+      data.frame(what = RESPONDER_GEOGRAPHIES[[geo]], who = paste0(nm, " (", n(x$people), ")", collapse = "; "), stringsAsFactors = FALSE)
+    }))
   }
-  paste0(
-    "<!doctype html><html lang=\"en-GB\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">",
-    "<title>", esc(a$area_name), " - area brief</title><style>",
-    "@page{size:A4;margin:14mm}body{font-family:Arial,Helvetica,sans-serif;color:#0B0C0C;font-size:13px;line-height:1.35;max-width:190mm;margin:0 auto;padding:12px}",
-    "h1{font-size:24px;margin:0 0 2px}h2{font-size:15px;margin:16px 0 6px;border-bottom:2px solid #053D7E;padding-bottom:2px}.sub{color:#505A5F;margin:0 0 10px}",
-    ".kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:8px 0}.kpis div{border-top:4px solid #053D7E;padding-top:4px}.kpis b{display:block;font-size:20px}.kpis span{font-size:11px;color:#505A5F}",
-    "table{border-collapse:collapse;width:100%;margin:4px 0}th{text-align:left;border-bottom:2px solid #0B0C0C;padding:3px 6px 3px 0}td{border-bottom:1px solid #B1B4B6;padding:3px 6px 3px 0;vertical-align:top}td.n,th.n{text-align:right}",
-    ".band-chip{display:inline-block;padding:0 6px;font-size:11px;font-weight:700}.note,.foot{color:#505A5F;font-size:11px}.foot{margin-top:14px;border-top:1px solid #B1B4B6;padding-top:6px}",
-    ".restricted{background:#FFF4D6;border:1px solid #8A5A00;padding:4px 8px;font-size:11px}</style></head><body>",
-    "<div class=\"restricted\">Restricted: built from address-level data. Handle as the data is classified.</div>",
-    "<h1>", esc(a$area_name), "</h1><p class=\"sub\">", esc(a$type_text), " ", esc(a$area_id), if (length(a$county) == 1L && !is.na(a$county)) paste0(" - ", esc(a$county)) else "",
-    if (length(a$risk_score) == 1L && !is.na(a$risk_score)) sprintf(" - risk score %.1f of 100", a$risk_score) else "", "</p>",
-    "<div class=\"kpis\"><div><b>", n(a$people), "</b><span>people</span></div><div><b>", n(a$households), "</b><span>households</span></div>",
-    "<div><b>", n(a$over65), "</b><span>aged 65 or over (", pct(a$over65 / max(a$people, 1)), ")</span></div>",
-    "<div><b>", pct(a$share_people_imd_1_2), "</b><span>in the most deprived 20% of neighbourhoods</span></div><div><b>", n(a$sites), "</b><span>critical sites</span></div></div>",
-    "<p>", n(a$people_rs_high_medium), " people (", pct(a$share_people_high_medium), ") and ", n(a$households_rs_high_medium),
-    " households are in a High or Medium band for flooding from rivers and the sea. ", n(a$people_shared), " people are also in another area of this kind.</p>",
-    "<h2>By flood band</h2><table><thead><tr><th>Band</th><th class=\"n\">Share of people</th><th class=\"n\">People</th><th class=\"n\">Households</th></tr></thead><tbody>", bands, "</tbody></table>",
-    "<h2>Critical sites in a High or Medium band</h2>", sites_html,
-    "<h2>Who responds</h2>", resp_html,
-    "<h2>Constituencies</h2><p>", if (is.na(cons) || !nzchar(cons)) "Not available." else esc(cons), "</p>",
-    "<p class=\"foot\">Rivers and the sea only: surface water is not counted. People are the Census 2021 output area total shared among the addresses in it, so small counts are estimates. ",
-    "Areas of one kind overlap, so a person can be in more than one area. Prepared ", format(generated, "%d %b %Y %H:%M"), ".</p></body></html>")
+  list(
+    title = as.character(a$area_name),
+    subtitle = paste0(a$type_text, " ", a$area_id, if (has("county")) paste0(" - ", a$county) else "",
+                      if (has("risk_score")) sprintf(" - risk score %.1f of 100", a$risk_score) else ""),
+    kpis = data.frame(value = c(n(a$people), n(a$households), n(a$over65), pct(a$share_people_imd_1_2), n(a$sites)),
+                      label = c("people", "households", sprintf("aged 65 or over (%s)", pct(a$over65 / max(a$people, 1))),
+                                "in the most deprived 20% of neighbourhoods", "critical sites"), stringsAsFactors = FALSE),
+    summary = paste0(n(a$people_rs_high_medium), " people (", pct(a$share_people_high_medium), ") and ", n(a$households_rs_high_medium),
+                     " households are in a High or Medium band for flooding from rivers and the sea. ", n(a$people_shared), " people are also in another area of this kind."),
+    bands = bands, sites = site_rows, sites_note = sites_note, responders = resp, responders_note = resp_note,
+    constituencies = if (is.na(cons) || !nzchar(cons)) "Not available." else cons,
+    footer = paste0("Rivers and the sea only: surface water is not counted. People are the Census 2021 output area total shared among the addresses in it, ",
+                    "so small counts are estimates. Areas of one kind overlap, so a person can be in more than one area. Prepared ", format(generated, "%d %b %Y %H:%M"), "."))
+}
+
+# Draws the content on A4 with grid and writes it to `file`. One page for a normal area; a long list simply starts a second page.
+# cairo_pdf handles any characters in names; without cairo the plain pdf device is used with names reduced to ASCII.
+area_brief_pdf <- function(file, content) {
+  use_cairo <- isTRUE(capabilities("cairo"))
+  txt <- if (use_cairo) function(x) as.character(x) else function(x) iconv(as.character(x), to = "ASCII//TRANSLIT", sub = "?")
+  if (use_cairo) grDevices::cairo_pdf(file, width = 8.27, height = 11.69, family = "sans") else grDevices::pdf(file, width = 8.27, height = 11.69)
+  on.exit(grDevices::dev.off(), add = TRUE)
+  W <- 8.27; H <- 11.69; M <- 0.6; X1 <- W - M
+  ink <- "#0B0C0C"; grey <- "#505A5F"; navy <- "#053D7E"; line <- "#B1B4B6"
+  grid::grid.newpage()
+  y <- M                                                   # inches from the top
+  gp <- function(size, bold = FALSE, col = ink) grid::gpar(fontsize = size, fontface = if (bold) "bold" else "plain", col = col, lineheight = 1.15)
+  u <- function(v) grid::unit(v, "inches")
+  yy <- function(v) u(H - v)                               # a y from the top as a grid y from the bottom
+  room <- function(need) { if (y + need > H - M) { grid::grid.newpage(); y <<- M } }
+  put <- function(label, x, size = 9, bold = FALSE, col = ink, just = "left", at = y) {
+    grid::grid.text(txt(label), x = u(x), y = yy(at), just = c(just, "top"), gp = gp(size, bold, col))
+  }
+  wrap <- function(label, width, size = 9, bold = FALSE) {
+    w <- function(s) grid::convertWidth(grid::grobWidth(grid::textGrob(txt(s), gp = gp(size, bold))), "inches", valueOnly = TRUE)
+    out <- character()
+    for (para in strsplit(as.character(label), "\n", fixed = TRUE)[[1L]]) {
+      words <- strsplit(para, " ", fixed = TRUE)[[1L]]; cur <- ""
+      for (wd in words) {
+        try_ <- if (nzchar(cur)) paste(cur, wd) else wd
+        if (w(try_) > width && nzchar(cur)) { out <- c(out, cur); cur <- wd } else cur <- try_
+      }
+      out <- c(out, cur)
+    }
+    out
+  }
+  para <- function(label, size = 9, col = ink, width = X1 - M, gap = 0.06) {
+    ls <- wrap(label, width, size); h <- length(ls) * size * 1.25 / 72
+    room(h + gap); for (i in seq_along(ls)) put(ls[i], M, size, col = col, at = y + (i - 1L) * size * 1.25 / 72); y <<- y + h + gap
+  }
+  heading <- function(label) {
+    room(0.45); y <<- y + 0.12; put(label, M, 11, TRUE); y <<- y + 0.2
+    grid::grid.lines(x = u(c(M, X1)), y = yy(c(y, y)), gp = grid::gpar(col = navy, lwd = 1.6)); y <<- y + 0.07
+  }
+  chip <- function(band, x, at = y) {
+    i <- match(band, FLOOD_BANDS$band); if (is.na(i)) { put(band, x, 8, at = at); return(invisible()) }
+    wd <- grid::convertWidth(grid::grobWidth(grid::textGrob(band, gp = gp(7.5, TRUE))), "inches", valueOnly = TRUE) + 0.12
+    grid::grid.rect(x = u(x), y = yy(at - 0.02), width = u(wd), height = u(0.15), just = c("left", "top"), gp = grid::gpar(fill = FLOOD_BANDS$fill[i], col = NA))
+    grid::grid.text(band, x = u(x + 0.06), y = yy(at - 0.012), just = c("left", "top"), gp = gp(7.5, TRUE, FLOOD_BANDS$text[i]))
+  }
+  table <- function(head, rows, xs, aligns, chips = integer(), rh = 0.205) {
+    room(rh * (nrow(rows) + 1L) + 0.05)
+    for (j in seq_along(head)) put(head[j], if (aligns[j] == "right") xs[j + 1L] else xs[j], 8, TRUE, just = aligns[j])
+    y <<- y + rh; grid::grid.lines(x = u(c(M, X1)), y = yy(c(y - 0.03, y - 0.03)), gp = grid::gpar(col = ink, lwd = 1.4))
+    for (i in seq_len(nrow(rows))) {
+      room(rh)
+      for (j in seq_along(head)) {
+        if (j %in% chips) chip(rows[i, j], xs[j]) else put(rows[i, j], if (aligns[j] == "right") xs[j + 1L] else xs[j], 8.5, just = aligns[j])
+      }
+      y <<- y + rh; grid::grid.lines(x = u(c(M, X1)), y = yy(c(y - 0.03, y - 0.03)), gp = grid::gpar(col = line, lwd = 0.6))
+    }
+    y <<- y + 0.03
+  }
+
+  # banner
+  grid::grid.rect(x = u(M), y = yy(y), width = u(X1 - M), height = u(0.24), just = c("left", "top"), gp = grid::gpar(fill = "#FFF4D6", col = "#8A5A00", lwd = 0.8))
+  put("Restricted: built from address-level data. Handle as the data is classified.", M + 0.08, 8, at = y + 0.055); y <- y + 0.42
+  for (l in wrap(content$title, X1 - M, 21, TRUE)) { put(l, M, 21, TRUE); y <- y + 0.36 }
+  para(content$subtitle, 9.5, grey, gap = 0.12)
+  # figures
+  k <- content$kpis; cw <- (X1 - M) / nrow(k)
+  for (i in seq_len(nrow(k))) {
+    x0 <- M + (i - 1L) * cw
+    grid::grid.rect(x = u(x0), y = yy(y), width = u(cw - 0.12), height = u(0.045), just = c("left", "top"), gp = grid::gpar(fill = navy, col = NA))
+    put(k$value[i], x0, 17, TRUE, at = y + 0.08)
+    ls <- wrap(k$label[i], cw - 0.15, 7.5); for (j in seq_along(ls)) put(ls[j], x0, 7.5, col = grey, at = y + 0.42 + (j - 1L) * 0.12)
+  }
+  y <- y + 0.88
+  para(content$summary, 9.5)
+  heading("By flood band")
+  b <- content$bands
+  table(c("Band", "", "Share of people", "People", "Households"), cbind(b$band, b$range, b$share, b$people, b$households),
+        xs = c(M, M + 0.9, M + 3.3, M + 4.5, M + 5.8, X1), aligns = c("left", "left", "right", "right", "right"), chips = 1L)
+  heading("Critical sites in a High or Medium band")
+  if (!is.null(content$sites)) table(c("Site", "Type", "Band"), cbind(content$sites$name, content$sites$type, content$sites$band),
+                                     xs = c(M, M + 3.9, M + 5.5), aligns = rep("left", 3), chips = 3L)
+  if (!is.null(content$sites_note)) para(content$sites_note, 8.5, grey)
+  heading("Who responds")
+  if (!is.null(content$responders)) {
+    for (i in seq_len(nrow(content$responders))) {
+      ls <- wrap(content$responders$who[i], X1 - M - 2.1, 8.5); h <- max(length(ls) * 0.15, 0.2); room(h + 0.04)
+      put(content$responders$what[i], M, 8.5, TRUE)
+      for (j in seq_along(ls)) put(ls[j], M + 2.1, 8.5, at = y + (j - 1L) * 0.15)
+      y <- y + h + 0.04; grid::grid.lines(x = u(c(M, X1)), y = yy(c(y - 0.025, y - 0.025)), gp = grid::gpar(col = line, lwd = 0.6))
+    }
+  }
+  if (!is.null(content$responders_note)) para(content$responders_note, 8.5, grey)
+  heading("Constituencies")
+  para(content$constituencies, 9)
+  room(0.7); y <- y + 0.1
+  grid::grid.lines(x = u(c(M, X1)), y = yy(c(y, y)), gp = grid::gpar(col = line, lwd = 0.6)); y <- y + 0.06
+  para(content$footer, 7.5, grey)
+  invisible(file)
 }
 
 # Columns the area pages read that an older ea_area_exposure may not have yet. Missing ones are added empty (NA), so a page built before the
