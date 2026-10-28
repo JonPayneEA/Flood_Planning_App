@@ -1783,3 +1783,30 @@ inforce_exposure_summary <- function(f, ex, pairs = NULL) {
   out <- do.call(rbind, rows)
   if (is.null(out)) empty else out
 }
+
+
+# The "Who responds" tables on the area detail page: one per geography in RESPONDER_GEOGRAPHIES, biggest first, up to `top` rows each. `g` has
+# geography, code, name, people, share_of_area_people and people_rs_high_medium. A geography the area has no rows for is left out; NULL when none.
+# The tables are passed as unnamed children: a named child would be written as an HTML attribute and the section would draw empty.
+responder_tables_ui <- function(g, top = 12L) {
+  g <- as.data.frame(g)
+  n <- function(v) formatC(round(as.numeric(v)), format = "d", big.mark = ",")
+  one <- function(geo, heading) {
+    x <- g[g$geography == geo, , drop = FALSE]
+    if (nrow(x) == 0L) return(NULL)
+    x <- x[order(-x$people), , drop = FALSE]
+    k <- seq_len(min(nrow(x), top))
+    htmltools::tags$div(
+      htmltools::tags$h3(heading),
+      htmltools::tags$table(class = "responder-table",
+        htmltools::tags$thead(htmltools::tags$tr(htmltools::tags$th("Name"), htmltools::tags$th(class = "n", "People"),
+                                                 htmltools::tags$th(class = "n", "Share of the area"), htmltools::tags$th(class = "n", "At risk (High or Medium)"))),
+        htmltools::tags$tbody(lapply(k, function(i)
+          htmltools::tags$tr(htmltools::tags$td(if (is.na(x$name[i]) || !nzchar(x$name[i])) x$code[i] else x$name[i]), htmltools::tags$td(class = "n", n(x$people[i])),
+                             htmltools::tags$td(class = "n", sprintf("%.0f%%", 100 * x$share_of_area_people[i])), htmltools::tags$td(class = "n", n(x$people_rs_high_medium[i])))))),
+      if (nrow(x) > top) htmltools::tags$p(class = "app-caption", sprintf("The first %d of %d. The export has the rest.", top, nrow(x))))
+  }
+  tables <- unname(Filter(Negate(is.null), Map(one, names(RESPONDER_GEOGRAPHIES), unname(RESPONDER_GEOGRAPHIES))))
+  if (length(tables) == 0L) return(NULL)
+  do.call(htmltools::tags$div, c(list(class = "responder-grid"), tables))
+}

@@ -1094,3 +1094,19 @@ test_that("the in-force summary counts warnings against warnings, takes shared p
   expect_equal(nrow(inforce_exposure_summary(f, NULL, pairs)), 0L)
   expect_equal(inforce_exposure_summary(f[f$severity_level == 3L, ], ex, NULL)$people, 4000)
 })
+
+
+test_that("the Who responds tables draw: one per geography present, biggest first, names or codes, and nothing leaks into attributes", {
+  g <- data.frame(geography = c("police_force_area", "police_force_area", "region", "fire_and_rescue_authority"), code = c("P1", "P2", "R1", "F1"),
+                  name = c("North Police", NA, "Yorkshire", "North Fire"), people = c(900, 100, 1000, 1000), share_of_area_people = c(0.9, 0.1, 1, 1), people_rs_high_medium = c(90, 10, 100, 100))
+  ui <- responder_tables_ui(g)
+  html <- as.character(ui)
+  expect_equal(lengths(regmatches(html, gregexpr("<table", html, fixed = TRUE))), 3L)          # police, fire, region; the others have no rows
+  expect_match(html, "North Police"); expect_match(html, "<td>P2</td>", fixed = TRUE); expect_match(html, "90%")
+  expect_lt(regexpr("North Police", html), regexpr("<td>P2</td>", html, fixed = TRUE))          # biggest first
+  expect_false(grepl("police_force_area=", html, fixed = TRUE))                                  # not written as an HTML attribute
+  expect_equal(as.character(ui$attribs$class), "responder-grid"); expect_length(ui$children, 3L)
+  expect_null(responder_tables_ui(g[0, ]))
+  many <- data.frame(geography = "region", code = sprintf("R%d", 1:20), name = NA, people = 20:1, share_of_area_people = 0.05, people_rs_high_medium = 0)
+  expect_match(as.character(responder_tables_ui(many)), "The first 12 of 20")
+})
