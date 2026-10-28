@@ -1026,3 +1026,27 @@ test_that("shareable links drop table and map mechanics but keep real filters an
   expect_false(any(c("main_tabs", "areas_kind", "areas_search", "sit_search", "area_pick", "grid_min_score", "layer_risk_grid", "nations", "statement_id") %in% drop))
   expect_equal(bookmark_noise(character()), character())
 })
+
+
+test_that("the area brief is a complete page, escapes names, and degrades when the lists are missing", {
+  a <- data.frame(area_id = "A1", area_name = "River <Ouse> & Foss", type_text = "Flood warning area", county = "North Yorkshire", risk_score = 31.24,
+                  people = 18400, households = 8150, over65 = 3260, share_people_imd_1_2 = 0.12, sites = 14, people_rs_high_medium = 5400,
+                  share_people_high_medium = 0.2935, households_rs_high_medium = 2140, people_shared = 900, people_rs_high = 1980, people_rs_medium = 3420,
+                  people_rs_low = 5100, people_rs_very_low = 7900, households_rs_high = 930, households_rs_medium = 1210, households_rs_low = 2040, households_rs_very_low = 3300)
+  sites <- data.frame(name = c("Rowan Court", "Far school"), site_type = c("Care home", "School"), band = c("High", "None"), rofrs_rank = c(4L, 0L))
+  geos <- data.frame(geography = c("police_force_area", "police_force_area", "region"), name = c("North Yorkshire Police", NA, "Yorkshire"), code = c("E23", "E99", "E12"), people = c(15000, 300, 18400))
+  h <- area_brief_html(a, sites, geos, "York Central, York Outer", generated = as.POSIXct("2026-10-28 12:00", tz = "UTC"))
+  expect_match(h, "<!doctype html>", fixed = TRUE); expect_match(h, "</html>$")
+  expect_false(grepl("<Ouse>", h, fixed = TRUE)); expect_match(h, "River &lt;Ouse&gt; &amp; Foss", fixed = TRUE)
+  expect_match(h, "18,400"); expect_match(h, "risk score 31.2 of 100"); expect_match(h, "Rowan Court"); expect_false(grepl("Far school", h, fixed = TRUE))
+  expect_match(h, "North Yorkshire Police \\(15,000\\); E99 \\(300\\)"); expect_match(h, "York Central, York Outer"); expect_match(h, "Restricted")
+  bare <- area_brief_html(a, NULL, NULL, NA_character_)
+  expect_match(bare, "named sites is not available"); expect_match(bare, "Who responds is not available"); expect_match(bare, "Not available")
+})
+
+test_that("the area brief draws for an exposure table that has no risk score column yet", {
+  a <- data.frame(area_id = "A1", area_name = "X", type_text = "Flood alert area", county = NA_character_, people = 10, households = 4, over65 = 1, share_people_imd_1_2 = 0.1,
+                  sites = 0, people_rs_high_medium = 1, share_people_high_medium = 0.1, households_rs_high_medium = 1, people_shared = 0, people_rs_high = 1, people_rs_medium = 0,
+                  people_rs_low = 0, people_rs_very_low = 9, households_rs_high = 1, households_rs_medium = 0, households_rs_low = 0, households_rs_very_low = 3)
+  expect_false(grepl("risk score", area_brief_html(a), fixed = TRUE))
+})

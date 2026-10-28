@@ -1581,3 +1581,61 @@ bookmark_noise <- function(input_names) {
   map <- grepl("_(bounds|center|zoom|click|shape_click|shape_mouseover|shape_mouseout|marker_click|marker_mouseover|marker_mouseout|groups|geojson_click)$", input_names)
   input_names[tbl | dt_search | map]
 }
+
+
+# ---- The one-page area brief ----------------------------------------------------------------------------------------------
+# A self-contained page for one warning or alert area, to print or save as PDF from the browser: the figures, the people by band, the critical
+# sites in a High or Medium band, who responds, and the constituencies. `a` is the area's row from the exposure table, `sites` its sites
+# (name, site_type, band, rofrs_rank; NULL when not built), `geos` its responder rows (geography, name, code, people; NULL when not built) and
+# `cons` its constituency names as one string. Everything is escaped. The page says it is restricted and what the figures are.
+area_brief_html <- function(a, sites = NULL, geos = NULL, cons = NA_character_, generated = Sys.time()) {
+  esc <- function(x) htmltools::htmlEscape(as.character(x))
+  n <- function(v) ifelse(is.na(v), "none", formatC(round(as.numeric(v)), format = "d", big.mark = ","))
+  pct <- function(v) sprintf("%.0f%%", 100 * as.numeric(v))
+  row <- function(...) paste0("<tr>", paste(sprintf("<td>%s</td>", c(...)), collapse = ""), "</tr>")
+  bands <- paste(vapply(seq_len(nrow(FLOOD_BANDS)), function(i) {
+    cc <- FLOOD_BANDS$col[i]
+    paste0("<tr><td>", band_chip(FLOOD_BANDS$band[i]), " ", esc(FLOOD_BANDS$range[i]), "</td><td class=\"n\">", pct(a[[paste0("people_", cc)]] / max(a$people, 1)),
+           "</td><td class=\"n\">", n(a[[paste0("people_", cc)]]), "</td><td class=\"n\">", n(a[[paste0("households_", cc)]]), "</td></tr>")
+  }, character(1)), collapse = "")
+  sites_html <- if (is.null(sites)) "<p class=\"note\">The list of named sites is not available.</p>" else {
+    s <- as.data.frame(sites); s <- s[!is.na(s$rofrs_rank) & s$rofrs_rank >= 3, , drop = FALSE]
+    if (nrow(s) == 0L) "<p>None of the critical sites is in a High or Medium band.</p>" else paste0(
+      "<table><thead><tr><th>Site</th><th>Type</th><th>Band</th></tr></thead><tbody>",
+      paste(vapply(seq_len(min(nrow(s), 25L)), function(i) row(esc(s$name[i]), esc(s$site_type[i]), band_chip(s$band[i])), character(1)), collapse = ""),
+      "</tbody></table>", if (nrow(s) > 25L) sprintf("<p class=\"note\">The first 25 of %d.</p>", nrow(s)) else "")
+  }
+  resp_html <- if (is.null(geos) || nrow(geos) == 0L) "<p class=\"note\">Who responds is not available.</p>" else {
+    g <- as.data.frame(geos)
+    paste(vapply(names(RESPONDER_GEOGRAPHIES), function(geo) {
+      x <- g[g$geography == geo, , drop = FALSE]
+      if (nrow(x) == 0L) return("")
+      x <- x[order(-x$people), , drop = FALSE]; x <- x[seq_len(min(nrow(x), 5L)), , drop = FALSE]
+      nm <- ifelse(is.na(x$name) | !nzchar(x$name), x$code, x$name)
+      sprintf("<tr><td>%s</td><td>%s</td></tr>", esc(RESPONDER_GEOGRAPHIES[[geo]]), esc(paste0(nm, " (", n(x$people), ")", collapse = "; ")))
+    }, character(1)), collapse = "") |> (\(r) paste0("<table><tbody>", r, "</tbody></table>"))()
+  }
+  paste0(
+    "<!doctype html><html lang=\"en-GB\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">",
+    "<title>", esc(a$area_name), " - area brief</title><style>",
+    "@page{size:A4;margin:14mm}body{font-family:Arial,Helvetica,sans-serif;color:#0B0C0C;font-size:13px;line-height:1.35;max-width:190mm;margin:0 auto;padding:12px}",
+    "h1{font-size:24px;margin:0 0 2px}h2{font-size:15px;margin:16px 0 6px;border-bottom:2px solid #053D7E;padding-bottom:2px}.sub{color:#505A5F;margin:0 0 10px}",
+    ".kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:8px 0}.kpis div{border-top:4px solid #053D7E;padding-top:4px}.kpis b{display:block;font-size:20px}.kpis span{font-size:11px;color:#505A5F}",
+    "table{border-collapse:collapse;width:100%;margin:4px 0}th{text-align:left;border-bottom:2px solid #0B0C0C;padding:3px 6px 3px 0}td{border-bottom:1px solid #B1B4B6;padding:3px 6px 3px 0;vertical-align:top}td.n{text-align:right}",
+    ".band-chip{display:inline-block;padding:0 6px;font-size:11px;font-weight:700}.note,.foot{color:#505A5F;font-size:11px}.foot{margin-top:14px;border-top:1px solid #B1B4B6;padding-top:6px}",
+    ".restricted{background:#FFF4D6;border:1px solid #8A5A00;padding:4px 8px;font-size:11px}</style></head><body>",
+    "<div class=\"restricted\">Restricted: built from address-level data. Handle as the data is classified.</div>",
+    "<h1>", esc(a$area_name), "</h1><p class=\"sub\">", esc(a$type_text), " ", esc(a$area_id), if (length(a$county) == 1L && !is.na(a$county)) paste0(" - ", esc(a$county)) else "",
+    if (length(a$risk_score) == 1L && !is.na(a$risk_score)) sprintf(" - risk score %.1f of 100", a$risk_score) else "", "</p>",
+    "<div class=\"kpis\"><div><b>", n(a$people), "</b><span>people</span></div><div><b>", n(a$households), "</b><span>households</span></div>",
+    "<div><b>", n(a$over65), "</b><span>aged 65 or over (", pct(a$over65 / max(a$people, 1)), ")</span></div>",
+    "<div><b>", pct(a$share_people_imd_1_2), "</b><span>in the most deprived 20% of neighbourhoods</span></div><div><b>", n(a$sites), "</b><span>critical sites</span></div></div>",
+    "<p>", n(a$people_rs_high_medium), " people (", pct(a$share_people_high_medium), ") and ", n(a$households_rs_high_medium),
+    " households are in a High or Medium band for flooding from rivers and the sea. ", n(a$people_shared), " people are also in another area of this kind.</p>",
+    "<h2>By flood band</h2><table><thead><tr><th>Band</th><th class=\"n\">Share of people</th><th class=\"n\">People</th><th class=\"n\">Households</th></tr></thead><tbody>", bands, "</tbody></table>",
+    "<h2>Critical sites in a High or Medium band</h2>", sites_html,
+    "<h2>Who responds</h2>", resp_html,
+    "<h2>Constituencies</h2><p>", if (is.na(cons) || !nzchar(cons)) "Not available." else esc(cons), "</p>",
+    "<p class=\"foot\">Rivers and the sea only: surface water is not counted. People are the Census 2021 output area total shared among the addresses in it, so small counts are estimates. ",
+    "Areas of one kind overlap, so a person can be in more than one area. Prepared ", format(generated, "%d %b %Y %H:%M"), ".</p></body></html>")
+}
