@@ -719,6 +719,87 @@ fetch_situation_for_statement <- function(statement_id, issued_at = NA) {
 
 fetch_exposure <- function(n_months = 12L) copy(demo_exposure(demo_current()$scenario))
 
+# Invented exposure for the demo warning areas, shaped like ea_area_exposure (job 35). Overlap is invented too: each
+# area shares part of its people with the next area of the same kind.
+demo_area_exposure <- function() demo_memo("area_exposure", demo_with_seed(3517, {
+  a <- demo_ea_areas()$table
+  n <- nrow(a)
+  km2 <- round(runif(n, 4, 40), 1)
+  people <- as.integer(round(km2 * runif(n, 40, 1800)))
+  hm <- pmin(people, as.integer(round(people * rbeta(n, 1.2, 6))))
+  high <- as.integer(round(hm * runif(n, .15, .5)))
+  shared <- as.integer(round(people * runif(n, 0, .25)))
+  sites <- rpois(n, 6)
+  data.table(
+    kind = ifelse(a$ea_area_type == "flood_warning", "flood_warning", "flood_alert"),
+    area_id = a$ea_area_code, area_name = a$ea_area_name,
+    type_text = ifelse(a$ea_area_type == "flood_warning", "Flood warning area", "Flood alert area"),
+    area_source = sample(c("fluvial", "coastal"), n, TRUE, prob = c(.8, .2)),
+    river_or_sea = sub(" at .*", "", a$ea_area_name), county = "Demo county", area_km2 = km2,
+    addresses = as.integer(round(people / 2.4)), people = people, households = as.integer(round(people / 2.4)),
+    over65 = as.integer(round(people * runif(n, .12, .28))),
+    people_rs_very_low = pmax(0L, people - hm - as.integer(round((people - hm) * .4))),
+    people_rs_low = as.integer(round((people - hm) * .4)), people_rs_medium = hm - high, people_rs_high = high,
+    people_rs_high_medium = hm, share_people_high_medium = round(hm / pmax(people, 1L), 4),
+    people_fz3 = as.integer(round(hm * .6)), people_imd_1_2 = as.integer(round(people * runif(n, .1, .4))),
+    share_people_imd_1_2 = NA_real_,
+    people_unique = people - shared, people_split = people - as.integer(round(shared / 2)),
+    people_shared = shared, share_people_shared = round(shared / pmax(people, 1L), 4),
+    sites = sites, sites_health = rbinom(n, sites, .25), sites_education = rbinom(n, sites, .4),
+    sites_emergency = rbinom(n, sites, .1), sites_utilities = rbinom(n, sites, .1), sites_rs_high_medium = rbinom(n, sites, .3)
+  )[, share_people_imd_1_2 := round(people_imd_1_2 / pmax(people, 1L), 4)][]
+}))
+
+fetch_area_exposure <- function() copy(demo_area_exposure())
+
+# Invented cells for whatever the demo map shows: a smooth score field over the viewport, so the layer can be seen working.
+fetch_risk_grid <- function(west, south, east, north, min_score = 10, limit = GRID_CELL_LIMIT) {
+  b <- bbox_to_bng(west, south, east, north)
+  e <- seq(floor(b$xmin / 100) * 100, b$xmax, by = 100); nn <- seq(floor(b$ymin / 100) * 100, b$ymax, by = 100)
+  if (length(e) * length(nn) > 40000L) { e <- e[seq_len(200L)]; nn <- nn[seq_len(200L)] }
+  d <- CJ(easting = e, northing = nn)
+  cx <- mean(range(d$easting)); cy <- mean(range(d$northing)); r <- max(diff(range(d$easting)), 1)
+  d[, risk_score := round(pmax(0, 90 * exp(-(((easting - cx)^2 + (northing - cy)^2) / (2 * (r / 4)^2))) * (0.6 + 0.4 * abs(sin(easting / 700 + northing / 900)))), 2)]
+  d[, `:=`(people = as.integer(round(risk_score * 1.5)), imd_decile = 1L + as.integer(floor(abs(cos(easting / 500)) * 9.99)),
+           haz_rs = round(pmin(4, risk_score / 20), 2), critical_sites = as.integer(risk_score > 70 & (easting %% 500 == 0)), pop_pct = round(risk_score / 100, 4))]
+  d <- d[risk_score >= min_score][order(-risk_score)]
+  head(d, limit)
+}
+
+fetch_area_coverage <- function() {
+  d <- demo_area_exposure()
+  tot <- sum(d$people) * 3; hm <- sum(d$people_rs_high_medium) * 3
+  data.table(kind = c("all", "flood_warning", "flood_alert"),
+             addresses = round(tot / 2.4), people = tot, households = round(tot / 2.4), people_rs_high_medium = hm,
+             people_not_in_area = c(0, round(tot * .8), round(tot * .55)),
+             people_high_medium_not_in_area = c(0, round(hm * .45), round(hm * .3)))
+}
+
+fetch_constituency_exposure <- function() demo_with_seed(3519, {
+  g <- demo_geometry()$table
+  n <- nrow(g)
+  people <- round(runif(n, 60000, 110000)); hm <- round(people * rbeta(n, 1, 12))
+  w <- round(hm * runif(n, .4, .9)); a <- round(hm * runif(n, .6, 1))
+  data.table(constituency_code = g$constituency_id, constituency_name = g$constituency_name, people = people,
+             people_rs_high_medium = hm, people_fz3 = round(hm * .6),
+             people_rs_high_medium_in_warning_area = w, people_rs_high_medium_in_alert_area = a,
+             people_high_medium_not_in_warning_area = hm - w, people_high_medium_not_in_alert_area = hm - a)
+})
+
+fetch_area_overlaps <- function(area_id) {
+  d <- demo_area_exposure()
+  i <- match(area_id, d$area_id)
+  none <- data.table(kind = character(), area_id_a = character(), area_id_b = character(), addresses = integer(),
+                     people = integer(), name_a = character(), name_b = character())
+  if (is.na(i)) return(none)
+  same <- which(d$kind == d$kind[i])
+  k <- same[which(same == i) %% length(same) + 1L]                 # the next area of the same kind
+  if (identical(k, i)) return(none)
+  p <- as.integer(min(d$people_shared[i], d$people[k]))
+  data.table(kind = d$kind[i], area_id_a = d$area_id[i], area_id_b = d$area_id[k], addresses = as.integer(round(p / 2.4)),
+             people = p, name_a = d$area_name[i], name_b = d$area_name[k])
+}
+
 # A small invented gauge network: 4 rivers in 3 areas, with level, flow and rainfall measures.
 demo_rt_register <- function() demo_memo("rt_register", {
   st <- data.table(

@@ -890,6 +890,85 @@ fetch_warnings_in_force <- function() {
 
 
 # -----------------------------------------------------------------------------
+# Warning area exposure (ea_area_exposure and ea_area_overlaps, FGS_Notebooks job 35; restricted schema)
+#
+# fetch_area_exposure(): one row per flood warning area and flood alert area: people, households,
+#   the rivers and sea bands, Flood Zones, the unique and split counts that cope with overlap, and the
+#   sites inside. Rivers and sea only.
+# fetch_area_overlaps(): the areas of the same kind that share people with one area.
+#   The id comes from a browser input, so it is reduced to safe characters before the SQL.
+# -----------------------------------------------------------------------------
+
+fetch_area_exposure <- function() {
+  db_query(sprintf("
+    SELECT
+      kind, area_id, area_name, type_text, area_source, river_or_sea, county, area_km2,
+      addresses, people, households, over65,
+      people_rs_very_low, people_rs_low, people_rs_medium, people_rs_high, people_rs_high_medium, share_people_high_medium,
+      people_fz3, people_imd_1_2, share_people_imd_1_2,
+      people_unique, people_split, people_shared, share_people_shared,
+      sites, sites_health, sites_education, sites_emergency, sites_utilities, sites_rs_high_medium
+    FROM %s
+  ", TBL_AREA_EXPOSURE))
+}
+
+fetch_area_overlaps <- function(area_id) {
+  id <- gsub("[^A-Za-z0-9_.-]", "", as.character(area_id))
+  db_query(sprintf("
+    SELECT o.kind, o.area_id_a, o.area_id_b, o.addresses, o.people,
+           a.area_name AS name_a, b.area_name AS name_b
+    FROM %s o
+    LEFT JOIN %s a ON a.kind = o.kind AND a.area_id = o.area_id_a
+    LEFT JOIN %s b ON b.kind = o.kind AND b.area_id = o.area_id_b
+    WHERE o.area_id_a = '%s' OR o.area_id_b = '%s'
+    ORDER BY o.people DESC
+  ", TBL_AREA_OVERLAPS, TBL_AREA_EXPOSURE, TBL_AREA_EXPOSURE, id, id))
+}
+
+
+# fetch_area_coverage(): three rows (all, flood_warning, flood_alert): distinct people covered, and the
+#   People in a High or Medium band that no area of the kind covers.
+# fetch_constituency_exposure(): per constituency, people, people at risk, and how many a warning area and
+#   an alert area cover. The code is the NSUL parliamentary constituency code; names come from the constituencies table.
+
+fetch_area_coverage <- function() {
+  db_query(sprintf("
+    SELECT kind, addresses, people, households, people_rs_high_medium,
+           people_not_in_area, people_high_medium_not_in_area
+    FROM %s
+  ", TBL_AREA_COVERAGE))
+}
+
+fetch_constituency_exposure <- function() {
+  db_query(sprintf("
+    SELECT e.constituency_code, c.name AS constituency_name,
+           e.people, e.people_rs_high_medium, e.people_fz3,
+           e.people_rs_high_medium_in_warning_area, e.people_rs_high_medium_in_alert_area,
+           e.people_high_medium_not_in_warning_area, e.people_high_medium_not_in_alert_area
+    FROM %s e
+    LEFT JOIN %s c ON c.constituency_id = e.constituency_code
+  ", TBL_CONST_EXPOSURE, TBL_CONSTITUENCIES))
+}
+
+
+# fetch_risk_grid(): the 100 m cells inside a longitude and latitude box with a score at or above min_score, highest first, at most
+#   `limit` of them. Read from exposure_grid_100m by easting and northing. Only for a map in view: the table holds all of England.
+
+fetch_risk_grid <- function(west, south, east, north, min_score = 10, limit = GRID_CELL_LIMIT) {
+  b <- bbox_to_bng(west, south, east, north)
+  db_query(sprintf("
+    SELECT easting, northing, people, imd_decile, haz_rs, critical_sites, pop_pct, risk_score
+    FROM %s
+    WHERE easting BETWEEN %.0f AND %.0f
+      AND northing BETWEEN %.0f AND %.0f
+      AND risk_score >= %.2f
+    ORDER BY risk_score DESC
+    LIMIT %d
+  ", TBL_EXPOSURE_GRID, b$xmin, b$xmax, b$ymin, b$ymax, as.numeric(min_score), as.integer(limit)))
+}
+
+
+# -----------------------------------------------------------------------------
 # Hydrometrics (Environment Agency real-time data)
 #
 # fetch_rt_register(): one row per measure (what is measured, where, on which river), with the real
@@ -1372,6 +1451,10 @@ fetch_coverage_summary             <- with_cache(fetch_coverage_summary,        
 fetch_coverage_warnings            <- with_cache(fetch_coverage_warnings,            "cov_warnings", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_coverage_detail              <- with_cache(fetch_coverage_detail,              "cov_detail", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_coverage_span                <- with_cache(fetch_coverage_span,                "cov_span", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
+fetch_area_exposure                <- with_cache(fetch_area_exposure,                "area_exposure", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
+fetch_area_overlaps                <- with_cache(fetch_area_overlaps,                "area_overlaps", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
+fetch_area_coverage                <- with_cache(fetch_area_coverage,                "area_coverage", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
+fetch_constituency_exposure        <- with_cache(fetch_constituency_exposure,        "const_exposure", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_rt_register                  <- with_cache(fetch_rt_register,                  "rt_register", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_rt_boundary                  <- with_cache(fetch_rt_boundary,                  "rt_boundary", ttl = min(CACHE_TTL_SECONDS, 300))
 fetch_data_signature               <- with_cache(fetch_data_signature,               "signature", ttl = 0)

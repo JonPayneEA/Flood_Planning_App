@@ -953,3 +953,28 @@ test_that("a threshold line is named from the label prefix and the target area, 
   old <- thr[, .(measure_uri, type, purpose, season, value, unit_name, unit_match)]   # a links table from before the prefix was carried
   expect_equal(rt_threshold_lines(old, "u2")$short, "RES FW")
 })
+
+
+test_that("the area popup line carries the people and the share at risk, and is empty without a match", {
+  ex <- data.frame(area_id = c("A", "B"), people = c(12345, 80), people_rs_high_medium = c(2000, 0), share_people_high_medium = c(0.162, 0))
+  out <- area_exposure_popup(c("B", "A", "Z"), ex)
+  expect_match(out[1L], "People inside: 80")
+  expect_match(out[2L], "12,345")
+  expect_match(out[2L], "2,000 \\(16%\\)")
+  expect_equal(out[3L], "")
+  expect_equal(area_exposure_popup(c("A", "B"), NULL), c("", ""))
+})
+
+
+test_that("grid helpers: the BNG box holds the view, corners come back as a rectangle, colours step by band", {
+  skip_if_not_installed("sf")
+  b <- bbox_to_bng(-1.56, 53.79, -1.52, 53.82)                      # central Leeds
+  expect_true(b$xmin > 425000 && b$xmax < 435000 && b$ymin > 430000 && b$ymax < 440000)
+  expect_true(b$xmax > b$xmin && b$ymax > b$ymin)
+  cells <- grid_cell_corners(data.frame(easting = 430000, northing = 433000, risk_score = 60))
+  expect_true(cells$lng2 > cells$lng1 && cells$lat2 > cells$lat1)
+  expect_lt(abs(cells$lng1 - -1.54), 0.1)
+  expect_equal(nrow(grid_cell_corners(data.frame(easting = numeric(), northing = numeric()))), 0L)
+  expect_equal(grid_colour(c(0, 9.9, 10, 49, 75, 100)), GRID_COLOURS[c(1, 1, 2, 3, 5, 5)])
+  expect_match(grid_popup(data.frame(risk_score = 61.4, people = 1234, haz_rs = 3.5, imd_decile = 2, critical_sites = 1)), "Risk score 61 of 100.*1,234")
+})

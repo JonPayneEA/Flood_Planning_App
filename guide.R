@@ -48,12 +48,12 @@ GUIDE_TABLES <- data.frame(
             "ea_area_constituency_lookup", "mp_contact_details",
             "fgs_constituency_changes", "fgs_changes_log", "constituency_flood_situation", "mp_briefing_drafts",
             "fgs_constituency_exposure", "pipeline_health", "ea_warning_episodes",
-            "ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_readings_bronze", "ea_warning_fgs_coverage", "ea_rt_measures_mapped", "ea_rt_latest", "flood_warnings_current", "ea_fw_threshold_gauge_links"),
-  notebook = c("01", "01", "07", "07", "03", "03", "05", "06", "04", "18", "18", "19", "20", "21", "22", "25", "09", "23", "10", "26", "16", "23", "11", "28"),
+            "ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_readings_bronze", "ea_warning_fgs_coverage", "ea_rt_measures_mapped", "ea_rt_latest", "flood_warnings_current", "ea_fw_threshold_gauge_links", "ea_area_exposure", "ea_area_overlaps", "ea_area_coverage", "constituency_flood_exposure", "exposure_grid_100m"),
+  notebook = c("01", "01", "07", "07", "03", "03", "05", "06", "04", "18", "18", "19", "20", "21", "22", "25", "09", "23", "10", "26", "16", "23", "11", "28", "35", "35", "35", "35", "34"),
   refresh = c("Each FGS issue or amendment", "Each FGS issue or amendment", "Each FGS issue", "Each FGS issue",
               "Weekly", "Weekly", "Quarterly, or after an election", "Weekly and quarterly", "Weekly",
               "Every poll", "Every poll", "Every poll", "Every poll", "Daily", "Every poll", "Every poll",
-              "Weekly", "Every 15 minutes", "Daily", "Daily", "When the mapping file changes", "Every 15 minutes", "Every poll", "Manual, when the mapping or thresholds change"),
+              "Weekly", "Every 15 minutes", "Daily", "Daily", "When the mapping file changes", "Every 15 minutes", "Every poll", "Manual, when the mapping or thresholds change", "Manual, when the hazard maps or address points change", "Manual, with the table above", "Manual, with the table above", "Manual, with the table above", "Manual, after notebooks 30 to 33"),
   holds = c("One row per statement: the headline and the forecast text.",
             "One row per risk polygon, flood source and day, with impact, likelihood and risk level.",
             "Each FGS shape that overlaps an EA flood warning or alert area.",
@@ -77,7 +77,12 @@ GUIDE_TABLES <- data.frame(
             "The measure register with each measure's real gauge name, FFFS id and WISKI id, where the telemetry mapping matched it. Optional.",
             "The newest reading of each measure, from the live tail.",
             "One row per EA area with an alert, warning or severe warning in force now, from the live feed.",
-            "Observed flood warning thresholds linked to gauge measures, in each measure's own unit. Held in the restricted schema; read only when the Hydrometrics tick is on."),
+            "Observed flood warning thresholds linked to gauge measures, in each measure's own unit. Held in the restricted schema; read only when the Hydrometrics tick is on.",
+            "One row per flood warning area and flood alert area: the people, households and rivers and sea bands inside it, counted gross, unique and split across overlaps, and the critical sites. Restricted schema.",
+            "Pairs of areas of one kind that share people, with how many. Restricted schema.",
+            "People in England, and in a High or Medium band, covered by any warning area, by any alert area and by neither. Restricted schema.",
+            "Per constituency: people, people at risk, and how many of each a warning or alert area covers. Restricted schema.",
+            "One row per 100 m cell of England: people, deprivation, rivers and sea band shares, critical sites and a 0 to 100 risk score. Restricted schema; read only for the part of the map in view."),
   stringsAsFactors = FALSE
 )
 
@@ -306,6 +311,26 @@ guide_products <- function(s) {
     ),
 
     list(
+      id = "risk-grid", title = "Risk grid (map layer)", where = "FGS Interrogator",
+      answers = "Where, street by street, are people, deprived communities and critical sites exposed to flooding from rivers and the sea?",
+      tables = c("exposure_grid_100m"),
+      steps = c(
+        "Tick Risk grid and zoom to street level. Each 100 m cell in view is filled by its risk score, from 0 to 100.",
+        "The score is the rivers and sea band of the cell (0 to 4) as a share of the top band, multiplied by a weighted mix of the cell's population rank, how deprived it is and how many critical sites it holds. No hazard, no score.",
+        "Only the cells in view with a score at or above the slider are read, the highest first, up to a cap. The sidebar says when the cap is reached."
+      ),
+      read = c(
+        "Click a cell for its score, people, band, deprivation decile and critical sites.",
+        "A pale cell is exposed but has few people or low deprivation. A dark cell has all three."
+      ),
+      limits = c(
+        "Rivers and the sea only. Surface water is not in the score.",
+        "People are the Census 2021 output area total shared among the addresses, so a single cell's count is an estimate. Read the pattern, not the digit.",
+        "Not tied to the forecast: the statement and day pickers do not apply. The figures are restricted."
+      )
+    ),
+
+    list(
       id = "exposure", title = "Exposure history", where = "Exposure history",
       answers = "Which constituencies are repeatedly forecast at risk, and is this winter unusual?",
       tables = c("fgs_constituency_exposure"),
@@ -372,6 +397,29 @@ guide_products <- function(s) {
         "Not covered is a disagreement between two forecasts of a different kind, not a missed forecast: the FGS forecasts risk across regions and the Environment Agency warns for particular rivers and coasts.",
         "Polygons that had no warning under them are not counted. This shows how often warnings were covered, not how often polygons were followed by warnings.",
         "A warning open for over 30 days is treated as having lost its end message and counts only for its first day. A span is capped at 60 days."
+      )
+    ),
+
+    list(
+      id = "warning-areas", title = "Warning areas", where = "Warning areas",
+      answers = "How many people and households live inside each flood warning area and flood alert area, and how many of them are in a High or Medium band for flooding from rivers and the sea?",
+      tables = c("ea_area_exposure", "ea_area_overlaps", "ea_area_coverage", "constituency_flood_exposure"),
+      steps = c(
+        "Notebook 33 places every address in England as a point and gives it its share of the Census 2021 output area's people and households. Notebook 35 then finds which warning and alert area boundaries contain each point.",
+        "Each point carries the rivers and sea band (NaFRA2) and Flood Zone at its position, so an area's people can be split by band. At risk means High or Medium.",
+        "Areas of one kind overlap. Gross counts everyone inside the area. Unique counts only people in no other area of that kind. Split shares each person equally between the areas they are in, so split figures add up to the true total.",
+        "Select an area for its figures, the over 65s, deprivation, critical sites and the areas that share people with it.",
+        "On the Forecast map, tick Risk grid and zoom in to street level: each 100 m cell is coloured by its risk score, the rivers and sea band weighted by people, deprivation and critical sites. Only the cells in view with a score at or above the slider are read, the highest first, up to a cap.",
+        "The coverage panel counts every person once and shows how many of those in a High or Medium band sit in no warning area, and in no alert area. The constituency view gives the same split for each constituency."
+      ),
+      read = c(
+        "Warning areas and alert areas are counted against their own kind. Do not add a warning area figure to an alert area figure.",
+        "Share at risk is the share of the area's people in a High or Medium band, not the chance of flooding."
+      ),
+      limits = c(
+        "Rivers and the sea only. Surface water is not counted: the Environment Agency does not warn for it.",
+        "Until AddressBase Premium is available the points come from the National Statistics UPRN Lookup, so counts are of addresses, not of buildings or businesses, and England only.",
+        "The figures are restricted. Small counts are shown as they are held; treat them with care before sharing."
       )
     ),
 
