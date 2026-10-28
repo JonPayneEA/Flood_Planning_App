@@ -1566,3 +1566,17 @@ guide_link_html <- function(entry, label) {
                  "var e=document.getElementById('guide-%s');n++;if(e){e.scrollIntoView({behavior:'smooth'});clearInterval(t);}else if(n>10){clearInterval(t);}},200);return false;\">%s</a>"),
           entry, htmltools::htmlEscape(label))
 }
+
+
+# ---- Shareable links -------------------------------------------------------------------------------------------------
+# URL bookmarking writes every input into the address. The tables and maps add inputs of their own (the selected rows, every row in the
+# current order, the paging state, the map bounds, zoom and last click), and a table of thousands of areas puts thousands of numbers in the
+# link. A link past about 2,000 characters fails in a browser, a proxy or a chat tool. These are view mechanics, not the view, so they are
+# left out. A text box that happens to end in _search is kept: only a DT's own search input, which sits beside a _state input, is dropped.
+bookmark_noise <- function(input_names) {
+  tbl <- grepl("_(rows_selected|rows_current|rows_all|row_last_clicked|cell_clicked|cells_selected|columns_selected|search_columns|state)$", input_names)
+  state_ids <- sub("_state$", "", input_names[grepl("_state$", input_names)])
+  dt_search <- grepl("_search$", input_names) & sub("_search$", "", input_names) %in% state_ids
+  map <- grepl("_(bounds|center|zoom|click|shape_click|shape_mouseover|shape_mouseout|marker_click|marker_mouseover|marker_mouseout|groups|geojson_click)$", input_names)
+  input_names[tbl | dt_search | map]
+}

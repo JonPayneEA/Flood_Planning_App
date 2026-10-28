@@ -1013,3 +1013,16 @@ test_that("the guide link opens the Guide, scrolls to the entry's card, and cann
   expect_true(any(grepl('id = paste0("guide-", p$id)', readLines(file.path(app_root, "guide.R")), fixed = TRUE)))        # the anchor the link targets
   expect_true(any(grepl('id = "risk-grid"', readLines(file.path(app_root, "guide.R")), fixed = TRUE)))
 })
+
+test_that("shareable links drop table and map mechanics but keep real filters and text boxes", {
+  nm <- c("main_tabs", "areas_kind", "areas_search", "areas_table_rows_selected", "areas_table_rows_all", "areas_table_rows_current",
+          "areas_table_state", "areas_table_search", "areas_table_search_columns", "areas_table_cell_clicked", "areas_table_row_last_clicked",
+          "area_grid_map_bounds", "area_grid_map_zoom", "area_grid_map_center", "area_grid_map_click", "area_grid_map_shape_click",
+          "live_map_groups", "sit_search", "area_pick", "grid_min_score", "layer_risk_grid", "nations", "statement_id")
+  drop <- bookmark_noise(nm)
+  expect_true(all(c("areas_table_rows_selected", "areas_table_rows_all", "areas_table_rows_current", "areas_table_state", "areas_table_search",
+                    "areas_table_search_columns", "areas_table_cell_clicked", "areas_table_row_last_clicked", "area_grid_map_bounds",
+                    "area_grid_map_zoom", "area_grid_map_center", "area_grid_map_click", "area_grid_map_shape_click", "live_map_groups") %in% drop))
+  expect_false(any(c("main_tabs", "areas_kind", "areas_search", "sit_search", "area_pick", "grid_min_score", "layer_risk_grid", "nations", "statement_id") %in% drop))
+  expect_equal(bookmark_noise(character()), character())
+})
