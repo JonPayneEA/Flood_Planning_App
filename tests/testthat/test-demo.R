@@ -53,6 +53,11 @@ test_that("no demo fetcher reaches for the warehouse", {
     expect_lt(sum(geo[geography == "combined_authority"]$share_of_area_people), 1)
     pr <- demo_env$fetch_area_overlap_pairs()
     expect_true(all(c("kind", "area_id_a", "area_id_b", "people") %in% names(pr)))
+    epi <- demo_env$fetch_area_episodes(ae$area_id[1L])
+    expect_true(all(c("episode_id", "ea_area_code", "ea_area_type", "start_time", "end_time", "duration_minutes", "peak_level", "had_severe", "stale_open") %in% names(epi)))
+    expect_gt(nrow(epi), 0L)
+    rows <- warning_episode_rows(cbind(data.table::as.data.table(epi), ea_area_name = "x"), as.Date("1900-01-01"), Sys.Date() + 1L)       # what the area page does
+    expect_equal(nrow(rows), nrow(epi)); expect_true(all(c("Issued", "Ended", "Duration", "Highest level", "Severe") %in% names(rows)))
     ov <- demo_env$fetch_area_overlaps(ae$area_id[1L])
     expect_true(all(c("area_id_a", "area_id_b", "people", "name_a", "name_b") %in% names(ov)))
     expect_no_error(demo_env$fetch_warning_episodes(demo_env$fetch_warning_history()$constituency_id[1L]))

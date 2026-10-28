@@ -1439,7 +1439,7 @@ server <- function(input, output, session) {
     "refresh_data", "show_health", "goto_constituency", "exp_pick", "nav_to",
     "rv_reviewed", "rv_sent", "rv_rejected", "demo_reset",
     "area_row_click", "download_ea_areas", "download_situation",
-    "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas", "download_areas", "download_const_exp", "download_exp_bands", "download_area_cells", "download_area_brief", "download_area_sites", "download_exp_responders", "area_open", "areas_open_selected",
+    "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas", "download_areas", "download_const_exp", "download_exp_bands", "download_area_cells", "download_area_issues", "download_area_brief", "download_area_sites", "download_exp_responders", "area_open", "areas_open_selected",
     "situation_table_rows_selected", "situation_table_row_last_clicked",
     "situation_table_cell_clicked", "situation_table_rows_current",
     "situation_table_rows_all", "situation_table_state", "situation_table_search",
@@ -2581,6 +2581,59 @@ server <- function(input, output, session) {
     if (length(nm) == 0L || is.na(nm)) return(tags$p(class = "text-muted", "No constituency links found for this area."))
     tags$p(nm)
   })
+
+  # ---- Warning issue history for the chosen area (job 25's episodes) ----------------------------------------------------
+  area_episodes <- reactive({
+    req(input$area_pick)
+    tryCatch(fetch_area_episodes(input$area_pick), error = function(e) NULL)
+  })
+
+  output$area_issue_summary <- renderUI({
+    ep <- area_episodes()
+    if (is.null(ep)) return(tags$p(class = "text-muted", "The issue history could not be loaded."))
+    s <- area_issue_summary(ep)
+    if (s$total == 0L) return(tags$p("No alert or warning has been issued for this area in the history held."))
+    d <- function(x) format(x, "%d %b %Y", tz = "UTC")
+    tags$ul(
+      if (!is.na(s$in_force_since)) tags$li(tags$strong(sprintf("In force now, since %s.", format(s$in_force_since, "%d %b %Y %H:%M", tz = "UTC")))),
+      tags$li(sprintf("%d issued in the last 12 months, %d in all.", s$last12, s$total)),
+      tags$li(sprintf("%d reached a severe flood warning.", s$severe)),
+      tags$li(sprintf("Most recent issue %s. Median time in force %s.", d(s$latest), if (is.na(s$median_minutes)) "not known" else duration_label(s$median_minutes))))
+  })
+
+  if (requireNamespace("plotly", quietly = TRUE)) {
+    output$area_issue_chart <- plotly::renderPlotly({
+      ep <- area_episodes(); req(ep, nrow(ep) > 0L)
+      m <- issue_counts_by_month(ep)
+      cols <- c(`Flood alert` = APP_ALERT_HEX, `Flood warning` = APP_WARNING_HEX, `Severe flood warning` = APP_SEVERE_HEX)
+      fig <- plotly::plot_ly()
+      for (lv in names(cols)) {
+        z <- m[level == lv]
+        fig <- plotly::add_bars(fig, x = z$month, y = z$n, name = lv, marker = list(color = unname(cols[[lv]])), hovertemplate = paste0("%{y} issued<extra>", lv, "</extra>"))
+      }
+      top <- max(m[, .(t = sum(n)), by = month]$t, 1L)
+      app_plot_style(fig, height = 240, barmode = "stack", hovermode = "x unified",
+                     xaxis = app_plot_axis(type = "date"), yaxis = app_plot_axis("Issued in the month", grid = TRUE, tickformat = "d", dtick = nice_dtick(top), range = c(0, top * 1.1)),
+                     margin = list(t = 10, l = 50, r = 20))
+    })
+  }
+
+  area_issue_rows <- reactive({
+    ep <- data.table::copy(data.table::as.data.table(area_episodes())); req(nrow(ep) > 0L)
+    ep[, ea_area_name := area_sel()$area_name]                           # the episodes table has the code; the formatter wants a name column
+    warning_episode_rows(ep, as.Date("1900-01-01"), Sys.Date() + 1L)
+  })
+
+  output$area_issue_table <- DT::renderDataTable({
+    ep <- area_episodes()
+    x <- if (is.null(ep)) data.table() else area_issue_rows()
+    if (nrow(x) == 0L) return(DT::datatable(data.frame(Note = "Nothing to list."), rownames = FALSE, selection = "none", options = list(dom = "t")))
+    DT::datatable(x[, !c("Area", "Code")], rownames = FALSE, selection = "none", options = list(pageLength = 8, dom = "tip", order = list(), scrollX = TRUE))
+  })
+
+  output$download_area_issues <- downloadHandler(
+    filename = function() sprintf("area_%s_issue_history_%s.csv", gsub("[^A-Za-z0-9_.-]", "", input$area_pick %||% "none"), format(Sys.Date(), "%Y%m%d")),
+    content = function(file) data.table::fwrite(tryCatch(area_issue_rows(), error = function(e) data.table()), file, bom = TRUE))
 
   output$area_responders <- renderUI({
     a <- tryCatch(area_sel(), error = function(e) NULL); req(a)

@@ -1061,6 +1061,29 @@ fetch_warning_episodes <- function(constituency_id) {
   e[, .(episode_id, ea_area_code, ea_area_name, ea_area_type, start_time, end_time, duration_minutes, peak_level, had_severe, stale_open)]
 }
 
+# Invented history for one demo area: a handful of episodes over the last two years, the busy ones in winter.
+fetch_area_episodes <- function(area_id) {
+  a <- demo_ea_areas()$table
+  i <- match(area_id, a$ea_area_code)
+  none <- data.table(episode_id = character(), ea_area_code = character(), ea_area_type = character(), start_time = as.POSIXct(character(), tz = "UTC"),
+                     end_time = as.POSIXct(character(), tz = "UTC"), duration_minutes = numeric(), peak_level = character(), had_severe = logical(), stale_open = logical())
+  if (is.na(i)) return(none)
+  set.seed(sum(utf8ToInt(area_id)))
+  type <- a$ea_area_type[i]
+  n <- if (type == "flood_warning") sample(3:9, 1L) else sample(6:16, 1L)
+  start <- as.POSIXct(Sys.time() - runif(n, 3600, 730 * 86400), tz = "UTC")
+  keep <- ifelse(as.integer(format(start, "%m")) %in% c(10, 11, 12, 1, 2, 3), TRUE, runif(n) < 0.4)
+  start <- sort(start[keep], decreasing = TRUE)
+  if (length(start) == 0L) return(none)
+  m <- length(start)
+  dur <- round(rexp(m, 1 / ifelse(type == "flood_alert", 2400, 900))) + 30
+  severe <- type == "flood_warning" & runif(m) < 0.15
+  out <- data.table(episode_id = sprintf("%s_%d", area_id, seq_len(m)), ea_area_code = area_id, ea_area_type = type, start_time = start,
+                    end_time = start + dur * 60, duration_minutes = dur, peak_level = ifelse(severe, "severe_flood_warning", type), had_severe = severe, stale_open = FALSE)
+  out[end_time > Sys.time(), `:=`(end_time = as.POSIXct(NA, tz = "UTC"), duration_minutes = NA_real_)]
+  out
+}
+
 fetch_warning_history <- function() demo_memo("warning_history", demo_with_seed(515, {
   lk <- fetch_ea_constituency_mp()[constituency_overlap_pct >= TARGET_AREA_MIN_PCT]
   ea <- demo_ea_areas()$table

@@ -1110,3 +1110,23 @@ test_that("the Who responds tables draw: one per geography present, biggest firs
   many <- data.frame(geography = "region", code = sprintf("R%d", 1:20), name = NA, people = 20:1, share_of_area_people = 0.05, people_rs_high_medium = 0)
   expect_match(as.character(responder_tables_ui(many)), "The first 12 of 20")
 })
+
+
+test_that("area issue summary and monthly counts: totals, severe, in force now, stale episodes, empty months kept", {
+  now <- as.POSIXct("2026-10-28 12:00", tz = "UTC")
+  ep <- data.frame(start_time = as.POSIXct(c("2026-10-27 09:00", "2026-03-02 10:00", "2025-01-10 08:00", "2026-03-20 06:00"), tz = "UTC"),
+                   end_time = as.POSIXct(c(NA, "2026-03-03 10:00", "2025-01-11 08:00", NA), tz = "UTC"),
+                   duration_minutes = c(NA, 1440, 1440, NA), ea_area_type = c("flood_warning", "flood_alert", "flood_warning", "flood_alert"),
+                   had_severe = c(FALSE, FALSE, TRUE, FALSE), stale_open = c(FALSE, FALSE, FALSE, TRUE))
+  s <- area_issue_summary(ep, now)
+  expect_equal(s$total, 4L); expect_equal(s$last12, 3L); expect_equal(s$severe, 1L); expect_equal(s$median_minutes, 1440)
+  expect_equal(format(s$in_force_since, "%Y-%m-%d %H:%M"), "2026-10-27 09:00")             # the stale one (still open after 30 days) is not "in force now"
+  expect_equal(format(s$latest, "%Y-%m-%d"), "2026-10-27")
+  expect_equal(area_issue_summary(NULL, now)$total, 0L); expect_true(is.na(area_issue_summary(ep[0, ], now)$in_force_since))
+  m <- issue_counts_by_month(ep, now, 12L)
+  expect_equal(length(unique(m$month)), 12L); expect_equal(nrow(m), 36L)
+  expect_equal(m[m$month == as.Date("2026-10-01") & m$level == "Flood warning", "n"][[1L]], 1L)
+  expect_equal(m[m$month == as.Date("2026-03-01") & m$level == "Flood alert", "n"][[1L]], 2L)
+  expect_equal(sum(m$n), 3L)                                                                   # the January 2025 episode is outside the 12 months
+  expect_equal(sum(issue_counts_by_month(NULL, now, 12L)$n), 0L)
+})
