@@ -955,16 +955,29 @@ test_that("a threshold line is named from the label prefix and the target area, 
 })
 
 
-test_that("the area popup line carries the people and the share at risk, and is empty without a match", {
-  ex <- data.frame(area_id = c("A", "B"), people = c(12345, 80), people_rs_high_medium = c(2000, 0), share_people_high_medium = c(0.162, 0))
-  out <- area_exposure_popup(c("B", "A", "Z"), ex)
-  expect_match(out[1L], "People inside: 80")
+test_that("the area popup carries the figures, the constituencies and a link to the detail, and is empty without a match", {
+  ex <- data.frame(area_id = c("A", "B"), people = c(12345, 80), over65 = c(2000, 9), people_rs_high_medium = c(2000, 0), households_rs_high_medium = c(800, 0),
+                   sites = c(14, 0), sites_rs_high_medium = c(8, 0), share_people_high_medium = c(0.162, 0))
+  out <- area_exposure_popup(c("B", "A", "Z"), ex, c(A = "York Central, York Outer"))
   expect_match(out[2L], "12,345")
-  expect_match(out[2L], "2,000 \\(16%\\)")
+  expect_match(out[2L], "<b>14</b> \\(8 in High or Medium\\)")
+  expect_match(out[2L], "York Central, York Outer")
+  expect_match(out[2L], "Shiny.setInputValue\\('area_open','A'")
+  expect_false(grepl("Constituencies", out[1L]))
   expect_equal(out[3L], "")
   expect_equal(area_exposure_popup(c("A", "B"), NULL), c("", ""))
 })
 
+test_that("band helpers: bars sum to the share, chips carry the band, links are safe, constituencies join by area", {
+  x <- data.frame(people = 100, people_rs_high = 20, people_rs_medium = 20, people_rs_low = 30, people_rs_very_low = 10)
+  bar <- band_bar_html(x)
+  expect_match(bar, "High 20%, Medium 20%, Low 30%, Very Low 10%")
+  expect_match(band_chip("High"), "#053D7E")
+  expect_false(grepl("<script", area_open_link("A'\"<script>", "x<b>"), fixed = TRUE))
+  links <- data.frame(ea_area_code = c("A", "A", "B"), constituency_name = c("One", "Two", "Three"), share_of_area_in_constituency = c(0.6, 0.4, 0.001))
+  expect_equal(area_constituency_names(links, 0.01), c(A = "One, Two"))
+  expect_equal(grid_band_colour(c(0, 1, 4, 5)), c("#F3F2F1", "#CFE3F6", "#053D7E", "#053D7E"))
+})
 
 test_that("grid helpers: the BNG box holds the view, corners come back as a rectangle, colours step by band", {
   skip_if_not_installed("sf")

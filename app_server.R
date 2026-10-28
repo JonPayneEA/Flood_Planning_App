@@ -820,7 +820,7 @@ server <- function(input, output, session) {
       "Target Area ID: ", shape$ea_area_code, "<br>",
       "Risk: ", shape$risk_level, "<br>",
       "Intersection: ", intersection_label(shape$intersection_pct),
-      area_exposure_popup(shape$ea_area_code, area_exposure_for_popup())
+      area_exposure_popup(shape$ea_area_code, area_exposure_for_popup(), area_cons_for_popup())
     )
     
     leaflet::addPolygons(
@@ -900,6 +900,7 @@ server <- function(input, output, session) {
 
   # Exposure figures for the popups. A missing or unreadable table leaves the popup as it was, with no banner.
   area_exposure_for_popup <- function() tryCatch(fetch_area_exposure(), error = function(e) NULL)
+  area_cons_for_popup <- function() tryCatch(area_constituency_names(fetch_area_constituency_links()), error = function(e) NULL)
 
   observeEvent(input$area_row_click, {
     f <- filters()
@@ -928,7 +929,7 @@ server <- function(input, output, session) {
       "Target Area ID: ", matched$ea_area_code[1], "<br>",
       "Risk: ", matched$risk_level[1], "<br>",
       "Intersection: ", intersection_label(matched$intersection_pct[1]),
-      area_exposure_popup(matched$ea_area_code[1], area_exposure_for_popup())
+      area_exposure_popup(matched$ea_area_code[1], area_exposure_for_popup(), area_cons_for_popup())
     )
 
     proxy <- leaflet::leafletProxy("live_map")
@@ -1413,7 +1414,7 @@ server <- function(input, output, session) {
     "refresh_data", "show_health", "goto_constituency", "exp_pick", "nav_to",
     "rv_reviewed", "rv_sent", "rv_rejected", "demo_reset",
     "area_row_click", "download_ea_areas", "download_situation",
-    "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas", "download_areas", "download_const_exp",
+    "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas", "download_areas", "download_const_exp", "download_exp_bands", "download_area_cells", "download_area_sites", "area_open", "area_pick", "areas_search",
     "situation_table_rows_selected", "situation_table_row_last_clicked",
     "situation_table_cell_clicked", "situation_table_rows_current",
     "situation_table_rows_all", "situation_table_state", "situation_table_search",
@@ -2335,19 +2336,32 @@ server <- function(input, output, session) {
   })
 
   # ---- Warning areas (FGS_Notebooks job 35) --------------------------------------------------------------
-  areas_started <- reactive(identical(input$main_tabs, "Warning areas"))
+  areas_started <- reactive(input$main_tabs %in% c("Warning areas", "Area detail"))
 
   areas_all <- reactive({
     req(areas_started())
     safe_fetch(fetch_area_exposure)
   })
 
+  # The county list and the area picker are filled once the figures are in.
+  observe({
+    x <- areas_all(); req(x)
+    x <- as.data.table(x)
+    updateSelectInput(session, "areas_county", choices = c("All" = "", sort(unique(na.omit(x$county)))), selected = isolate(input$areas_county))
+    ord <- x[order(area_name)]
+    updateSelectizeInput(session, "area_pick", selected = isolate(input$area_pick),
+                         choices = stats::setNames(ord$area_id, sprintf("%s (%s)", ord$area_name, ifelse(ord$kind == "flood_warning", "warning", "alert"))))
+  })
+
   areas_table_data <- reactive({
     x <- areas_all()
-    req(x, input$areas_kind, input$areas_source)
-    x <- as.data.table(x)[kind == input$areas_kind]
+    req(x, input$areas_kind, input$areas_source, input$areas_sort)
+    x <- as.data.table(x)
+    if (input$areas_kind != "both") x <- x[kind == input$areas_kind]
+    if (nzchar(input$areas_county %||% "")) x <- x[county == input$areas_county]
     if (input$areas_source != "any") x <- x[grepl(input$areas_source, area_source, fixed = TRUE)]
-    x[order(-people_rs_high_medium, area_name)]
+    if (nzchar(trimws(input$areas_search %||% ""))) x <- x[grepl(trimws(input$areas_search), area_name, ignore.case = TRUE, fixed = TRUE)]
+    if (input$areas_sort == "area_name") x[order(area_name)] else x[order(-get(input$areas_sort), area_name)]
   })
 
   output$areas_note <- renderUI({
@@ -2357,59 +2371,182 @@ server <- function(input, output, session) {
     NULL
   })
 
+  output$areas_band_legend <- renderUI({
+    tags$div(class = "band-legend", lapply(seq_len(nrow(FLOOD_BANDS)), function(i)
+      tags$span(tags$i(style = paste0("background:", FLOOD_BANDS$fill[i])), sprintf("%s (%s)", FLOOD_BANDS$band[i], FLOOD_BANDS$range[i]))))
+  })
+
   areas_display <- function(x) {
-    x[, .(Area = area_name, River_or_sea = river_or_sea, County = county, Source = tools::toTitleCase(area_source),
-          People = round(people), Households = round(households),
-          `At risk (High or Medium)` = round(people_rs_high_medium),
-          `Share at risk` = sprintf("%.0f%%", 100 * share_people_high_medium),
-          `In Flood Zone 3` = round(people_fz3),
-          `Shared with another area` = sprintf("%.0f%%", 100 * share_people_shared),
-          `Critical sites` = sites, id = area_id)]
+    data.table(
+      Area = vapply(seq_len(nrow(x)), function(i) area_open_link(x$area_id[i], x$area_name[i]), character(1)),
+      Kind = ifelse(x$kind == "flood_warning", "Warning", "Alert"),
+      People = round(x$people), `Aged 65+` = round(x$over65),
+      `In most deprived 20%` = sprintf("%.0f%%", 100 * x$share_people_imd_1_2),
+      `People by flood band` = band_bar_html(x),
+      `Households at High or Medium` = round(x$households_rs_high_medium),
+      `Critical sites` = x$sites)
   }
 
   output$areas_table <- DT::renderDataTable({
     x <- areas_table_data()
     if (nrow(x) == 0L) return(DT::datatable(data.frame(Note = "No areas to show."), rownames = FALSE, selection = "none", options = list(dom = "t")))
-    tbl <- areas_display(x)
-    setnames(tbl, "River_or_sea", "River or sea")
-    DT::datatable(tbl, rownames = FALSE, selection = "single",
-                  options = list(pageLength = 15, scrollX = TRUE, dom = "ftip", order = list(list(6L, "desc")),
-                                 columnDefs = list(list(visible = FALSE, targets = ncol(tbl) - 1L)),
+    DT::datatable(areas_display(x), rownames = FALSE, selection = "none", escape = FALSE,
+                  options = list(pageLength = 15, scrollX = TRUE, dom = "tip", order = list(),
+                                 columnDefs = list(list(orderable = FALSE, targets = c(0L, 4L))),
                                  language = list(info = "Showing _START_ to _END_ of _TOTAL_ areas"))) |>
-      DT::formatRound(c("People", "Households", "At risk (High or Medium)", "In Flood Zone 3"), digits = 0, mark = ",")
+      DT::formatRound(c("People", "Aged 65+", "Households at High or Medium"), digits = 0, mark = ",")
   })
 
-  area_selected <- reactive({
-    row <- input$areas_table_rows_selected
-    if (is.null(row)) return(NULL)
-    tbl <- areas_table_data()
-    if (row > nrow(tbl)) NULL else tbl[row]
+  # An area link anywhere (table, map popup) opens its detail page.
+  observeEvent(input$area_open, {
+    id <- gsub("[^A-Za-z0-9_.-]", "", input$area_open)
+    x <- tryCatch(areas_all(), error = function(e) NULL)
+    if (is.null(x)) x <- safe_fetch(fetch_area_exposure)
+    req(x, id %in% x$area_id)
+    updateTabsetPanel(session, "main_tabs", selected = "Area detail")
+    ord <- as.data.table(x)[order(area_name)]
+    updateSelectizeInput(session, "area_pick", selected = id,
+                         choices = stats::setNames(ord$area_id, sprintf("%s (%s)", ord$area_name, ifelse(ord$kind == "flood_warning", "warning", "alert"))))
   })
 
-  output$area_detail <- renderUI({
-    a <- area_selected()
-    if (is.null(a)) return(tags$p(class = "text-muted", "Select an area in the table for its figures."))
-    n <- function(v) format(round(v), big.mark = ",")
-    bands <- c(`Very Low` = a$people_rs_very_low, Low = a$people_rs_low, Medium = a$people_rs_medium, High = a$people_rs_high)
-    tags$div(
-      tags$h3(a$area_name),
-      tags$p(class = "app-caption", sprintf("%s, %s. %s km2.", a$type_text, tools::toTitleCase(a$area_source), format(a$area_km2, nsmall = 1))),
-      tags$ul(
-        tags$li(sprintf("%s people live in %s households (%s addresses).", n(a$people), n(a$households), n(a$addresses))),
-        tags$li(sprintf("%s people (%.0f%%) are in a High or Medium band for rivers and the sea; %s are in Flood Zone 3.",
-                        n(a$people_rs_high_medium), 100 * a$share_people_high_medium, n(a$people_fz3))),
-        tags$li(sprintf("By band: %s.", paste(sprintf("%s %s", names(bands), n(bands)), collapse = ", "))),
-        tags$li(sprintf("%s people (%.0f%%) are also in another area of this kind. Counted once across overlapping areas this area has %s; split evenly it has %s.",
-                        n(a$people_shared), 100 * a$share_people_shared, n(a$people_unique), n(a$people_split))),
-        tags$li(sprintf("%s over 65s; %.0f%% of people live in the most deprived fifth of England.", n(a$over65), 100 * a$share_people_imd_1_2)),
-        tags$li(sprintf("%s critical sites: %s health, %s education, %s emergency, %s utilities; %s in a High or Medium band.",
-                        a$sites, a$sites_health, a$sites_education, a$sites_emergency, a$sites_utilities, a$sites_rs_high_medium)))
-    )
+  area_sel <- reactive({
+    req(input$area_pick)
+    x <- as.data.table(areas_all())
+    r <- x[area_id == input$area_pick]
+    req(nrow(r) == 1L)
+    r
   })
+
+  area_n <- function(v) formatC(round(as.numeric(v)), format = "d", big.mark = ",")
+
+  output$area_head <- renderUI({
+    a <- tryCatch(area_sel(), error = function(e) NULL)
+    if (is.null(a)) return(tags$p(class = "text-muted", "Choose an area above, or select one in the Warning areas table."))
+    cells <- tryCatch(area_cells(), error = function(e) NULL)
+    tags$div(tags$h1(class = "app-title", a$area_name),
+             tags$p(class = "app-lead", sprintf("%s %s.%s", a$type_text, a$area_id,
+                                                if (!is.null(cells) && nrow(cells)) sprintf(" Held in %s cells of 100 m.", area_n(nrow(cells))) else "")))
+  })
+
+  output$area_kpis <- renderUI({
+    a <- tryCatch(area_sel(), error = function(e) NULL); req(a)
+    tile <- function(big, small) tags$div(tags$b(big), tags$span(small))
+    tags$div(class = "kpi-row",
+             tile(area_n(a$people), "people"),
+             tile(area_n(a$households), "households"),
+             tile(area_n(a$over65), sprintf("aged 65 or over (%.0f%%)", 100 * a$over65 / max(a$people, 1))),
+             tile(sprintf("%.0f%%", 100 * a$share_people_imd_1_2), "live in the most deprived 20% of neighbourhoods"),
+             tile(area_n(a$sites), "critical sites"))
+  })
+
+  output$area_bands <- renderUI({
+    a <- tryCatch(area_sel(), error = function(e) NULL); req(a)
+    rows <- lapply(seq_len(nrow(FLOOD_BANDS)), function(i) {
+      cc <- FLOOD_BANDS$col[i]
+      p <- a[[paste0("people_", cc)]]; h <- a[[paste0("households_", cc)]]
+      tags$tr(tags$td(HTML(band_chip(FLOOD_BANDS$band[i]))), tags$td(class = "n", sprintf("%.0f%%", 100 * p / max(a$people, 1))),
+              tags$td(class = "n", area_n(p)), tags$td(class = "n", area_n(h)))
+    })
+    none <- max(a$people - a$people_rs_high - a$people_rs_medium - a$people_rs_low - a$people_rs_very_low, 0)
+    tags$div(tags$table(
+      tags$thead(tags$tr(tags$th("Band"), tags$th(class = "n", "Share of people"), tags$th(class = "n", "People"), tags$th(class = "n", "Households"))),
+      tags$tbody(rows)),
+      tags$p(class = "app-caption", sprintf("%s people live outside every band. Unique to this area, not shared with another area of its kind: %s people; split evenly across overlaps: %s.",
+                                            area_n(none), area_n(a$people_unique), area_n(a$people_split))))
+  })
+
+  output$area_sites <- renderUI({
+    a <- tryCatch(area_sel(), error = function(e) NULL); req(a)
+    summary <- tags$p(sprintf("%s critical sites: %s health, %s education, %s emergency, %s utilities. %s are in a High or Medium band.",
+                              a$sites, a$sites_health, a$sites_education, a$sites_emergency, a$sites_utilities, a$sites_rs_high_medium))
+    s <- area_sites_data()
+    if (is.null(s)) return(tags$div(summary, tags$p(class = "app-caption", "The list of named sites is not available yet (pipeline notebook 35 writes it).")))
+    s <- as.data.table(s)[rofrs_rank >= 3L]
+    if (nrow(s) == 0L) return(tags$div(summary, tags$p(class = "app-caption", "None of them is in a High or Medium band.")))
+    rows <- lapply(seq_len(min(nrow(s), 15L)), function(i)
+      tags$tr(tags$td(s$name[i]), tags$td(s$site_type[i]), tags$td(HTML(band_chip(s$band[i])))))
+    tags$div(summary,
+             tags$table(tags$thead(tags$tr(tags$th("Site"), tags$th("Type"), tags$th("Band"))), tags$tbody(rows)),
+             if (nrow(s) > 15L) tags$p(class = "app-caption", sprintf("The first 15 of %d sites in a High or Medium band. Download the sites for the rest.", nrow(s))),
+             downloadButton("download_area_sites", "Download this area's critical sites", class = "btn-sm btn-outline-secondary"))
+  })
+
+  # The sites inside the chosen area, or NULL when the pipeline table is missing (no banner: the page says so).
+  area_sites_data <- reactive({
+    req(input$area_pick)
+    tryCatch(fetch_area_sites(input$area_pick), error = function(e) NULL)
+  })
+  output$download_area_sites <- downloadHandler(
+    filename = function() sprintf("area_%s_critical_sites_%s.csv", gsub("[^A-Za-z0-9_.-]", "", input$area_pick %||% "none"), format(Sys.Date(), "%Y%m%d")),
+    content = function(file) {
+      s <- area_sites_data()
+      data.table::fwrite(if (is.null(s)) data.table() else as.data.table(s)[, .(Site = name, Type = site_type, Group = site_group, Band = band)], file, bom = TRUE)
+    })
+
+  area_cons_names <- reactive({
+    l <- tryCatch(fetch_area_constituency_links(), error = function(e) NULL)
+    area_constituency_names(l)
+  })
+
+  output$area_cons <- renderUI({
+    a <- tryCatch(area_sel(), error = function(e) NULL); req(a)
+    nm <- unname(area_cons_names()[a$area_id])
+    if (length(nm) == 0L || is.na(nm)) return(tags$p(class = "text-muted", "No constituency links found for this area."))
+    tags$p(nm)
+  })
+
+  # The 100 m cells inside the area's boundary.
+  area_shape <- reactive({ req(input$area_pick); tryCatch(fetch_area_shape(input$area_pick), error = function(e) NULL) })
+  area_cells <- reactive({
+    shp <- area_shape(); req(shp)
+    bb <- sf::st_bbox(shp)
+    d <- tryCatch(fetch_risk_grid(bb[["xmin"]], bb[["ymin"]], bb[["xmax"]], bb[["ymax"]], 0, 20000L), error = function(e) NULL)
+    if (is.null(d)) return(NULL)
+    cells_in_shape(grid_cell_corners(as.data.frame(d)), shp)
+  })
+
+  area_map <- function(mode) {
+    shp <- area_shape()
+    m <- leaflet::leaflet(options = leaflet::leafletOptions(zoomSnap = 0.25))
+    m <- leaflet::addProviderTiles(m, leaflet::providers$Esri.WorldGrayCanvas)
+    if (is.null(shp)) return(m)
+    bb <- sf::st_bbox(shp)
+    cells <- tryCatch(area_cells(), error = function(e) NULL)
+    if (!is.null(cells) && nrow(cells) > 0L) {
+      fill <- if (mode == "score") grid_colour(cells$risk_score) else grid_band_colour(cells$haz_rs)
+      m <- leaflet::addRectangles(m, lng1 = cells$lng1, lat1 = cells$lat1, lng2 = cells$lng2, lat2 = cells$lat2, stroke = FALSE,
+                                  fillColor = fill, fillOpacity = 0.85, popup = grid_popup(cells))
+    }
+    m <- leaflet::addPolygons(m, data = shp, fill = FALSE, color = "#BE0553", weight = 2.5, dashArray = "6 5", opacity = 1)
+    m <- leaflet::fitBounds(m, bb[["xmin"]], bb[["ymin"]], bb[["xmax"]], bb[["ymax"]])
+    if (mode == "score") {
+      leaflet::addLegend(m, position = "bottomleft", colors = GRID_COLOURS, labels = GRID_LABELS, title = "Risk score", opacity = 0.9)
+    } else {
+      leaflet::addLegend(m, position = "bottomleft", colors = c(FLOOD_BANDS$fill, "#F3F2F1"), labels = c(FLOOD_BANDS$band, "None"), title = "Flood band", opacity = 0.9)
+    }
+  }
+  output$area_grid_map <- leaflet::renderLeaflet(area_map("score"))
+  output$area_band_map <- leaflet::renderLeaflet(area_map("band"))
+
+  output$area_grid_note <- renderUI({
+    cells <- tryCatch(area_cells(), error = function(e) NULL)
+    if (is.null(input$area_pick) || !nzchar(input$area_pick)) return(NULL)
+    if (is.null(cells)) return(tags$p(class = "text-muted", "The 100 m grid is not available (pipeline notebook 34)."))
+    if (nrow(cells) == 0L) return(tags$p(class = "text-muted", "No grid cells inside this area."))
+    NULL
+  })
+
+  output$download_area_cells <- downloadHandler(
+    filename = function() sprintf("area_%s_cells_100m_%s.csv", gsub("[^A-Za-z0-9_.-]", "", input$area_pick %||% "none"), format(Sys.Date(), "%Y%m%d")),
+    content = function(file) {
+      cells <- tryCatch(area_cells(), error = function(e) NULL)
+      keep <- c("easting", "northing", "people", "imd_decile", "haz_rs", "critical_sites", "risk_score")
+      data.table::fwrite(if (is.null(cells)) data.table() else as.data.table(cells)[, intersect(keep, names(cells)), with = FALSE], file, bom = TRUE)
+    })
 
   output$area_overlaps <- DT::renderDataTable({
-    a <- area_selected()
-    if (is.null(a)) return(DT::datatable(data.frame(Note = "Select an area above."), rownames = FALSE, selection = "none", options = list(dom = "t")))
+    a <- tryCatch(area_sel(), error = function(e) NULL)
+    if (is.null(a)) return(DT::datatable(data.frame(Note = "Choose an area above."), rownames = FALSE, selection = "none", options = list(dom = "t")))
     o <- safe_fetch(fetch_area_overlaps, a$area_id)
     if (is.null(o) || nrow(o) == 0L) return(DT::datatable(data.frame(Note = "No other area of this kind shares people with it."), rownames = FALSE, selection = "none", options = list(dom = "t")))
     o <- as.data.table(o)
@@ -2488,14 +2625,29 @@ server <- function(input, output, session) {
     content  = function(file) data.table::fwrite(const_exp_data(), file, bom = TRUE))
 
   output$download_areas <- downloadHandler(
-    filename = function() sprintf("warning_areas_%s_%s.csv", input$areas_kind, format(Sys.Date(), "%Y%m%d")),
+    filename = function() sprintf("warning_areas_%s.csv", format(Sys.Date(), "%Y%m%d")),
     content = function(file) {
       x <- areas_table_data()
-      if (nrow(x) == 0L) { write.csv(data.frame(), file, row.names = FALSE); return(invisible()) }
-      tbl <- areas_display(x); tbl[, id := NULL]
-      write.csv(tbl, file, row.names = FALSE, na = "")
+      if (nrow(x) == 0L) { data.table::fwrite(data.table(), file); return(invisible()) }
+      data.table::fwrite(x[, .(Kind = kind, `Area id` = area_id, Area = area_name, County = county, Source = area_source, People = round(people),
+                               `Aged 65+` = round(over65), `In most deprived 20%` = round(people_imd_1_2), Households = round(households),
+                               `People High` = round(people_rs_high), `People Medium` = round(people_rs_medium), `People Low` = round(people_rs_low), `People Very Low` = round(people_rs_very_low),
+                               `Households at High or Medium` = round(households_rs_high_medium), `Critical sites` = sites)], file, bom = TRUE)
     }
   )
+
+  output$download_exp_bands <- downloadHandler(
+    filename = function() sprintf("warning_areas_by_flood_band_%s.csv", format(Sys.Date(), "%Y%m%d")),
+    content = function(file) {
+      x <- safe_fetch(fetch_area_exposure)
+      if (is.null(x) || nrow(x) == 0L) { data.table::fwrite(data.table(), file); return(invisible()) }
+      x <- as.data.table(x)
+      out <- rbindlist(lapply(seq_len(nrow(FLOOD_BANDS)), function(i) {
+        cc <- FLOOD_BANDS$col[i]
+        x[, .(Kind = kind, `Area id` = area_id, Area = area_name, Band = FLOOD_BANDS$band[i], People = round(get(paste0("people_", cc))), Households = round(get(paste0("households_", cc))))]
+      }))
+      data.table::fwrite(out[order(Kind, `Area id`)], file, bom = TRUE)
+    })
 
   output$cov_list_note <- renderUI({
     x <- cov_list()

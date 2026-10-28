@@ -1059,26 +1059,63 @@ make_overview_tab <- function() tags$div(
 make_areas_tab <- function() tags$div(
   class = "areas-page",
   tags$h1(class = "app-title", "Warning areas"),
-  tags$p(class = "app-lead", "Who lives inside each flood warning area and flood alert area, and how many of them are in a High or Medium band for flooding from rivers and the sea."),
+  tags$p(class = "app-lead", "Who and what sits inside each flood warning and flood alert area, and how much of it lies in each flood risk band."),
   uiOutput("areas_note"),
-  tags$h2("Who the warning areas reach"),
-  uiOutput("areas_coverage"),
   tags$div(
     class = "filter-row",
-    selectInput("areas_kind", "Kind of area", choices = c("Flood warning areas" = "flood_warning", "Flood alert areas" = "flood_alert"), width = "240px"),
-    selectInput("areas_source", "Flood source", choices = c("Any" = "any", "Fluvial (rivers)" = "fluvial", "Coastal" = "coastal"), width = "220px"),
-    downloadButton("download_areas", "Export CSV", class = "btn-sm btn-outline-secondary")
+    selectInput("areas_kind", "Kind", choices = c("Flood warning and alert" = "both", "Flood warning" = "flood_warning", "Flood alert" = "flood_alert"), width = "220px"),
+    selectInput("areas_county", "County", choices = c("All" = ""), width = "200px"),
+    selectInput("areas_source", "Flood source", choices = c("Rivers and the sea" = "any", "Fluvial (rivers)" = "fluvial", "Coastal" = "coastal"), width = "200px"),
+    selectInput("areas_sort", "Sort by", choices = c("People at risk" = "people_rs_high_medium", "Share at risk" = "share_people_high_medium", "People" = "people",
+                                                    "Households at High or Medium" = "households_rs_high_medium", "Critical sites" = "sites", "Area name" = "area_name"), width = "230px"),
+    textInput("areas_search", "Search", placeholder = "Area name", width = "200px"),
+    downloadButton("download_areas", "Download CSV", class = "btn-primary")
   ),
+  tags$p(class = "app-caption", "Rivers and the sea bands, from the National Flood Risk Assessment (NaFRA2). The bar shows the share of the area's people in High, Medium, Low and Very Low chance of flooding in any year. Select an area name for the detail."),
   DT::dataTableOutput("areas_table"),
-  tags$h2(class = "sit-briefing-h", "The selected area"),
-  uiOutput("area_detail"),
-  tags$h3("Areas that share people with it"),
-  DT::dataTableOutput("area_overlaps"),
+  uiOutput("areas_band_legend"),
+  tags$h2("Who the warning areas reach"),
+  uiOutput("areas_coverage"),
   tags$details(class = "app-details", tags$summary("How the figures are made"), tags$p(
     "Each address point is placed in the areas whose boundary contains it, and its people are the Census 2021 output area total shared equally among the points in that output area. ",
-    "People are everyone inside the area. Areas overlap, so a person can be in more than one: add the figures for one kind of area only after reading the unique and split columns, and never add warning areas to alert areas. ",
-    "At risk means a High or Medium band in the rivers and sea risk map. Surface water is not counted, because the Environment Agency does not issue warnings for it. ",
+    "Areas overlap, so a person can be in more than one: read the unique and split figures in the area detail before adding areas together, and never add warning areas to alert areas. ",
+    "At risk means a High or Medium band in the rivers and sea risk map. Surface water is not counted, because the Environment Agency does not warn for it. ",
     "Until AddressBase Premium is available the points come from the National Statistics UPRN Lookup, so counts are of addresses, not of buildings or businesses."))
+)
+
+
+# -----------------------------------------------------------------------------
+# Area detail tab: one warning or alert area. The figures, the 100 m risk grid inside its boundary, the same area by flood band,
+# the people by band, what it overlaps, and the constituencies it lies in.
+# -----------------------------------------------------------------------------
+
+make_area_detail_tab <- function() tags$div(
+  class = "areas-page",
+  tags$div(class = "filter-row",
+           selectizeInput("area_pick", "Area", choices = NULL, width = "460px", options = list(placeholder = "Choose an area")),
+           downloadButton("download_area_cells", "Download this area's 100 m cells", class = "btn-sm btn-outline-secondary")),
+  uiOutput("area_head"),
+  uiOutput("area_kpis"),
+  tags$div(
+    class = "area-cols",
+    tags$div(
+      tags$h2("Risk grid"),
+      tags$p(class = "app-caption", "Each square is 100 m. Colour is the composite risk score, with the warning area outlined."),
+      leaflet::leafletOutput("area_grid_map", height = "420px"),
+      uiOutput("area_grid_note")),
+    tags$div(
+      tags$h2("By flood band"),
+      tags$p(class = "app-caption", "Rivers and the sea. Surface water is not counted."),
+      uiOutput("area_bands"),
+      tags$h2("Critical sites"),
+      uiOutput("area_sites"),
+      tags$h2("Constituencies"),
+      uiOutput("area_cons"))),
+  tags$h2("The same area by flood band"),
+  tags$p(class = "app-caption", "The map can show the NaFRA2 bands on their own, without the score."),
+  leaflet::leafletOutput("area_band_map", height = "420px"),
+  tags$h2("Areas that share people with it"),
+  DT::dataTableOutput("area_overlaps")
 )
 
 
@@ -1127,6 +1164,11 @@ make_exports_tab <- function() tags$div(
     tags$h2("Warning area exposure"),
     tags$p("Each flood warning area and flood alert area with the people, households and people in a High or Medium rivers and sea band inside it. Restricted: handle as the data is classified."),
     downloadButton("download_exp_areas", "Download CSV", class = "btn-primary")),
+  tags$section(
+    class = "ex-section",
+    tags$h2("Warning areas by flood band"),
+    tags$p("One row per area and rivers and sea band: the people and households in it. Restricted."),
+    downloadButton("download_exp_bands", "Download CSV", class = "btn-primary")),
   tags$section(
     class = "ex-section",
     tags$h2("Constituencies and MP contact details"),
@@ -1206,6 +1248,7 @@ ui <- function(request) {
 
     tabPanel("Constituency situation", make_situation_tab()),
     tabPanel("Warning areas",          make_areas_tab()),
+    tabPanel("Area detail",            make_area_detail_tab()),
     tabPanel("Constituency exposure",  make_const_exposure_tab()),
     tabPanel("Exposure history",       make_exposure_tab()),
     tabPanel("Warning history",        make_warning_history_tab()),
@@ -1222,7 +1265,7 @@ ui <- function(request) {
   bslib::page_fluid(
     theme = app_theme(),
     tags$head(tags$title(if (DEMO_MODE) "Flood Intelligence Tool (demonstration)" else "Flood Intelligence Tool"),
-              tags$style(HTML(paste(app_css_variables(), custom_css, design_css()))),
+              tags$style(HTML(paste(app_css_variables(), custom_css, design_css(), areas_css()))),
               tags$script(HTML(app_nav_js()))),
     if (DEMO_MODE) tags$div(class = "demo-ribbon", "Demonstration: synthetic data. Nothing is connected, saved or sent."),
     tags$a(class = "skip-link", href = "#main-content", "Skip to main content"),

@@ -66,6 +66,7 @@ APP_SECTIONS <- list(
   list(id = "areas", label = "Warning areas",
        intro = "Who lives inside each flood warning and flood alert area, and how much of that is at risk from rivers and the sea.",
        views = list(list(value = "Warning areas", label = "Warning areas"),
+                    list(value = "Area detail", label = "Area detail"),
                     list(value = "Constituency exposure", label = "Constituency exposure"))),
   list(id = "constituencies", label = "Constituencies and briefings",
        intro = "Each constituency's forecast, its warnings and its MP briefing.",
@@ -516,4 +517,27 @@ make_styleguide_tab <- function() {
       tags$div(class = "quiet-notice", "A quiet notice for a normal state, such as a day with no risk areas."),
       tags$div(class = "stale-banner stale-warn", "A warning banner, for a pipeline that is late."))
   )
+}
+
+
+# Styles for the Warning areas pages: the band bar and chips, the figure tiles, the two-column detail and the popup table.
+areas_css <- function() {
+  paste0(r"---(
+.band-bar { display: flex; height: 18px; width: 200px; background: #F3F2F1; }
+.band-bar i { display: block; height: 100%; }
+.band-chip { display: inline-block; padding: 1px 8px; font-size: 13px; font-weight: 700; }
+.band-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 14px; margin: 8px 0 26px; }
+.band-legend i { display: inline-block; width: 14px; height: 14px; margin-right: 5px; vertical-align: -2px; border: 1px solid #B1B4B6; }
+.kpi-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 26px; margin: 4px 0 28px; }
+.kpi-row > div { border-top: 5px solid #053D7E; padding-top: 10px; }
+.kpi-row b { display: block; font-size: 34px; line-height: 1.1; }
+.kpi-row span { font-size: 15px; color: #505A5F; }
+.area-cols { display: grid; grid-template-columns: 1.15fr 1fr; gap: 34px; }
+.area-cols table, .popup-figs { border-collapse: collapse; width: 100%; font-size: 15px; }
+.area-cols th { text-align: left; border-bottom: 2px solid #0B0C0C; padding: 6px 8px 6px 0; }
+.area-cols td, .popup-figs td { border-bottom: 1px solid #B1B4B6; padding: 7px 8px 7px 0; }
+.area-cols td.n, .area-cols th.n, .popup-figs td.n { text-align: right; }
+.popup-figs { min-width: 260px; margin-top: 6px; }
+@media (max-width: 900px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } .area-cols { grid-template-columns: 1fr; } }
+)---")
 }

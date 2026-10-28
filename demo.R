@@ -740,7 +740,10 @@ demo_area_exposure <- function() demo_memo("area_exposure", demo_with_seed(3517,
     over65 = as.integer(round(people * runif(n, .12, .28))),
     people_rs_very_low = pmax(0L, people - hm - as.integer(round((people - hm) * .4))),
     people_rs_low = as.integer(round((people - hm) * .4)), people_rs_medium = hm - high, people_rs_high = high,
-    people_rs_high_medium = hm, share_people_high_medium = round(hm / pmax(people, 1L), 4),
+    people_rs_high_medium = hm, households_rs_high_medium = as.integer(round(hm / 2.4)),
+    households_rs_high = as.integer(round(high / 2.4)), households_rs_medium = as.integer(round((hm - high) / 2.4)),
+    households_rs_low = as.integer(round((people - hm) * .4 / 2.4)), households_rs_very_low = as.integer(round(pmax(0L, people - hm - (people - hm) * .4) / 2.4)),
+    share_people_high_medium = round(hm / pmax(people, 1L), 4),
     people_fz3 = as.integer(round(hm * .6)), people_imd_1_2 = as.integer(round(people * runif(n, .1, .4))),
     share_people_imd_1_2 = NA_real_,
     people_unique = people - shared, people_split = people - as.integer(round(shared / 2)),
@@ -785,6 +788,28 @@ fetch_constituency_exposure <- function() demo_with_seed(3519, {
              people_rs_high_medium_in_warning_area = w, people_rs_high_medium_in_alert_area = a,
              people_high_medium_not_in_warning_area = hm - w, people_high_medium_not_in_alert_area = hm - a)
 })
+
+fetch_area_shape <- function(area_id) {
+  a <- demo_ea_areas()
+  i <- match(area_id, a$table$ea_area_code)
+  if (is.na(i)) return(NULL)
+  sf::st_sf(ea_area_code = area_id, geometry = sf::st_geometry(a$geom4326)[i], crs = 4326)
+}
+
+# Invented sites for a demo area: as many as its count says, with a band each.
+fetch_area_sites <- function(area_id) {
+  d <- demo_area_exposure()
+  i <- match(area_id, d$area_id)
+  r <- d[i]
+  none <- data.table(site_id = character(), name = character(), site_group = character(), site_type = character(), band = character(), rofrs_rank = integer())
+  if (is.na(i) || r$sites == 0L) return(none)
+  set.seed(sum(utf8ToInt(area_id)))
+  type <- sample(c("Hospital", "Care home", "School", "Electricity", "Fire and rescue", "GP surgery"), r$sites, TRUE)
+  rank <- sort(sample(0:4, r$sites, TRUE, prob = c(.15, .15, .2, .25, .25)), decreasing = TRUE)
+  data.table(site_id = sprintf("demo:%s:%d", area_id, seq_len(r$sites)), name = sprintf("Demo %s %d", tolower(type), seq_len(r$sites)),
+             site_group = c(Hospital = "health", `Care home` = "health", School = "education", Electricity = "utilities", `Fire and rescue` = "emergency", `GP surgery` = "health")[type],
+             site_type = type, band = c("None", "Very Low", "Low", "Medium", "High")[rank + 1L], rofrs_rank = as.integer(rank))
+}
 
 fetch_area_overlaps <- function(area_id) {
   d <- demo_area_exposure()
