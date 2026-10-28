@@ -51,6 +51,8 @@ test_that("no demo fetcher reaches for the warehouse", {
     expect_true(all(names(RESPONDER_GEOGRAPHIES) %in% geo$geography))
     for (gg in setdiff(unique(geo$geography), "combined_authority")) expect_equal(sum(geo[geography == gg]$share_of_area_people), 1, tolerance = 0.01)
     expect_lt(sum(geo[geography == "combined_authority"]$share_of_area_people), 1)
+    pr <- demo_env$fetch_area_overlap_pairs()
+    expect_true(all(c("kind", "area_id_a", "area_id_b", "people") %in% names(pr)))
     ov <- demo_env$fetch_area_overlaps(ae$area_id[1L])
     expect_true(all(c("area_id_a", "area_id_b", "people", "name_a", "name_b") %in% names(ov)))
     expect_no_error(demo_env$fetch_warning_episodes(demo_env$fetch_warning_history()$constituency_id[1L]))
