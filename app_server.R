@@ -1414,7 +1414,7 @@ server <- function(input, output, session) {
     "refresh_data", "show_health", "goto_constituency", "exp_pick", "nav_to",
     "rv_reviewed", "rv_sent", "rv_rejected", "demo_reset",
     "area_row_click", "download_ea_areas", "download_situation",
-    "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas", "download_areas", "download_const_exp", "download_exp_bands", "download_area_cells", "download_area_sites", "area_open", "area_pick", "areas_search",
+    "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas", "download_areas", "download_const_exp", "download_exp_bands", "download_area_cells", "download_area_sites", "area_open", "areas_open_selected", "area_pick", "areas_search",
     "situation_table_rows_selected", "situation_table_row_last_clicked",
     "situation_table_cell_clicked", "situation_table_rows_current",
     "situation_table_rows_all", "situation_table_state", "situation_table_search",
@@ -2390,11 +2390,62 @@ server <- function(input, output, session) {
   output$areas_table <- DT::renderDataTable({
     x <- areas_table_data()
     if (nrow(x) == 0L) return(DT::datatable(data.frame(Note = "No areas to show."), rownames = FALSE, selection = "none", options = list(dom = "t")))
-    DT::datatable(areas_display(x), rownames = FALSE, selection = "none", escape = FALSE,
+    DT::datatable(areas_display(x), rownames = FALSE, selection = "single", escape = FALSE,
                   options = list(pageLength = 15, scrollX = TRUE, dom = "tip", order = list(),
                                  columnDefs = list(list(orderable = FALSE, targets = c(0L, 4L))),
                                  language = list(info = "Showing _START_ to _END_ of _TOTAL_ areas"))) |>
       DT::formatRound(c("People", "Aged 65+", "Households at High or Medium"), digits = 0, mark = ",")
+  })
+
+  # The row selected in the table: its written description and the areas that share people with it sit below the table.
+  areas_selected <- reactive({
+    row <- input$areas_table_rows_selected
+    if (is.null(row)) return(NULL)
+    tbl <- areas_table_data()
+    if (row > nrow(tbl)) NULL else tbl[row]
+  })
+
+  # The written description of an area, from its exposure row. Used under the table and on the detail page.
+  area_description <- function(a) {
+    n <- function(v) formatC(round(as.numeric(v)), format = "d", big.mark = ",")
+    bands <- c(`Very Low` = a$people_rs_very_low, Low = a$people_rs_low, Medium = a$people_rs_medium, High = a$people_rs_high)
+    tags$div(
+      tags$h3(a$area_name),
+      tags$p(class = "app-caption", sprintf("%s, %s. %s km2.", a$type_text, tools::toTitleCase(a$area_source), format(a$area_km2, nsmall = 1))),
+      tags$ul(
+        tags$li(sprintf("%s people live in %s households (%s addresses).", n(a$people), n(a$households), n(a$addresses))),
+        tags$li(sprintf("%s people (%.0f%%) are in a High or Medium band for rivers and the sea; %s are in Flood Zone 3.",
+                        n(a$people_rs_high_medium), 100 * a$share_people_high_medium, n(a$people_fz3))),
+        tags$li(sprintf("By band: %s.", paste(sprintf("%s %s", names(bands), n(bands)), collapse = ", "))),
+        tags$li(sprintf("%s people (%.0f%%) are also in another area of this kind. Counted once across overlapping areas this area has %s; split evenly it has %s.",
+                        n(a$people_shared), 100 * a$share_people_shared, n(a$people_unique), n(a$people_split))),
+        tags$li(sprintf("%s over 65s; %.0f%% of people live in the most deprived fifth of England.", n(a$over65), 100 * a$share_people_imd_1_2)),
+        tags$li(sprintf("%s critical sites: %s health, %s education, %s emergency, %s utilities; %s in a High or Medium band.",
+                        a$sites, a$sites_health, a$sites_education, a$sites_emergency, a$sites_utilities, a$sites_rs_high_medium))),
+      tags$p(actionLink("areas_open_selected", "Open the full area detail with the maps and critical sites")))
+  }
+
+  output$areas_description <- renderUI({
+    a <- areas_selected()
+    if (is.null(a)) return(tags$p(class = "text-muted", "Select a row in the table for a written description of the area."))
+    area_description(a)
+  })
+
+  overlaps_table <- function(a) {
+    if (is.null(a)) return(DT::datatable(data.frame(Note = "Select an area above."), rownames = FALSE, selection = "none", options = list(dom = "t")))
+    o <- safe_fetch(fetch_area_overlaps, a$area_id)
+    if (is.null(o) || nrow(o) == 0L) return(DT::datatable(data.frame(Note = "No other area of this kind shares people with it."), rownames = FALSE, selection = "none", options = list(dom = "t")))
+    o <- as.data.table(o)
+    o[, Other := fifelse(area_id_a == a$area_id, name_b, name_a)]
+    DT::datatable(o[, .(`Overlapping area` = Other, People = round(people), Addresses = round(addresses))], rownames = FALSE, selection = "none",
+                  options = list(pageLength = 10, dom = "tip"))
+  }
+  output$areas_overlaps <- DT::renderDataTable(overlaps_table(areas_selected()))
+
+  observeEvent(input$areas_open_selected, {
+    a <- areas_selected(); req(a)
+    updateTabsetPanel(session, "main_tabs", selected = "Area detail")
+    updateSelectizeInput(session, "area_pick", selected = a$area_id)
   })
 
   # An area link anywhere (table, map popup) opens its detail page.
@@ -2544,16 +2595,7 @@ server <- function(input, output, session) {
       data.table::fwrite(if (is.null(cells)) data.table() else as.data.table(cells)[, intersect(keep, names(cells)), with = FALSE], file, bom = TRUE)
     })
 
-  output$area_overlaps <- DT::renderDataTable({
-    a <- tryCatch(area_sel(), error = function(e) NULL)
-    if (is.null(a)) return(DT::datatable(data.frame(Note = "Choose an area above."), rownames = FALSE, selection = "none", options = list(dom = "t")))
-    o <- safe_fetch(fetch_area_overlaps, a$area_id)
-    if (is.null(o) || nrow(o) == 0L) return(DT::datatable(data.frame(Note = "No other area of this kind shares people with it."), rownames = FALSE, selection = "none", options = list(dom = "t")))
-    o <- as.data.table(o)
-    o[, Other := fifelse(area_id_a == a$area_id, name_b, name_a)]
-    DT::datatable(o[, .(`Overlapping area` = Other, People = round(people), Addresses = round(addresses))], rownames = FALSE, selection = "none",
-                  options = list(pageLength = 10, dom = "tip"))
-  })
+  output$area_overlaps <- DT::renderDataTable(overlaps_table(tryCatch(area_sel(), error = function(e) NULL)))
 
   output$areas_coverage <- renderUI({
     req(areas_started())

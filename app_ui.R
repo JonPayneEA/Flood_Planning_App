@@ -1074,6 +1074,10 @@ make_areas_tab <- function() tags$div(
   tags$p(class = "app-caption", "Rivers and the sea bands, from the National Flood Risk Assessment (NaFRA2). The bar shows the share of the area's people in High, Medium, Low and Very Low chance of flooding in any year. Select an area name for the detail."),
   DT::dataTableOutput("areas_table"),
   uiOutput("areas_band_legend"),
+  tags$h2(class = "sit-briefing-h", "The selected area"),
+  uiOutput("areas_description"),
+  tags$h3("Areas that share people with it"),
+  DT::dataTableOutput("areas_overlaps"),
   tags$h2("Who the warning areas reach"),
   uiOutput("areas_coverage"),
   tags$details(class = "app-details", tags$summary("How the figures are made"), tags$p(
