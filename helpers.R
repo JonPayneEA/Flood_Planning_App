@@ -1424,15 +1424,36 @@ bbox_to_bng <- function(west, south, east, north) {
   list(xmin = floor(min(xy[, 1L])), xmax = ceiling(max(xy[, 1L])), ymin = floor(min(xy[, 2L])), ymax = ceiling(max(xy[, 2L])))
 }
 
-# Adds the corners of each cell in longitude and latitude, for leaflet rectangles.
-grid_cell_corners <- function(cells) {
+# Adds the corners of each cell (a square of `size` metres, easting and northing the south-west corner) in longitude and latitude.
+# These are the box that holds the cell, good for finding its centre. Draw cells with grid_cells_sf(): British National Grid north is
+# not map north, so an axis-aligned box leaves slivers between neighbours.
+grid_cell_corners <- function(cells, size = 100) {
   cells <- as.data.frame(cells)
   if (nrow(cells) == 0L) return(cbind(cells, lng1 = numeric(), lat1 = numeric(), lng2 = numeric(), lat2 = numeric()))
   sw <- sf::st_as_sf(data.frame(x = cells$easting, y = cells$northing), coords = c("x", "y"), crs = 27700)
-  ne <- sf::st_as_sf(data.frame(x = cells$easting + 100, y = cells$northing + 100), coords = c("x", "y"), crs = 27700)
+  ne <- sf::st_as_sf(data.frame(x = cells$easting + size, y = cells$northing + size), coords = c("x", "y"), crs = 27700)
   a <- sf::st_coordinates(sf::st_transform(sw, 4326)); b <- sf::st_coordinates(sf::st_transform(ne, 4326))
   cells$lng1 <- a[, 1L]; cells$lat1 <- a[, 2L]; cells$lng2 <- b[, 1L]; cells$lat2 <- b[, 2L]
   cells
+}
+
+# The cells as true squares on the British National Grid, projected to longitude and latitude, one polygon each, with the cell's columns.
+grid_cells_sf <- function(cells, size = 100) {
+  cells <- as.data.frame(cells)
+  n <- nrow(cells)
+  if (n == 0L) return(sf::st_sf(cells, geometry = sf::st_sfc(crs = 4326)))
+  x <- cells$easting; y <- cells$northing
+  polys <- lapply(seq_len(n), function(i)
+    sf::st_polygon(list(cbind(c(x[i], x[i] + size, x[i] + size, x[i], x[i]), c(y[i], y[i], y[i] + size, y[i] + size, y[i])))))
+  g <- sf::st_transform(sf::st_sfc(polys, crs = 27700), 4326)
+  sf::st_sf(cells, geometry = g)
+}
+
+# The size to read a box of the grid at, so no more than about `target` cells come back: 100 m, then 200, 500 and 1,000 m.
+grid_step_for <- function(n_cells, target = 15000L) {
+  steps <- c(100, 200, 500, 1000, 2000)
+  i <- which(n_cells / (steps / 100)^2 <= target)[1L]
+  if (is.na(i)) steps[length(steps)] else steps[i]
 }
 
 grid_colour <- function(score) {

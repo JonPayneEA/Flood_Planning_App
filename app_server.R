@@ -1721,9 +1721,11 @@ server <- function(input, output, session) {
     if (!isTRUE(input$layer_risk_grid)) return()
     g <- tryCatch(grid_cells(), error = function(e) NULL)
     if (is.null(g) || is.null(g$cells) || nrow(g$cells) == 0L) return()
-    cells <- grid_cell_corners(g$cells)
-    leaflet::addRectangles(proxy, lng1 = cells$lng1, lat1 = cells$lat1, lng2 = cells$lng2, lat2 = cells$lat2, group = "risk_grid",
-                           stroke = FALSE, fillColor = grid_colour(cells$risk_score), fillOpacity = 0.7, popup = grid_popup(cells))
+    cells <- grid_cells_sf(g$cells)
+    fill <- grid_colour(cells$risk_score)
+    # a hairline in the cell's own colour closes the seams between neighbours
+    leaflet::addPolygons(proxy, data = cells, group = "risk_grid", stroke = TRUE, weight = 0.6, color = fill, opacity = 0.7,
+                         fillColor = fill, fillOpacity = 0.7, popup = grid_popup(cells))
     leaflet::addLegend(proxy, position = "bottomleft", colors = GRID_COLOURS, labels = GRID_LABELS, layerId = "risk_grid_legend",
                        title = "Risk score<br>(rivers and sea)", opacity = 0.85)
   })
@@ -2551,9 +2553,15 @@ server <- function(input, output, session) {
   area_cells <- reactive({
     shp <- area_shape(); req(shp)
     bb <- sf::st_bbox(shp)
-    d <- tryCatch(fetch_risk_grid(bb[["xmin"]], bb[["ymin"]], bb[["xmax"]], bb[["ymax"]], 0, 20000L), error = function(e) NULL)
+    # Read at 100 m where the box is small, and in larger squares (worst band wins) where it is not, so a big estuary is whole, not cut off.
+    n <- tryCatch(fetch_risk_grid_count(bb[["xmin"]], bb[["ymin"]], bb[["xmax"]], bb[["ymax"]]), error = function(e) NA_real_)
+    if (is.na(n)) return(NULL)
+    step <- grid_step_for(n)
+    d <- tryCatch(fetch_risk_grid(bb[["xmin"]], bb[["ymin"]], bb[["xmax"]], bb[["ymax"]], 0, 200000L, step), error = function(e) NULL)
     if (is.null(d)) return(NULL)
-    cells_in_shape(grid_cell_corners(as.data.frame(d)), shp)
+    out <- cells_in_shape(grid_cell_corners(as.data.frame(d), step), shp)
+    attr(out, "step") <- step
+    out
   })
 
   area_map <- function(mode) {
@@ -2565,8 +2573,9 @@ server <- function(input, output, session) {
     cells <- tryCatch(area_cells(), error = function(e) NULL)
     if (!is.null(cells) && nrow(cells) > 0L) {
       fill <- if (mode == "score") grid_colour(cells$risk_score) else grid_band_colour(cells$haz_rs)
-      m <- leaflet::addRectangles(m, lng1 = cells$lng1, lat1 = cells$lat1, lng2 = cells$lng2, lat2 = cells$lat2, stroke = FALSE,
-                                  fillColor = fill, fillOpacity = 0.85, popup = grid_popup(cells))
+      sq <- grid_cells_sf(cells, attr(cells, "step") %||% 100)
+      m <- leaflet::addPolygons(m, data = sq, stroke = TRUE, weight = 0.6, color = fill, opacity = 0.85, fillColor = fill, fillOpacity = 0.85,
+                                popup = grid_popup(sq))
     }
     m <- leaflet::addPolygons(m, data = shp, fill = FALSE, color = "#BE0553", weight = 2.5, dashArray = "6 5", opacity = 1)
     m <- leaflet::fitBounds(m, bb[["xmin"]], bb[["ymin"]], bb[["xmax"]], bb[["ymax"]])
@@ -2584,7 +2593,9 @@ server <- function(input, output, session) {
     if (is.null(input$area_pick) || !nzchar(input$area_pick)) return(NULL)
     if (is.null(cells)) return(tags$p(class = "text-muted", "The 100 m grid is not available (pipeline notebook 34)."))
     if (nrow(cells) == 0L) return(tags$p(class = "text-muted", "No grid cells inside this area."))
-    NULL
+    st <- attr(cells, "step") %||% 100
+    if (st > 100) tags$p(class = "text-muted small", sprintf("This area is large, so cells are shown as %s m squares: each takes the worst band and the highest score of the 100 m cells in it.", format(st, big.mark = ",")))
+    else NULL
   })
 
   output$download_area_cells <- downloadHandler(
