@@ -421,7 +421,7 @@ guide_products <- function(s) {
         "Notebook 33 places every address in England as a point and gives it its share of the Census 2021 output area's people and households. Notebook 35 then finds which warning and alert area boundaries contain each point.",
         "Each point carries the rivers and sea band (NaFRA2) and Flood Zone at its position, so an area's people can be split by band. At risk means High or Medium.",
         "Areas of one kind overlap. Gross counts everyone inside the area. Unique counts only people in no other area of that kind. Split shares each person equally between the areas they are in, so split figures add up to the true total.",
-        "Download a one-page brief on the Area detail page for a printable page of the figures, the band split, the critical sites in a High or Medium band, who responds and the constituencies. Open the file and print it or save it as a PDF from the browser. It is marked restricted.",
+        "Download a one-page brief on the Area detail page for a printable page of the figures, the band split, the critical sites in a High or Medium band, who responds and the constituencies. It is a PDF, ready to print or send, and is marked restricted.",
 
         "The risk score in the table is the people-weighted average of the 100 m cell scores inside the area, so an area where many people live in flooded, deprived or critical cells scores high and an area of mostly dry land scores low. The detail page also gives the highest single cell. It is blank until job 35 has been run with the grid built.",
         "Select an area for its figures, the 100 m grid inside it, its people by band, the named critical sites in a High or Medium band, and the areas that share people with it.",
