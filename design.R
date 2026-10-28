@@ -313,10 +313,12 @@ button.stat-btn .stat-hint { display: block; font-size: 16px; color: var(--gov-l
 .guide h2 { margin-top: var(--sp-7); }
 
 /* Warning icons beside the in-force counts. */
-.warn-icon { width: 44px; height: 44px; flex: 0 0 auto; }
+.warn-icon { height: 44px; width: auto; max-width: 56px; object-fit: contain; flex: 0 0 auto; }
+.warn-icon[viewBox] { width: 44px; }
 button.stat-btn .stat-top { display: flex; align-items: center; gap: var(--sp-3); }
 .ov-list-h { display: flex; align-items: center; gap: var(--sp-3); }
-.ov-list-h .warn-icon { width: 32px; height: 32px; }
+.ov-list-h .warn-icon { height: 32px; width: auto; }
+.ov-list-h .warn-icon[viewBox] { width: 32px; }
 
 .ex-section { margin-bottom: var(--sp-8); max-width: 48em; }
 .ex-section .btn { margin-top: var(--sp-2); }
