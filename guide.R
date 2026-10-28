@@ -316,6 +316,12 @@ guide_products <- function(s) {
       answers = "Where, street by street, are people, deprived communities and critical sites exposed to flooding from rivers and the sea?",
       tables = c("exposure_grid_100m"),
       steps = c(
+        "Why there is a grid. The counts for each warning area come from address points, which is the accurate route: each point is placed inside a boundary and carries its own flood band. The grid is there for what the points cannot do.",
+        "It shows where risk concentrates inside an area. A warning area is one row in a table; the grid shows which streets carry the risk, which is what someone prioritising a response needs.",
+        "It gives one score. Hazard, population, deprivation and critical sites sit in different tables. In each 100 m cell they combine into a single 0 to 100 score, so cells can be ranked and mapped without reading four tables.",
+        "It is a safer thing to show. Address-level data stays in the restricted schema. A 100 m cell is an aggregate, so the app can map it without displaying any individual address.",
+        "It is a common base for other geographies. Warning areas, constituencies and fire authorities have awkward, overlapping boundaries. A fixed fine grid is a neutral layer each can be rolled up from, so a new geography, such as local resilience forums later, is a lookup and not a rebuild.",
+        "100 m is a compromise: fine enough to see street-scale patterns, coarse enough to cover England in a table the app can query by easting and northing. Large areas are read in coarser squares (200 m to 2 km) so the page stays quick.",
         "Tick Risk grid and zoom to street level. Each 100 m cell in view is filled by its risk score, from 0 to 100.",
         "The score is the rivers and sea band of the cell (0 to 4) as a share of the top band, multiplied by a weighted mix of the cell's population rank, how deprived it is and how many critical sites it holds. No hazard, no score.",
         "Only the cells in view with a score at or above the slider are read, the highest first, up to a cap. The sidebar says when the cap is reached."
@@ -327,6 +333,7 @@ guide_products <- function(s) {
       limits = c(
         "Rivers and the sea only. Surface water is not in the score.",
         "People are the Census 2021 output area total shared among the addresses, so a single cell's count is an estimate. Read the pattern, not the digit.",
+        "Until AddressBase Premium is available the addresses come from the National Statistics UPRN Lookup, which limits how good any cell-level figure can be, whatever the grid resolution.",
         "Not tied to the forecast: the statement and day pickers do not apply. The figures are restricted."
       )
     ),
