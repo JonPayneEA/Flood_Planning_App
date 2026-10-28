@@ -1410,19 +1410,26 @@ server <- function(input, output, session) {
   # are actions or selections, not view state, are excluded.
   # ---------------------------------------------------------------------------
 
-  setBookmarkExclude(c(
+  bookmark_static <- c(
     "refresh_data", "show_health", "goto_constituency", "exp_pick", "nav_to",
     "rv_reviewed", "rv_sent", "rv_rejected", "demo_reset",
     "area_row_click", "download_ea_areas", "download_situation",
-    "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas", "download_areas", "download_const_exp", "download_exp_bands", "download_area_cells", "download_area_sites", "download_exp_responders", "area_open", "areas_open_selected", "area_pick", "areas_search",
+    "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas", "download_areas", "download_const_exp", "download_exp_bands", "download_area_cells", "download_area_sites", "download_exp_responders", "area_open", "areas_open_selected",
     "situation_table_rows_selected", "situation_table_row_last_clicked",
     "situation_table_cell_clicked", "situation_table_rows_current",
     "situation_table_rows_all", "situation_table_state", "situation_table_search",
     "live_map_bounds", "live_map_center", "live_map_zoom", "live_map_click",
     "live_map_shape_click", "live_map_shape_mouseover", "live_map_shape_mouseout",
-    "live_map_groups", "live_map_marker_click"
-  ))
-  view_state <- debounce(reactive(reactiveValuesToList(input)), 600)
+    "live_map_groups", "live_map_marker_click")
+  # Table and map mechanics are dropped whatever tab they sit on, including ones that appear later (see bookmark_noise in helpers.R).
+  observe(setBookmarkExclude(union(bookmark_static, bookmark_noise(names(input)))))
+
+  # The chosen area travels in the link as saved state, because its picker is filled after the page loads and cannot restore itself.
+  restored_area <- reactiveVal(NULL)
+  onBookmark(function(state) state$values$area_pick <- isolate(input$area_pick))
+  onRestored(function(state) restored_area(state$values$area_pick))
+
+  view_state <- debounce(reactive({ x <- reactiveValuesToList(input); x[setdiff(names(x), bookmark_noise(names(x)))] }), 600)
   observeEvent(view_state(), session$doBookmark(), ignoreInit = TRUE)
   onBookmarked(function(url) updateQueryString(url, mode = "replace"))
 
@@ -2351,7 +2358,7 @@ server <- function(input, output, session) {
     x <- as.data.table(x)
     updateSelectInput(session, "areas_county", choices = c("All" = "", sort(unique(na.omit(x$county)))), selected = isolate(input$areas_county))
     ord <- x[order(area_name)]
-    updateSelectizeInput(session, "area_pick", selected = isolate(input$area_pick),
+    updateSelectizeInput(session, "area_pick", selected = isolate(restored_area() %||% input$area_pick),
                          choices = stats::setNames(ord$area_id, sprintf("%s (%s)", ord$area_name, ifelse(ord$kind == "flood_warning", "warning", "alert"))))
   })
 
