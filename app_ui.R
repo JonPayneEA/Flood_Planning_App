@@ -1053,6 +1053,8 @@ make_areas_tab <- function() tags$div(
   tags$h1(class = "app-title", "Warning areas"),
   tags$p(class = "app-lead", "Who lives inside each flood warning area and flood alert area, and how many of them are in a High or Medium band for flooding from rivers and the sea."),
   uiOutput("areas_note"),
+  tags$h2("Who the warning areas reach"),
+  uiOutput("areas_coverage"),
   tags$div(
     class = "filter-row",
     selectInput("areas_kind", "Kind of area", choices = c("Flood warning areas" = "flood_warning", "Flood alert areas" = "flood_alert"), width = "240px"),
@@ -1069,6 +1071,27 @@ make_areas_tab <- function() tags$div(
     "People are everyone inside the area. Areas overlap, so a person can be in more than one: add the figures for one kind of area only after reading the unique and split columns, and never add warning areas to alert areas. ",
     "At risk means a High or Medium band in the rivers and sea risk map. Surface water is not counted, because the Environment Agency does not issue warnings for it. ",
     "Until AddressBase Premium is available the points come from the National Statistics UPRN Lookup, so counts are of addresses, not of buildings or businesses."))
+)
+
+
+# -----------------------------------------------------------------------------
+# Constituency exposure tab.
+#
+# Per constituency: people, people in a High or Medium rivers and sea band, and how many of those no warning area (or no alert area) covers.
+# The constituency code in the exposure table must match the app's constituency id; the note says when names could not be matched.
+# -----------------------------------------------------------------------------
+
+make_const_exposure_tab <- function() tags$div(
+  class = "areas-page",
+  tags$h1(class = "app-title", "Constituency exposure"),
+  tags$p(class = "app-lead", "People in each constituency who are in a High or Medium band for flooding from rivers and the sea, and how many of them no flood warning area or flood alert area covers."),
+  uiOutput("const_exp_note"),
+  tags$div(
+    class = "filter-row",
+    selectInput("const_exp_cover", "Gap measured against", choices = c("Flood warning areas" = "warning", "Flood alert areas" = "alert"), width = "240px"),
+    downloadButton("download_const_exp", "Export CSV", class = "btn-sm btn-outline-secondary")
+  ),
+  DT::dataTableOutput("const_exp_table")
 )
 
 
@@ -1091,6 +1114,11 @@ make_exports_tab <- function() tags$div(
     checkboxInput("exp_all_overlaps", "Include very small overlaps as well (by default only overlaps at or above the app's minimum)", FALSE),
     uiOutput("exp_links_note"),
     downloadButton("download_exp_links", "Download CSV", class = "btn-primary")),
+  tags$section(
+    class = "ex-section",
+    tags$h2("Warning area exposure"),
+    tags$p("Each flood warning area and flood alert area with the people, households and people in a High or Medium rivers and sea band inside it. Restricted: handle as the data is classified."),
+    downloadButton("download_exp_areas", "Download CSV", class = "btn-primary")),
   tags$section(
     class = "ex-section",
     tags$h2("Constituencies and MP contact details"),
@@ -1170,6 +1198,7 @@ ui <- function(request) {
 
     tabPanel("Constituency situation", make_situation_tab()),
     tabPanel("Warning areas",          make_areas_tab()),
+    tabPanel("Constituency exposure",  make_const_exposure_tab()),
     tabPanel("Exposure history",       make_exposure_tab()),
     tabPanel("Warning history",        make_warning_history_tab()),
     tabPanel("Warnings vs FGS",        make_coverage_tab()),

@@ -953,3 +953,14 @@ test_that("a threshold line is named from the label prefix and the target area, 
   old <- thr[, .(measure_uri, type, purpose, season, value, unit_name, unit_match)]   # a links table from before the prefix was carried
   expect_equal(rt_threshold_lines(old, "u2")$short, "RES FW")
 })
+
+
+test_that("the area popup line carries the people and the share at risk, and is empty without a match", {
+  ex <- data.frame(area_id = c("A", "B"), people = c(12345, 80), people_rs_high_medium = c(2000, 0), share_people_high_medium = c(0.162, 0))
+  out <- area_exposure_popup(c("B", "A", "Z"), ex)
+  expect_match(out[1L], "People inside: 80")
+  expect_match(out[2L], "12,345")
+  expect_match(out[2L], "2,000 \\(16%\\)")
+  expect_equal(out[3L], "")
+  expect_equal(area_exposure_popup(c("A", "B"), NULL), c("", ""))
+})

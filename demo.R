@@ -752,6 +752,26 @@ demo_area_exposure <- function() demo_memo("area_exposure", demo_with_seed(3517,
 
 fetch_area_exposure <- function() copy(demo_area_exposure())
 
+fetch_area_coverage <- function() {
+  d <- demo_area_exposure()
+  tot <- sum(d$people) * 3; hm <- sum(d$people_rs_high_medium) * 3
+  data.table(kind = c("all", "flood_warning", "flood_alert"),
+             addresses = round(tot / 2.4), people = tot, households = round(tot / 2.4), people_rs_high_medium = hm,
+             people_not_in_area = c(0, round(tot * .8), round(tot * .55)),
+             people_high_medium_not_in_area = c(0, round(hm * .45), round(hm * .3)))
+}
+
+fetch_constituency_exposure <- function() demo_with_seed(3519, {
+  g <- demo_geometry()$table
+  n <- nrow(g)
+  people <- round(runif(n, 60000, 110000)); hm <- round(people * rbeta(n, 1, 12))
+  w <- round(hm * runif(n, .4, .9)); a <- round(hm * runif(n, .6, 1))
+  data.table(constituency_code = g$constituency_id, constituency_name = g$constituency_name, people = people,
+             people_rs_high_medium = hm, people_fz3 = round(hm * .6),
+             people_rs_high_medium_in_warning_area = w, people_rs_high_medium_in_alert_area = a,
+             people_high_medium_not_in_warning_area = hm - w, people_high_medium_not_in_alert_area = hm - a)
+})
+
 fetch_area_overlaps <- function(area_id) {
   d <- demo_area_exposure()
   i <- match(area_id, d$area_id)

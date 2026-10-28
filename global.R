@@ -166,6 +166,8 @@ TBL_WARNING_FGS <- paste(CAT, SCH, "ea_warning_fgs_coverage", sep = ".")  # 26 (
 TBL_FW_THRESHOLDS <- paste(CAT, RESTRICTED_SCH, "ea_fw_threshold_gauge_links", sep = ".")  # 28 (restricted: Observed flood warning thresholds linked to gauge measures)
 TBL_AREA_EXPOSURE <- paste(CAT, RESTRICTED_SCH, "ea_area_exposure",         sep = ".")  # 35 (restricted: people, households and bands inside each warning or alert area)
 TBL_AREA_OVERLAPS <- paste(CAT, RESTRICTED_SCH, "ea_area_overlaps",         sep = ".")  # 35 (restricted: pairs of areas of one kind that share people)
+TBL_AREA_COVERAGE <- paste(CAT, RESTRICTED_SCH, "ea_area_coverage",         sep = ".")  # 35 (restricted: people covered by any warning area, any alert area, and in all)
+TBL_CONST_EXPOSURE <- paste(CAT, RESTRICTED_SCH, "constituency_flood_exposure", sep = ".")  # 35 (restricted: people by constituency, and how many a warning or alert area covers)
 TBL_WARNING_EPISODES <- paste(CAT, SCH, "ea_warning_episodes",      sep = ".")  # 25 (each alert or warning from issue to withdrawal)
 
 

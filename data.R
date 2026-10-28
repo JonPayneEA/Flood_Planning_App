@@ -926,6 +926,31 @@ fetch_area_overlaps <- function(area_id) {
 }
 
 
+# fetch_area_coverage(): three rows (all, flood_warning, flood_alert): distinct people covered, and the
+#   People in a High or Medium band that no area of the kind covers.
+# fetch_constituency_exposure(): per constituency, people, people at risk, and how many a warning area and
+#   an alert area cover. The code is the NSUL parliamentary constituency code; names come from the constituencies table.
+
+fetch_area_coverage <- function() {
+  db_query(sprintf("
+    SELECT kind, addresses, people, households, people_rs_high_medium,
+           people_not_in_area, people_high_medium_not_in_area
+    FROM %s
+  ", TBL_AREA_COVERAGE))
+}
+
+fetch_constituency_exposure <- function() {
+  db_query(sprintf("
+    SELECT e.constituency_code, c.name AS constituency_name,
+           e.people, e.people_rs_high_medium, e.people_fz3,
+           e.people_rs_high_medium_in_warning_area, e.people_rs_high_medium_in_alert_area,
+           e.people_high_medium_not_in_warning_area, e.people_high_medium_not_in_alert_area
+    FROM %s e
+    LEFT JOIN %s c ON c.constituency_id = e.constituency_code
+  ", TBL_CONST_EXPOSURE, TBL_CONSTITUENCIES))
+}
+
+
 # -----------------------------------------------------------------------------
 # Hydrometrics (Environment Agency real-time data)
 #
@@ -1411,6 +1436,8 @@ fetch_coverage_detail              <- with_cache(fetch_coverage_detail,         
 fetch_coverage_span                <- with_cache(fetch_coverage_span,                "cov_span", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_area_exposure                <- with_cache(fetch_area_exposure,                "area_exposure", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_area_overlaps                <- with_cache(fetch_area_overlaps,                "area_overlaps", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
+fetch_area_coverage                <- with_cache(fetch_area_coverage,                "area_coverage", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
+fetch_constituency_exposure        <- with_cache(fetch_constituency_exposure,        "const_exposure", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_rt_register                  <- with_cache(fetch_rt_register,                  "rt_register", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_rt_boundary                  <- with_cache(fetch_rt_boundary,                  "rt_boundary", ttl = min(CACHE_TTL_SECONDS, 300))
 fetch_data_signature               <- with_cache(fetch_data_signature,               "signature", ttl = 0)

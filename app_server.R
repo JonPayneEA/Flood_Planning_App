@@ -819,7 +819,8 @@ server <- function(input, output, session) {
       "<small>", shape$ea_area_type, " &middot; ", shape$source, "</small><br>",
       "Target Area ID: ", shape$ea_area_code, "<br>",
       "Risk: ", shape$risk_level, "<br>",
-      "Intersection: ", intersection_label(shape$intersection_pct)
+      "Intersection: ", intersection_label(shape$intersection_pct),
+      area_exposure_popup(shape$ea_area_code, area_exposure_for_popup())
     )
     
     leaflet::addPolygons(
@@ -897,6 +898,9 @@ server <- function(input, output, session) {
   # the layer is switched on.
   # ---------------------------------------------------------------------------
 
+  # Exposure figures for the popups. A missing or unreadable table leaves the popup as it was, with no banner.
+  area_exposure_for_popup <- function() tryCatch(fetch_area_exposure(), error = function(e) NULL)
+
   observeEvent(input$area_row_click, {
     f <- filters()
     req(f)
@@ -923,7 +927,8 @@ server <- function(input, output, session) {
       "<small>", matched$ea_area_type[1], " &middot; ", matched$source[1], "</small><br>",
       "Target Area ID: ", matched$ea_area_code[1], "<br>",
       "Risk: ", matched$risk_level[1], "<br>",
-      "Intersection: ", intersection_label(matched$intersection_pct[1])
+      "Intersection: ", intersection_label(matched$intersection_pct[1]),
+      area_exposure_popup(matched$ea_area_code[1], area_exposure_for_popup())
     )
 
     proxy <- leaflet::leafletProxy("live_map")
@@ -1408,7 +1413,7 @@ server <- function(input, output, session) {
     "refresh_data", "show_health", "goto_constituency", "exp_pick", "nav_to",
     "rv_reviewed", "rv_sent", "rv_rejected", "demo_reset",
     "area_row_click", "download_ea_areas", "download_situation",
-    "download_exp_links", "download_exp_cons", "download_exp_mail",
+    "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas", "download_areas", "download_const_exp",
     "situation_table_rows_selected", "situation_table_row_last_clicked",
     "situation_table_cell_clicked", "situation_table_rows_current",
     "situation_table_rows_all", "situation_table_state", "situation_table_search",
@@ -2364,6 +2369,75 @@ server <- function(input, output, session) {
     DT::datatable(o[, .(`Overlapping area` = Other, People = round(people), Addresses = round(addresses))], rownames = FALSE, selection = "none",
                   options = list(pageLength = 10, dom = "tip"))
   })
+
+  output$areas_coverage <- renderUI({
+    req(areas_started())
+    cv <- safe_fetch(fetch_area_coverage)
+    if (is.null(cv) || nrow(cv) == 0L) return(NULL)
+    cv <- as.data.table(cv)
+    n <- function(v) format(round(v), big.mark = ",")
+    all_ <- cv[kind == "all"]
+    line <- function(k, what) {
+      r <- cv[kind == k]
+      if (nrow(r) == 0L) return(NULL)
+      tags$li(sprintf("%s areas cover %s people (%.0f%% of England). %s people in a High or Medium band (%.0f%% of those) are in no %s area.",
+                      what, n(r$people), 100 * r$people / all_$people, n(r$people_high_medium_not_in_area),
+                      100 * r$people_high_medium_not_in_area / max(all_$people_rs_high_medium, 1), tolower(what)))
+    }
+    tags$div(
+      tags$p(sprintf("%s people in England are in a High or Medium band for rivers and the sea. Each person is counted once here, however many areas they are in.", n(all_$people_rs_high_medium))),
+      tags$ul(line("flood_warning", "Flood warning"), line("flood_alert", "Flood alert")),
+      tags$p(class = "app-caption", "A gap is not an error. Warning areas follow rivers and coasts the Environment Agency forecasts, and not every band-risk address sits on one."))
+  })
+
+  exp_areas <- reactive({
+    x <- safe_fetch(fetch_area_exposure)
+    if (is.null(x) || nrow(x) == 0L) return(data.table())
+    x <- as.data.table(x)[order(kind, -people_rs_high_medium)]
+    x[, .(Kind = kind, `Area id` = area_id, Area = area_name, Source = area_source, County = county, People = round(people),
+          Households = round(households), `People at risk (High or Medium)` = round(people_rs_high_medium),
+          `People in Flood Zone 3` = round(people_fz3), `People also in another area` = round(people_shared),
+          `Critical sites` = sites)]
+  })
+  output$download_exp_areas <- downloadHandler(
+    filename = function() sprintf("warning_area_exposure_%s.csv", format(Sys.Date(), "%Y%m%d")),
+    content  = function(file) data.table::fwrite(exp_areas(), file, bom = TRUE))
+
+  # ---- Constituency exposure ------------------------------------------------------------------------------
+  const_exp_started <- reactive(identical(input$main_tabs, "Constituency exposure"))
+  const_exp_all <- reactive({ req(const_exp_started()); safe_fetch(fetch_constituency_exposure) })
+
+  const_exp_data <- reactive({
+    x <- const_exp_all(); req(x, input$const_exp_cover)
+    x <- as.data.table(x)
+    gap <- if (input$const_exp_cover == "warning") x$people_high_medium_not_in_warning_area else x$people_high_medium_not_in_alert_area
+    x[, .(Constituency = fifelse(is.na(constituency_name), constituency_code, constituency_name), Code = constituency_code,
+          People = round(people), `At risk (High or Medium)` = round(people_rs_high_medium),
+          `Share at risk` = sprintf("%.1f%%", 100 * people_rs_high_medium / pmax(people, 1)),
+          `Not in a warning or alert area` = round(gap), `Share of at risk not covered` = sprintf("%.0f%%", 100 * gap / pmax(people_rs_high_medium, 1)))][order(-`Not in a warning or alert area`)]
+  })
+
+  output$const_exp_note <- renderUI({
+    loaded <- if (const_exp_started()) const_exp_all() else NULL
+    if ("constituency_flood_exposure" %in% names(data_gaps())) return(tags$p(class = "text-muted", gap_text("constituency_flood_exposure", "Constituency exposure")))
+    if (const_exp_started() && is.null(loaded)) return(tags$p(class = "text-muted", "Constituency exposure could not be loaded."))
+    if (!is.null(loaded) && any(is.na(loaded$constituency_name)))
+      return(tags$p(class = "text-muted", sprintf("%d constituency codes did not match the app's constituencies and are shown by code.", sum(is.na(loaded$constituency_name)))))
+    NULL
+  })
+
+  output$const_exp_table <- DT::renderDataTable({
+    x <- const_exp_data()
+    nm <- "Not in a warning or alert area"
+    setnames(x, nm, if (input$const_exp_cover == "warning") "At risk, in no warning area" else "At risk, in no alert area")
+    DT::datatable(x, rownames = FALSE, selection = "none",
+                  options = list(pageLength = 15, scrollX = TRUE, dom = "ftip", order = list(list(4L, "desc")),
+                                 language = list(info = "Showing _START_ to _END_ of _TOTAL_ constituencies"))) |>
+      DT::formatRound(c("People", "At risk (High or Medium)", names(x)[5L]), digits = 0, mark = ",")
+  })
+  output$download_const_exp <- downloadHandler(
+    filename = function() sprintf("constituency_exposure_%s.csv", format(Sys.Date(), "%Y%m%d")),
+    content  = function(file) data.table::fwrite(const_exp_data(), file, bom = TRUE))
 
   output$download_areas <- downloadHandler(
     filename = function() sprintf("warning_areas_%s_%s.csv", input$areas_kind, format(Sys.Date(), "%Y%m%d")),
