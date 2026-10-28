@@ -612,6 +612,7 @@ make_sidebar <- function() tags$div(
     tags$div(
       style = "margin-left: 16px; margin-top: -4px;",
       sliderInput("grid_min_score", "Show cells scoring at least", min = 0, max = 90, value = 10, step = 5, ticks = FALSE),
+      tags$p(class = "small", HTML(guide_link_html("risk-grid", "How the risk score is calculated"))),
       uiOutput("grid_note"))
   ),
   checkboxInput("layer_const_risk",
@@ -1104,7 +1105,8 @@ make_area_detail_tab <- function() tags$div(
     class = "area-cols",
     tags$div(
       tags$h2("Risk grid"),
-      tags$p(class = "app-caption", "Each square is 100 m. Colour is the composite risk score, with the warning area outlined."),
+      tags$p(class = "app-caption", "Each square is 100 m. Colour is the composite risk score, with the warning area outlined. ",
+             HTML(guide_link_html("risk-grid", "How the risk score is calculated"))),
       leaflet::leafletOutput("area_grid_map", height = "420px"),
       uiOutput("area_grid_note")),
     tags$div(

@@ -1467,7 +1467,8 @@ grid_popup <- function(cells) {
          "People: ", n(cells$people), "<br>",
          "Rivers and sea band (0 to 4): ", formatC(cells$haz_rs, format = "f", digits = 1), "<br>",
          "Deprivation decile: ", ifelse(is.na(cells$imd_decile) | cells$imd_decile == 0, "unknown", cells$imd_decile), " (1 is most deprived)<br>",
-         "Critical sites: ", n(cells$critical_sites))
+         "Critical sites: ", n(cells$critical_sites), "<br>",
+         guide_link_html("risk-grid", "How the risk score is calculated"))
 }
 
 
@@ -1555,3 +1556,13 @@ grid_band_colour <- function(haz) {
 # an area can touch dozens, which would swamp the page.
 RESPONDER_GEOGRAPHIES <- c(police_force_area = "Police force", local_authority_district = "District or unitary authority",
                            county_or_unitary = "County or unitary authority", constituency = "Constituency", region = "Region")
+
+
+# A link that opens the Guide and scrolls to one entry (the cards have the id guide-<id>). The Guide may still be drawing when the tab opens,
+# so the scroll retries for about two seconds. Used where a figure needs a route to how it was made.
+guide_link_html <- function(entry, label) {
+  entry <- gsub("[^A-Za-z0-9_-]", "", entry)
+  sprintf(paste0("<a href=\"#\" onclick=\"Shiny.setInputValue('nav_to','Guide',{priority:'event'});var n=0,t=setInterval(function(){",
+                 "var e=document.getElementById('guide-%s');n++;if(e){e.scrollIntoView({behavior:'smooth'});clearInterval(t);}else if(n>10){clearInterval(t);}},200);return false;\">%s</a>"),
+          entry, htmltools::htmlEscape(label))
+}

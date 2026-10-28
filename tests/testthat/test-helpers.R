@@ -1003,3 +1003,13 @@ test_that("grid cells are true squares on the British National Grid, and the ste
   expect_equal(nrow(grid_cells_sf(data.frame(easting = numeric(), northing = numeric()))), 0L)
   expect_equal(grid_step_for(1000), 100); expect_equal(grid_step_for(40000), 200); expect_equal(grid_step_for(300000), 500); expect_equal(grid_step_for(1e9), 2000)
 })
+
+test_that("the guide link opens the Guide, scrolls to the entry's card, and cannot be used to inject", {
+  l <- guide_link_html("risk-grid", "How it is calculated")
+  expect_match(l, "Shiny.setInputValue('nav_to','Guide'", fixed = TRUE)
+  expect_match(l, "getElementById('guide-risk-grid')", fixed = TRUE)
+  expect_false(grepl("<script", guide_link_html("a'\"<script>", "x<b>"), fixed = TRUE))
+  expect_match(grid_popup(data.frame(risk_score = 50, people = 10, haz_rs = 2, imd_decile = 3, critical_sites = 0)), "guide-risk-grid", fixed = TRUE)
+  expect_true(any(grepl('id = paste0("guide-", p$id)', readLines(file.path(app_root, "guide.R")), fixed = TRUE)))        # the anchor the link targets
+  expect_true(any(grepl('id = "risk-grid"', readLines(file.path(app_root, "guide.R")), fixed = TRUE)))
+})

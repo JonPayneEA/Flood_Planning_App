@@ -324,7 +324,10 @@ guide_products <- function(s) {
         "It is a common base for other geographies. Warning areas, constituencies and fire authorities have awkward, overlapping boundaries. A fixed fine grid is a neutral layer each can be rolled up from, so a new geography, such as local resilience forums later, is a lookup and not a rebuild.",
         "100 m is a compromise: fine enough to see street-scale patterns, coarse enough to cover England in a table the app can query by easting and northing. Large areas are read in coarser squares (200 m to 2 km) so the page stays quick.",
         "Tick Risk grid and zoom to street level. Each 100 m cell in view is filled by its risk score, from 0 to 100.",
-        "The score is the rivers and sea band of the cell (0 to 4) as a share of the top band, multiplied by a weighted mix of the cell's population rank, how deprived it is and how many critical sites it holds. No hazard, no score.",
+        "The score runs from 0 to 100: the cell's rivers and sea band (0 for none to 4 for High) as a share of the top band, multiplied by a weighted mix of three things. No hazard, no score.",
+        "The mix is 40% population, 30% vulnerability and 30% critical sites. Population is the cell's people as a national percentile among every cell in England, so a cell near 1 is among the most populous. Vulnerability turns the deprivation decile round: decile 1, the most deprived tenth, scores 1 and decile 10 scores 0.1. Critical sites are the sites in the cell, capped at 3, as a share of 3.",
+        "In short: score = 100 x (band / 4) x (0.4 x population percentile + 0.3 x vulnerability + 0.3 x critical sites share). The weights are set in the pipeline's configuration (notebook 34) and can be changed there; the score is never the only output, because the layers behind it are stored too.",
+        "The cell's band is an area-weighted average: each NaFRA2 band's rank (Very Low 1 to High 4) times the share of the cell in it, added up, so a cell half High and half no band scores 2. Where bands overlap at a point on the 10 m map the worst band wins. Rivers and the sea only.",
         "Only the cells in view with a score at or above the slider are read, the highest first, up to a cap. The sidebar says when the cap is reached."
       ),
       read = c(
