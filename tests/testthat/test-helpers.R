@@ -1224,6 +1224,24 @@ test_that("plot styling puts height on the widget and does not use the deprecate
   expect_equal(styled$height, 240)
 })
 
+
+test_that("an area's gauge rows keep every threshold, give headroom and status, and mark stale readings; gauge links are safe", {
+  now <- as.POSIXct("2026-10-28 12:00", tz = "UTC")
+  raw <- data.frame(measure_uri = c("m1", "m1", "m2", "m3"), target_area = "A1", type = c("ACTCON", "RES", "RES", "RES"), label_prefix = c("ACT", "RES FW", "RES FW", "RES FW"),
+                    value_in_measure_unit = c(2.0, 3.0, 5.0, 1.0), last_value = c(2.6, 2.6, 3.0, 0.5),
+                    last_time = as.POSIXct(c("2026-10-28 11:50", "2026-10-28 11:50", "2026-10-28 11:40", "2026-10-28 06:00"), tz = "UTC"),
+                    value_3h_ago = c(2.3, 2.3, 3.0, 0.5), gauge_station = c("Alpha", "Alpha", "Beta", "Gamma"), gauge_river = "R", stringsAsFactors = FALSE)
+  r <- area_gauge_rows(raw, now)
+  expect_equal(nrow(r), 4L); expect_equal(r$gauge, c("Alpha", "Alpha", "Beta", "Gamma"))
+  expect_equal(r$threshold[r$gauge == "Alpha"], c(2.0, 3.0))                       # the whole ladder, lowest first
+  expect_equal(r$status[r$gauge == "Alpha"], c("At or above", "Close and rising"))
+  expect_equal(r$headroom[r$gauge == "Alpha"], c(-0.6, 0.4), tolerance = 1e-9)
+  expect_equal(r$status[r$gauge == "Beta"], "Further"); expect_equal(r$status[r$gauge == "Gamma"], "No recent reading"); expect_true(r$stale[r$gauge == "Gamma"])
+  expect_equal(nrow(area_gauge_rows(NULL, now)), 0L); expect_equal(nrow(area_gauge_rows(raw[0, ], now)), 0L)
+  l <- gauge_open_link("http://x/measures/abc-1'\"<script>", "A<b>")
+  expect_match(l, "Shiny.setInputValue('goto_gauge'", fixed = TRUE); expect_false(grepl("<script", l, fixed = TRUE)); expect_false(grepl("A<b>", l, fixed = TRUE))
+})
+
 test_that("every fetch_ function the app calls is defined in data.R, so a merge cannot silently drop one and leave only the demo working", {
   code <- function(f) { l <- readLines(file.path(app_root, f), warn = FALSE); l <- sub("#.*$", "", l); paste(l, collapse = "\n") }
   used <- unique(unlist(regmatches(code("app_server.R"), gregexpr("\\bfetch_[a-z_0-9]+\\b", code("app_server.R")))))

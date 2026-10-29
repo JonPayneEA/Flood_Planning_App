@@ -1121,6 +1121,11 @@ fetch_threshold_board <- function() {
              gauge_station = sprintf("%s gauge", sub(" at .*", "", d$area_name[k])), gauge_river = sub(" at .*", "", d$area_name[k]))
 }
 
+fetch_area_gauges <- function(area_id) {
+  b <- fetch_threshold_board()
+  b[target_area == area_id]
+}
+
 fetch_warning_history <- function() demo_memo("warning_history", demo_with_seed(515, {
   lk <- fetch_ea_constituency_mp()[constituency_overlap_pct >= TARGET_AREA_MIN_PCT]
   ea <- demo_ea_areas()$table

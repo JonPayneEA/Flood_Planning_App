@@ -636,6 +636,25 @@ fetch_threshold_board <- function() {
   ", TBL_FW_THRESHOLDS, TBL_RT_LATEST, TBL_RT_ALL, TBL_RT_REGISTER))
 }
 
+# fetch_area_gauges(): every Observed flood warning threshold linked to a gauge for ONE warning area (job 28's target_area), with each gauge's newest level
+#   and its level two to four hours ago, as fetch_threshold_board() but for the area detail page. All of the area's thresholds come back, not only the lowest.
+fetch_area_gauges <- function(area_id) {
+  id <- gsub("[^A-Za-z0-9_.-]", "", as.character(area_id))
+  db_query(sprintf("
+    SELECT t.*, l.value AS last_value, l.date_time AS last_time, p.value_3h_ago, r.station_label AS gauge_station, r.river_name AS gauge_river
+    FROM (SELECT * FROM %s WHERE link_status IN ('linked', 'linked_chosen') AND value_in_measure_unit IS NOT NULL AND target_area = '%s') t
+    LEFT JOIN %s l ON l.measure_uri = t.measure_uri
+    LEFT JOIN (
+      SELECT measure_uri, AVG(value) AS value_3h_ago
+      FROM %s
+      WHERE reading_date >= date_sub(current_date(), 1)
+        AND date_time BETWEEN current_timestamp() - INTERVAL 4 HOURS AND current_timestamp() - INTERVAL 2 HOURS
+      GROUP BY measure_uri
+    ) p ON p.measure_uri = t.measure_uri
+    LEFT JOIN %s r ON r.measure_uri = t.measure_uri
+  ", TBL_FW_THRESHOLDS, id, TBL_RT_LATEST, TBL_RT_ALL, TBL_RT_REGISTER))
+}
+
 fetch_pipeline_health <- function() {
   db_query(sprintf("
     SELECT check_name, status, value, detail, checked_at
@@ -1574,6 +1593,7 @@ fetch_area_sites                   <- with_cache(fetch_area_sites,              
 fetch_area_geographies              <- with_cache(fetch_area_geographies,              "area_geographies", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_area_overlap_pairs            <- with_cache(fetch_area_overlap_pairs,            "area_pairs", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_area_episodes                <- with_cache(fetch_area_episodes,                "area_episodes", ttl = min(CACHE_TTL_SECONDS, 300))
+fetch_area_gauges                  <- with_cache(fetch_area_gauges,                  "area_gauges", ttl = min(CACHE_TTL_SECONDS, 60))
 fetch_threshold_board              <- with_cache(fetch_threshold_board,              "threshold_board", ttl = min(CACHE_TTL_SECONDS, 60))
 fetch_area_overlaps                <- with_cache(fetch_area_overlaps,                "area_overlaps", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_area_coverage                <- with_cache(fetch_area_coverage,                "area_coverage", ttl = max(CACHE_TTL_SECONDS, 0) * 6)

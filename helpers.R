@@ -1863,7 +1863,7 @@ issue_counts_by_month <- function(ep, now = Sys.time(), months = 36L) {
 # datum. A rate of rise comes from the two readings, in metres an hour, and an estimated time to the threshold only when the level is rising.
 # `ex` is the exposure table (area_id, area_name, people, people_rs_high_medium) so rows can be ranked by who is below them.
 threshold_board_rows <- function(raw, ex = NULL, now = Sys.time(), within_m = 1, rising_only = FALSE, stale_hours = 3, inforce = NULL, potential = NULL) {
-  empty <- data.frame(area_id = character(), area_name = character(), gauge = character(), river = character(), last_value = numeric(), last_time = as.POSIXct(character(), tz = "UTC"),
+  empty <- data.frame(area_id = character(), area_name = character(), measure_uri = character(), gauge = character(), river = character(), last_value = numeric(), last_time = as.POSIXct(character(), tz = "UTC"),
                       threshold = numeric(), label = character(), headroom = numeric(), rate = numeric(), eta_hours = numeric(), status = character(),
                       people_at_risk = numeric(), people = numeric(), in_force = character(), potential = character(), stringsAsFactors = FALSE)
   if (is.null(raw) || nrow(raw) == 0L) return(empty)
@@ -1893,7 +1893,7 @@ threshold_board_rows <- function(raw, ex = NULL, now = Sys.time(), within_m = 1,
   if (nrow(y) == 0L) return(empty)
   e <- if (is.null(ex)) NULL else as.data.frame(ex)
   m <- if (is.null(e)) rep(NA_integer_, nrow(y)) else match(y$target_area, e$area_id)
-  out <- data.frame(area_id = y$target_area, area_name = ifelse(is.na(m), y$target_area, e$area_name[m]),
+  out <- data.frame(area_id = y$target_area, area_name = ifelse(is.na(m), y$target_area, e$area_name[m]), measure_uri = y$measure_uri,
                     gauge = y$gauge_station, river = y$gauge_river, last_value = y$last_value, last_time = y$last_time, threshold = y$threshold,
                     label = ifelse(is.na(y$label_prefix), ifelse(is.na(y$type), "", y$type), y$label_prefix), headroom = y$headroom, rate = y$rate, eta_hours = y$eta_hours,
                     status = y$status, people_at_risk = if (is.null(e)) NA_real_ else e$people_rs_high_medium[m], people = if (is.null(e)) NA_real_ else e$people[m],
@@ -2026,4 +2026,33 @@ constituency_brief_pdf <- function(file, content) {
     if (!is.null(content$sites_note)) list(type = "note", text = content$sites_note),
     list(type = "heading", text = "Warning history"),
     list(type = "para", text = content$history, size = 9)))
+}
+
+
+# ---- The gauges linked to one warning area -----------------------------------------------------------------------------------
+# A link that sends the app to River levels and flows with that gauge's station chosen (the server handles input$goto_gauge).
+gauge_open_link <- function(measure_uri, label) {
+  sprintf("<a href=\"#\" onclick=\"Shiny.setInputValue('goto_gauge','%s',{priority:'event'});return false;\">%s</a>",
+          gsub("[^A-Za-z0-9:/._#-]", "", as.character(measure_uri)), htmltools::htmlEscape(label))
+}
+
+# `raw` is fetch_area_gauges(): one row per threshold linked to a gauge for the area. Every threshold is kept (the board keeps only the lowest Response
+# one), so the page can show the whole ladder: where the level is now against each. Status: at or above, close and rising, close (within 1 m), or further.
+area_gauge_rows <- function(raw, now = Sys.time(), stale_hours = 3, within_m = 1) {
+  empty <- data.frame(measure_uri = character(), gauge = character(), river = character(), label = character(), threshold = numeric(), last_value = numeric(),
+                      last_time = as.POSIXct(character(), tz = "UTC"), headroom = numeric(), rate = numeric(), status = character(), stale = logical(), stringsAsFactors = FALSE)
+  if (is.null(raw) || nrow(raw) == 0L) return(empty)
+  x <- as.data.frame(raw, stringsAsFactors = FALSE)
+  for (cn in c("type", "label_prefix", "gauge_station", "gauge_river", "last_value", "last_time", "value_3h_ago")) if (!(cn %in% names(x))) x[[cn]] <- NA
+  now <- as.POSIXct(now, tz = "UTC")
+  thr <- as.numeric(x$value_in_measure_unit); lv <- as.numeric(x$last_value); lt <- as.POSIXct(x$last_time, tz = "UTC")
+  head <- thr - lv
+  rate <- ifelse(is.na(x$value_3h_ago), NA_real_, (lv - as.numeric(x$value_3h_ago)) / 3)
+  stale <- is.na(lt) | as.numeric(difftime(now, lt, units = "hours")) > stale_hours
+  status <- ifelse(stale | is.na(lv), "No recent reading", ifelse(head <= 0, "At or above",
+              ifelse(head <= within_m & !is.na(rate) & rate > 0.01, "Close and rising", ifelse(head <= within_m, "Close", "Further"))))
+  out <- data.frame(measure_uri = x$measure_uri, gauge = ifelse(is.na(x$gauge_station), "", x$gauge_station), river = ifelse(is.na(x$gauge_river), "", x$gauge_river),
+                    label = ifelse(is.na(x$label_prefix) | !nzchar(x$label_prefix), ifelse(is.na(x$type), "", x$type), x$label_prefix), threshold = thr, last_value = lv, last_time = lt,
+                    headroom = head, rate = rate, status = status, stale = stale, stringsAsFactors = FALSE)
+  out[order(out$gauge, out$measure_uri, out$threshold), , drop = FALSE]
 }
