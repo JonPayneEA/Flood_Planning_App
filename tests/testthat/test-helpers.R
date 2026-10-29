@@ -1404,3 +1404,18 @@ test_that("provisional damage figures fill in only when none are set, and say so
   expect_false(isTRUE(o$provisional)); expect_match(econ_basis_text(o), "^YOUR OWN")
   expect_true(all(ECON_PROVISIONAL_DAMAGE == sort(ECON_PROVISIONAL_DAMAGE)))
 })
+
+test_that("rapid flood guidance whose polygons have all expired is not in force, and only valid polygons raise a flag", {
+  u <- data.table(update_key = c("9", "7"), is_present = c(TRUE, TRUE), n_valid = c(0L, 2L), n_polygons = c(2L, 2L))
+  expect_null(rfg_current(u))                                                       # the newest update gave guidance, but nothing in it is still valid
+  expect_equal(rfg_default_key(u), "9")                                             # the view still opens on it, for the record
+  expect_equal(as.character(rfg_current(data.table(update_key = "9", is_present = TRUE, n_valid = 1L))$update_key), "9")
+  areas <- data.table(area_id = c("A", "A"), people = c(300, 500), polygon_key = c("9|1", "9|2"), is_valid = c(TRUE, FALSE))
+  expect_equal(rfg_area_flag(areas, "A", 1000)$people, 300)                         # the expired polygon does not count
+  expect_null(rfg_area_flag(areas[is_valid == FALSE], "A", 1000))
+  expect_equal(rfg_area_flag(areas[, !"is_valid"], "A", 1000)$people, 800)          # an older table with no flag counts every row
+  ex <- data.table(update_key = c("9", "9", "7"), addresses = c(10, 20, 5), people = c(100, 300, 50), households = c(40, 120, 20), people_rs_high_medium = c(5, 15, 0), is_valid = c(TRUE, FALSE, FALSE))
+  tt <- rfg_totals(ex)
+  expect_equal(tt[update_key == "9"]$people, 400); expect_equal(tt[update_key == "9"]$people_valid, 100); expect_equal(tt[update_key == "7"]$people_valid, 0)
+  expect_true(is.na(rfg_totals(ex[, !"is_valid"])$people_valid[1])); expect_equal(nrow(rfg_totals(NULL)), 0L)
+})

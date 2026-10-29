@@ -2539,9 +2539,10 @@ server <- function(input, output, session) {
                tags$p(class = "app-lead", sprintf("Issued %s. Last updated %s.", fmt_statement_time(v$issued_at, "%d %b %Y %H:%M"), fmt_statement_time(v$last_updated, "%d %b %Y %H:%M"))),
                if (!is.na(v$national_summary) && nzchar(v$national_summary)) tags$p(v$national_summary),
                if (!is.na(v$pdf_url) && nzchar(v$pdf_url)) tags$p(tags$a(href = v$pdf_url, target = "_blank", rel = "noopener", "Open the PDF")),
+               if (!isTRUE(v$n_valid > 0)) tags$p(class = "app-caption", "None of this update's polygons is still valid: they have expired or been withdrawn. They are shown for the record."),
                tags$div(class = "kpi-row",
-                        tile(n(v$n_valid), "valid polygons"),
-                        tile(if (is.null(t) || nrow(t) == 0L) "n/a" else n(t$people), "people under them"),
+                        tile(sprintf("%s of %s", n(v$n_valid), n(v$n_polygons)), "polygons still valid"),
+                        tile(if (is.null(t) || nrow(t) == 0L) "n/a" else n(t$people), "people under its polygons"),
                         tile(if (is.null(t) || nrow(t) == 0L) "n/a" else n(t$households), "households"),
                         tile(if (is.null(t) || nrow(t) == 0L) "n/a" else n(t$people_rs_high_medium), "of them in a High or Medium rivers and sea band"))),
              if (!is.null(shown)) tags$p(class = "app-caption", shown))
@@ -2551,10 +2552,11 @@ server <- function(input, output, session) {
     m <- leaflet::addProviderTiles(leaflet::leaflet(), leaflet::providers$Esri.WorldGrayCanvas)
     p <- rfg_polys()
     if (is.null(p) || nrow(p) == 0L) return(leaflet::setView(m, lng = -2.0, lat = 53.2, zoom = 6))
-    m <- leaflet::addPolygons(m, data = p, color = "#B35900", weight = 2, fillColor = "#F0A64A", fillOpacity = 0.45,
-                              label = sprintf("Polygon %d", p$polygon_number),
-                              popup = sprintf("<b>Polygon %d</b><br>%s<br><i>%s</i>", p$polygon_number, htmltools::htmlEscape(ifelse(is.na(p$latest_update), "", p$latest_update)),
-                                              htmltools::htmlEscape(ifelse(is.na(p$counties), "", p$counties))))
+    ok <- p$is_valid %in% TRUE
+    m <- leaflet::addPolygons(m, data = p, color = ifelse(ok, "#B35900", "#6C757D"), weight = 2, dashArray = ifelse(ok, NA, "6 4"), fillColor = ifelse(ok, "#F0A64A", "#ADB5BD"), fillOpacity = 0.45,
+                              label = sprintf("Polygon %d%s", p$polygon_number, ifelse(ok, "", " (no longer valid)")),
+                              popup = sprintf("<b>Polygon %d</b>%s<br>%s<br><i>%s</i>", p$polygon_number, ifelse(ok, "", " (no longer valid)"),
+                                              htmltools::htmlEscape(ifelse(is.na(p$latest_update), "", p$latest_update)), htmltools::htmlEscape(ifelse(is.na(p$counties), "", p$counties))))
     bb <- sf::st_bbox(p)
     leaflet::fitBounds(m, bb[["xmin"]], bb[["ymin"]], bb[["xmax"]], bb[["ymax"]])
   })
@@ -2562,11 +2564,11 @@ server <- function(input, output, session) {
   output$rfg_polygon_table <- DT::renderDataTable({
     e <- rfg_expo(); p <- rfg_polys()
     if (is.null(p) || nrow(p) == 0L) return(DT::datatable(data.frame(Note = "No valid polygons."), rownames = FALSE, selection = "none", options = list(dom = "t")))
-    d <- data.table(Polygon = p$polygon_number, Counties = p$counties, `Latest update` = p$latest_update)
+    d <- data.table(Polygon = p$polygon_number, Status = ifelse(p$is_valid %in% TRUE, "Valid", "No longer valid"), Counties = p$counties, `Latest update` = p$latest_update)
     if (!is.null(e) && nrow(e) > 0L) {
       m <- match(p$polygon_number, e$polygon_number)
       d[, `:=`(People = round(e$people[m]), Households = round(e$households[m]), `High or Medium band` = round(e$people_rs_high_medium[m]))]
-      setcolorder(d, c("Polygon", "Counties", "People", "Households", "High or Medium band", "Latest update"))
+      setcolorder(d, c("Polygon", "Status", "Counties", "People", "Households", "High or Medium band", "Latest update"))
     }
     DT::datatable(d, rownames = FALSE, selection = "none", options = list(pageLength = 10, dom = "tip", order = list(), scrollX = TRUE))
   })
@@ -2606,7 +2608,7 @@ server <- function(input, output, session) {
     tot <- rfg_totals_d()
     ppl <- if (is.null(tot)) rep(NA_real_, nrow(u)) else tot$people[match(u$update_key, tot$update_key)]
     DT::datatable(data.table(`Last updated` = fmt_statement_time(u$last_updated, "%d %b %Y %H:%M"), Status = u$status, Update = ifelse(is.na(u$rfg_id), "", as.character(u$rfg_id)),
-                             `Valid polygons` = ifelse(u$is_present, u$n_valid, NA_integer_), `People under them` = round(ppl)),
+                             Polygons = ifelse(u$is_present, u$n_polygons, NA_integer_), `Still valid` = ifelse(u$is_present, u$n_valid, NA_integer_), `People under them` = round(ppl)),
                   rownames = FALSE, selection = list(mode = "single", selected = match(rfg_default_key(u), u$update_key), target = "row"),
                   options = list(pageLength = 10, dom = "tip", order = list(), scrollX = TRUE)) |>
       DT::formatRound("People under them", digits = 0, mark = ",")
@@ -2617,9 +2619,10 @@ server <- function(input, output, session) {
     cur <- rfg_current(rfg_updates_all()); req(!is.null(cur))
     tot <- rfg_totals_d(); t <- if (is.null(tot)) NULL else tot[update_key == cur$update_key]
     n <- function(x) formatC(round(as.numeric(x)), format = "d", big.mark = ",")
+    ppl <- if (is.null(t) || nrow(t) == 0L) NA_real_ else if (!is.na(t$people_valid)) t$people_valid else t$people
     tags$div(class = "alert alert-warning ov-rfg", tags$strong("Rapid flood guidance is in force. "),
              sprintf("%s valid polygon%s%s. ", n(cur$n_valid), if (cur$n_valid == 1L) "" else "s",
-                     if (is.null(t) || nrow(t) == 0L) "" else sprintf(", with about %s people under them", n(t$people))),
+                     if (is.na(ppl)) "" else sprintf(", with about %s people under them", n(ppl))),
              nav_link("Open rapid flood guidance", "Rapid Flood Guidance"))
   })
 
@@ -2630,6 +2633,7 @@ server <- function(input, output, session) {
     cur <- rfg_current(rfg_updates_all())
     if (is.null(cur)) { showNotification("No rapid flood guidance is in force.", type = "message", id = "rfg_none"); return() }
     p <- tryCatch(fetch_rfg_polygons(cur$update_key), error = function(e) NULL)
+    if (!is.null(p) && "is_valid" %in% names(p)) p <- p[p$is_valid %in% TRUE, ]            # only what is in force now goes on the forecast map
     if (is.null(p) || nrow(p) == 0L) return()
     leaflet::addPolygons(proxy, data = p, group = "rfg", color = "#B35900", weight = 2, dashArray = "6 4", fillColor = "#F0A64A", fillOpacity = 0.35,
                          label = sprintf("Rapid flood guidance, polygon %d", p$polygon_number),

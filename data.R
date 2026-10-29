@@ -927,22 +927,18 @@ fetch_rfg_updates <- function(limit = 50L) {
   ", TBL_RFG_UPDATES, as.integer(limit)))
 }
 
-# fetch_rfg_totals(): per update, what job 37 counted under its valid polygons (restricted). The sum of the polygons, which seldom overlap.
+# fetch_rfg_totals(): per update, what job 37 counted under its polygons (restricted): the sum of the polygons, which seldom overlap, and the same for the
+#   polygons still in force. SELECT * so a table built before the is_valid flag was added still reads.
 fetch_rfg_totals <- function() {
-  db_query(sprintf("
-    SELECT update_key, COUNT(*) AS polygons_counted, SUM(addresses) AS addresses, SUM(people) AS people, SUM(households) AS households,
-           SUM(people_rs_high_medium) AS people_rs_high_medium
-    FROM %s
-    GROUP BY update_key
-  ", TBL_RFG_EXPOSURE))
+  rfg_totals(db_query(sprintf("SELECT * FROM %s", TBL_RFG_EXPOSURE)))
 }
 
-# fetch_rfg_polygons(): the valid polygons of one update as sf (longitude and latitude), with their text and counties. NULL when none.
+# fetch_rfg_polygons(): the polygons of one update as sf (longitude and latitude), with their text, counties and whether each is still valid. NULL when none.
 fetch_rfg_polygons <- function(update_key) {
   dt <- db_query(sprintf("
-    SELECT update_key, polygon_number, geometry, updated_at, latest_update, counties
+    SELECT update_key, polygon_number, geometry, updated_at, latest_update, counties, is_valid
     FROM %s
-    WHERE update_key = '%s' AND is_valid AND geometry IS NOT NULL
+    WHERE update_key = '%s' AND geometry IS NOT NULL
     ORDER BY polygon_number
   ", TBL_RFG_POLYGONS, rfg_key_safe(update_key)))
   if (nrow(dt) == 0L) return(NULL)

@@ -1661,7 +1661,30 @@ econ_gauge_value <- function(links, ea, ex) {
 rfg_current <- function(upd) {
   if (is.null(upd) || nrow(upd) == 0L) return(NULL)
   u <- as.data.frame(upd)[1L, , drop = FALSE]
-  if (isTRUE(as.logical(u$is_present))) u else NULL
+  still <- !("n_valid" %in% names(u)) || isTRUE(as.numeric(u$n_valid) > 0)       # guidance whose polygons have all expired is not in force
+  if (isTRUE(as.logical(u$is_present)) && still) u else NULL
+}
+
+# rfg_totals(): what job 37 counted, added up per update. `x` is the exposure table (one row per polygon: update_key, addresses, people, households,
+#   people_rs_high_medium, and is_valid when the table has it). people_valid and the other *_valid figures count only the polygons still in force; NA when
+#   the table predates the flag.
+rfg_totals <- function(x) {
+  empty <- data.table::data.table(update_key = character(), polygons_counted = integer(), addresses = numeric(), people = numeric(), households = numeric(),
+                                  people_rs_high_medium = numeric(), people_valid = numeric(), households_valid = numeric())
+  if (is.null(x) || nrow(x) == 0L) return(empty)
+  d <- data.table::as.data.table(x)
+  d[, .valid := if ("is_valid" %in% names(d)) as.logical(is_valid) else NA]
+  out <- d[, list(polygons_counted = .N, addresses = sum(addresses, na.rm = TRUE), people = sum(people, na.rm = TRUE), households = sum(households, na.rm = TRUE),
+                  people_rs_high_medium = sum(people_rs_high_medium, na.rm = TRUE),
+                  people_valid = if (all(is.na(.valid))) NA_real_ else sum(people[.valid %in% TRUE], na.rm = TRUE),
+                  households_valid = if (all(is.na(.valid))) NA_real_ else sum(households[.valid %in% TRUE], na.rm = TRUE)), by = update_key]
+  out[]
+}
+
+# only_valid_rfg(): the rows of a per-polygon table that belong to polygons still in force; all rows when the table has no is_valid column yet.
+only_valid_rfg <- function(x) {
+  if (is.null(x) || nrow(x) == 0L || !("is_valid" %in% names(x))) return(x)
+  x <- as.data.frame(x); x[x$is_valid %in% TRUE, , drop = FALSE]
 }
 
 # rfg_default_key(): the update the Rapid Flood Guidance view opens on: the one in force, else the newest that ever had guidance, else NA.
@@ -1677,6 +1700,7 @@ rfg_default_key <- function(upd) {
 # rfg_area_flag(): how many of an area's people lie under the polygons of an update. `areas` is fetch_rfg_areas() (area_id, people, polygon_key). One polygon
 #   can overlap another, so the sum is capped at the area's own people. NULL when no polygon reaches it.
 rfg_area_flag <- function(areas, area_id, area_people = NA_real_) {
+  areas <- only_valid_rfg(areas)
   if (is.null(areas) || nrow(areas) == 0L) return(NULL)
   x <- as.data.frame(areas); x <- x[x$area_id == area_id & x$people > 0, , drop = FALSE]
   if (nrow(x) == 0L) return(NULL)
@@ -1686,6 +1710,7 @@ rfg_area_flag <- function(areas, area_id, area_people = NA_real_) {
 
 # rfg_constituency_flag(): the same for a constituency. `cons` is fetch_rfg_constituencies() (pcon, people, polygon_key).
 rfg_constituency_flag <- function(cons, code, people_in_constituency = NA_real_) {
+  cons <- only_valid_rfg(cons)
   if (is.null(cons) || nrow(cons) == 0L) return(NULL)
   x <- as.data.frame(cons); x <- x[x$pcon == code & x$people > 0, , drop = FALSE]
   if (nrow(x) == 0L) return(NULL)
