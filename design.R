@@ -66,7 +66,7 @@ APP_SECTIONS <- list(
   list(id = "areas", label = "Warning areas",
        intro = "Who lives inside each flood warning and flood alert area, and how much of that is at risk from rivers and the sea.",
        views = list(list(value = "Warning areas", label = "Warning areas"),
-                    list(value = "Area detail", label = "Area detail"),
+                    list(value = "Target Area", label = "Target Area"),
                     list(value = "Constituency exposure", label = "Constituency exposure"))),
   list(id = "constituencies", label = "Constituencies and briefings",
        intro = "Each constituency's forecast, its warnings and its MP briefing.",

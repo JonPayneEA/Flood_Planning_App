@@ -1106,14 +1106,14 @@ make_areas_tab <- function() tags$div(
   uiOutput("areas_coverage"),
   tags$details(class = "app-details", tags$summary("How the figures are made"), tags$p(
     "Each address point is placed in the areas whose boundary contains it, and its people are the Census 2021 output area total shared equally among the points in that output area. ",
-    "Areas overlap, so a person can be in more than one: read the unique and split figures in the area detail before adding areas together, and never add warning areas to alert areas. ",
+    "Areas overlap, so a person can be in more than one: read the unique and split figures in the Target Area page before adding areas together, and never add warning areas to alert areas. ",
     "At risk means a High or Medium band in the rivers and sea risk map. Surface water is not counted, because the Environment Agency does not warn for it. ",
     "Until AddressBase Premium is available the points come from the National Statistics UPRN Lookup, so counts are of addresses, not of buildings or businesses."))
 )
 
 
 # -----------------------------------------------------------------------------
-# Area detail tab: one warning or alert area. The figures, the 100 m risk grid inside its boundary, the same area by flood band,
+# Target Area tab: one warning or alert area. The figures, the 100 m risk grid inside its boundary, the same area by flood band,
 # the people by band, what it overlaps, and the constituencies it lies in.
 # -----------------------------------------------------------------------------
 
@@ -1297,7 +1297,7 @@ ui <- function(request) {
 
     tabPanel("Constituency situation", make_situation_tab()),
     tabPanel("Warning areas",          make_areas_tab()),
-    tabPanel("Area detail",            make_area_detail_tab()),
+    tabPanel("Target Area",            make_area_detail_tab()),
     tabPanel("Constituency exposure",  make_const_exposure_tab()),
     tabPanel("Exposure history",       make_exposure_tab()),
     tabPanel("Warning history",        make_warning_history_tab()),
