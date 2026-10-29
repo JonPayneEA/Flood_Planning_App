@@ -1130,3 +1130,96 @@ test_that("area issue summary and monthly counts: totals, severe, in force now, 
   expect_equal(sum(m$n), 3L)                                                                   # the January 2025 episode is outside the 12 months
   expect_equal(sum(issue_counts_by_month(NULL, now, 12L)$n), 0L)
 })
+
+
+test_that("the threshold board picks the lowest Response threshold, ranks at or above then close and rising, and drops stale readings", {
+  now <- as.POSIXct("2026-10-28 12:00", tz = "UTC")
+  raw <- data.frame(
+    measure_uri = c("m1", "m1", "m2", "m3", "m4", "m5", "m6"), target_area = c("A1", "A1", "A2", "A3", "A4", "A5", "A6"),
+    type = c("RES", "ACTCON", "RES", "RES", "ACTCON", "RES", "RES"), label_prefix = "RES FW",
+    value_in_measure_unit = c(3.0, 2.0, 2.5, 5.0, 4.0, 2.0, 2.0),
+    last_value = c(3.1, 3.1, 2.3, 4.9, 3.7, 0.9, 2.1), last_time = as.POSIXct(c("2026-10-28 11:50", "2026-10-28 11:50", "2026-10-28 11:40", "2026-10-28 11:45", "2026-10-28 11:30", "2026-10-28 11:30", "2026-10-28 06:00"), tz = "UTC"),
+    value_3h_ago = c(3.0, 3.0, 2.0, 4.6, 3.7, 0.9, 2.0), gauge_station = "g", gauge_river = "r", stringsAsFactors = FALSE)
+  ex <- data.frame(area_id = c("A1", "A2", "A3", "A4", "A5"), area_name = c("One", "Two", "Three", "Four", "Five"), people = 100, people_rs_high_medium = c(10, 50, 5, 30, 1))
+  r <- threshold_board_rows(raw, ex, now, within_m = 1)
+  expect_equal(r$area_id, c("A1", "A3", "A2", "A4"))                               # A5 is 1.1 m below: further; A6's reading is stale
+  expect_equal(r$status, c("At or above", "Close and rising", "Close and rising", "Close"))
+  expect_equal(r$threshold[r$area_id == "A1"], 3.0)                                  # RES (3.0) is used, not the lower ACTCON (2.0)
+  expect_equal(r$threshold[r$area_id == "A4"], 4.0)                                  # no RES threshold: the lowest of any type
+  a2 <- r[r$area_id == "A2", ]; expect_equal(a2$headroom, 0.2, tolerance = 1e-9); expect_equal(a2$rate, 0.1, tolerance = 1e-9); expect_equal(a2$eta_hours, 2, tolerance = 1e-9)
+  expect_equal(r$area_name[1L], "One"); expect_equal(r$people_at_risk[2L], 5)
+  expect_true(r$eta_hours[2L] < r$eta_hours[3L])                                      # sooner first among close and rising
+  expect_equal(threshold_board_rows(raw, ex, now, within_m = 1, rising_only = TRUE)$area_id, c("A1", "A3", "A2"))
+  expect_equal(nrow(threshold_board_rows(raw[0, ], ex, now)), 0L); expect_equal(nrow(threshold_board_rows(NULL, ex, now)), 0L)
+  expect_equal(trend_label(c(0.12, -0.2, 0.001, NA)), c("\u2191 +0.12 m/h", "\u2193 -0.20 m/h", "steady", "-"))
+})
+
+test_that("constituency flags: areas in force and potential ones are those linked by the overlap rule, severest first, and a potential area already in force is not listed twice", {
+  links <- data.frame(ea_area_code = c("W1", "W2", "A1", "A2", "W3", "A9"), constituency_id = c("C1", "C1", "C1", "C1", "C1", "C2"),
+                      share_of_area_in_constituency = c(0.5, 0.4, 0.3, 0.0001, 0.2, 1), stringsAsFactors = FALSE)
+  f <- data.frame(flood_area_id = c("W1", "A1", "A9"), severity_level = c(2L, 3L, 3L), description = c("River One", "Alert One", "Elsewhere"),
+                  time_raised = as.POSIXct(c("2026-10-28 09:00", "2026-10-28 08:00", "2026-10-28 07:00"), tz = "UTC"), stringsAsFactors = FALSE)
+  pot <- data.frame(ea_area_code = c("W1", "W2", "W3", "A2", "A9"), ea_area_name = c("River One", "River Two", "River Three", "Alert Two", "Elsewhere"),
+                    ea_area_type = c("flood_warning", "flood_warning", "flood_warning", "flood_alert", "flood_alert"), worst_rank = c(3L, 2L, 4L, 3L, 4L), first_day = c(1L, 3L, 2L, 1L, 1L), stringsAsFactors = FALSE)
+  fl <- constituency_flags(f, pot, links, "C1", min_pct = 0.01)
+  expect_equal(fl$in_force$area, c("River One", "Alert One")); expect_equal(fl$in_force$level, c("Flood warning", "Flood alert"))
+  expect_equal(fl$potential$area, c("River Three", "River Two"))           # W1 is in force so not potential; A2 overlaps less than 1 per cent; highest risk first
+  expect_equal(fl$potential$risk, c("High", "Low")); expect_equal(fl$potential$first_day, c(2L, 3L))
+  none <- constituency_flags(NULL, NULL, links, "C1"); expect_equal(nrow(none$in_force), 0L); expect_equal(nrow(none$potential), 0L)
+  expect_equal(nrow(constituency_flags(f, pot, NULL, "C1")$in_force), 0L)
+})
+
+test_that("the constituency brief content and PDF: figures, MP, the in force and potential tables, a five day forecast, and one page", {
+  cc <- data.frame(constituency_code = "E14001", constituency_name = "York Central", people = 100000, people_rs_high_medium = 8000, people_fz3 = 3000,
+                   people_high_medium_not_in_warning_area = 2500, people_high_medium_not_in_alert_area = 1000, sites = 12, stringsAsFactors = FALSE)
+  sit <- data.frame(mp_name = "A. Member", mp_party = "Party", fgs_issued_at = "2026-10-28 10:30:00", fgs_rank_day1 = 1L, fgs_rank_day2 = 2L, fgs_rank_day3 = 3L, fgs_rank_day4 = NA_integer_, fgs_rank_day5 = 0L, stringsAsFactors = FALSE)
+  fl <- list(in_force = data.frame(area = "River One", level = "Flood warning", since = as.POSIXct("2026-10-28 09:00", tz = "UTC"), severity = 2L, stringsAsFactors = FALSE),
+             potential = data.frame(area = "River Three", type = "Flood warning", risk = "High", first_day = 2L, rank = 4L, stringsAsFactors = FALSE))
+  sites <- data.frame(name = c("Rowan Court", "Far"), site_type = c("Care home", "School"), band = c("High", "None"), rofrs_rank = c(4L, 0L))
+  hist <- list(total = 14L, last12 = 5L, severe = 1L, median_minutes = 600, latest = Sys.time(), in_force_since = as.POSIXct(NA, tz = "UTC"))
+  k <- constituency_brief_content(cc, sit, sites, fl, hist, "statement 4936 issued 2026-10-28 10:30", "Low", generated = as.POSIXct("2026-10-28 12:00", tz = "UTC"))
+  expect_equal(k$title, "York Central"); expect_match(k$subtitle, "MP: A. Member (Party)", fixed = TRUE); expect_equal(k$kpis$value[c(1, 2, 3, 4, 5)], c("100,000", "8,000", "2,500", "12", "5"))
+  expect_equal(k$forecast$risk, c("Very Low", "Low", "Medium", "None", "None")); expect_equal(k$sites$name, "Rowan Court"); expect_match(k$history, "5 alerts or warnings were issued")
+  f <- tempfile(fileext = ".pdf"); on.exit(unlink(f), add = TRUE)
+  constituency_brief_pdf(f, k)
+  expect_equal(rawToChar(readBin(f, "raw", 4L)), "%PDF"); expect_gt(file.size(f), 3000)
+  if (nzchar(Sys.which("pdfinfo"))) expect_equal(as.integer(sub("Pages:\\s+", "", grep("^Pages:", system2("pdfinfo", f, stdout = TRUE), value = TRUE))), 1L)
+  g <- tempfile(fileext = ".pdf"); on.exit(unlink(g), add = TRUE)
+  constituency_brief_pdf(g, constituency_brief_content(cc, NULL, NULL, list(in_force = fl$in_force[0, ], potential = fl$potential[0, ]), NULL))      # nothing known: still draws
+  expect_gt(file.size(g), 2000)
+})
+
+
+test_that("the threshold board flags areas in force and potential ones, and does not call an area in force potential too", {
+  now <- as.POSIXct("2026-10-28 12:00", tz = "UTC")
+  raw <- data.frame(measure_uri = c("m1", "m2", "m3"), target_area = c("A1", "A2", "A3"), type = "RES", value_in_measure_unit = c(3, 3, 3), last_value = c(3.1, 2.9, 2.8),
+                    last_time = as.POSIXct("2026-10-28 11:50", tz = "UTC"), value_3h_ago = c(3, 2.8, 2.8), gauge_station = "g", gauge_river = "r", stringsAsFactors = FALSE)
+  f <- data.frame(flood_area_id = c("A1", "A1"), severity_level = c(3L, 2L))
+  pot <- data.frame(ea_area_code = c("A1", "A2", "A2"), worst_rank = c(4L, 2L, 3L), first_day = c(1L, 3L, 2L))
+  r <- threshold_board_rows(raw, NULL, now, within_m = 1, inforce = f, potential = pot)
+  expect_equal(r$in_force[r$area_id == "A1"], "Flood warning")                         # the severest of the two
+  expect_equal(r$potential[r$area_id == "A1"], "")                                       # in force, so not also potential
+  expect_equal(r$potential[r$area_id == "A2"], "Medium risk, from day 2")
+  expect_equal(r$potential[r$area_id == "A3"], ""); expect_equal(r$in_force[r$area_id == "A3"], "")
+  plain <- threshold_board_rows(raw, NULL, now, within_m = 1)
+  expect_true(all(plain$in_force == "") && all(plain$potential == ""))
+})
+
+test_that("an HTML error page from the warehouse gateway counts as a connection error, so it is retried and not fatal", {
+  expect_true(is_connection_error("Error in `httr2::req_perform()`: ! Failed to parse error body with method defined in `req_error()`."))
+  expect_true(is_connection_error("Caused by error in `httr2::resp_body_json()`: ! Unexpected content type \"text/html\"."))
+  expect_false(is_connection_error("[TABLE_OR_VIEW_NOT_FOUND] The table or view cannot be found"))
+})
+
+test_that("the overlap queries read the columns job 35 writes (area_a and area_b)", {
+  src <- paste(readLines(file.path(app_root, "data.R"), warn = FALSE), collapse = "\n")
+  expect_false(grepl("o.area_id_a|o.area_id_b", src))
+  expect_true(grepl("o.area_a AS area_id_a", src, fixed = TRUE) && grepl("area_a AS area_id_a, area_b AS area_id_b", src, fixed = TRUE))
+})
+
+test_that("plot styling puts height on the widget and does not use the deprecated layout height", {
+  skip_if_not_installed("plotly")
+  fig <- plotly::plot_ly(x = 1:3, y = 1:3, type = "scatter", mode = "lines")
+  expect_no_warning(styled <- app_plot_style(fig, height = 240, margin = list(t = 10)))
+  expect_equal(styled$height, 240)
+})

@@ -888,6 +888,29 @@ make_coverage_tab <- function() tags$div(
 # past 24 hours beside the map (up to six, one panel each, on one scale). A gauge with no recent reading is grey.
 # -----------------------------------------------------------------------------
 
+# Gauges near thresholds tab: for each warning area, the gauge linked to its Observed flood warning threshold, how close the level is, whether it is
+# rising, and who is below it. The thresholds and links are job 28's (restricted); levels are the live feed's.
+make_threshold_board_tab <- function() tags$div(
+  class = "areas-page",
+  tags$h1(class = "app-title", "Gauges near thresholds"),
+  tags$p(class = "app-lead", "The gauges linked to the flood warning thresholds, closest first, with the people at risk below each."),
+  uiOutput("tb_note"),
+  tags$div(
+    class = "filter-row",
+    selectInput("tb_within", "Show gauges within", choices = c("0.25 m" = 0.25, "0.5 m" = 0.5, "1 m" = 1, "2 m" = 2), selected = 1, width = "180px"),
+    checkboxInput("tb_rising", "Only those at or above, or rising", FALSE),
+    downloadButton("download_tb", "Export CSV", class = "btn-sm btn-outline-secondary")
+  ),
+  uiOutput("tb_kpis"),
+  DT::dataTableOutput("tb_table"),
+  tags$details(class = "app-details", tags$summary("How this is worked out"), tags$p(
+    "Each flood warning area has Observed thresholds linked to gauges (notebook 28). The Response threshold is the one that matters, so for each area and gauge the lowest Response ",
+    "threshold is used, or the lowest of any kind where there is no Response threshold. Headroom is the threshold minus the newest level, in metres, so it needs no datum. ",
+    "The trend compares the newest level with the average two to four hours earlier. The time to the threshold is shown only for a rising level and is a straight-line estimate, ",
+    "not a forecast. A reading older than three hours is left out. The people at risk are the people in the area in a High or Medium rivers and sea band. ",
+    "In force now is what the Environment Agency feed has in force for the area. Potential means the area lies under a risk polygon of Low or above in the latest Flood Guidance Statement and nothing is in force there yet."))
+)
+
 make_rain_tab <- function() tags$div(
   class = "rain-page",
   tags$h1(class = "app-title", "Rain gauges"),
@@ -1149,9 +1172,15 @@ make_const_exposure_tab <- function() tags$div(
   tags$div(
     class = "filter-row",
     selectInput("const_exp_cover", "Gap measured against", choices = c("Flood warning areas" = "warning", "Flood alert areas" = "alert"), width = "240px"),
+    selectInput("const_pot_rank", "Potential: areas under forecast risk of at least", choices = c("Very Low" = 1, "Low" = 2, "Medium" = 3, "High" = 4), selected = 2, width = "260px"),
+    checkboxInput("const_flagged", "Only constituencies with something in force or potential", FALSE),
     downloadButton("download_const_exp", "Export CSV", class = "btn-sm btn-outline-secondary")
   ),
-  DT::dataTableOutput("const_exp_table")
+  tags$p(class = "app-caption", "In force now is from the Environment Agency feed. Potential is the number of flood warning and flood alert areas that lie under a risk polygon in the latest Flood Guidance Statement, not ones that will be issued. Select a constituency for its detail and a one-page brief."),
+  DT::dataTableOutput("const_exp_table"),
+  tags$h2(class = "sit-briefing-h", "The selected constituency"),
+  uiOutput("const_detail"),
+  downloadButton("download_const_brief", "Download a one-page brief (PDF)", class = "btn-sm btn-primary")
 )
 
 
@@ -1274,6 +1303,7 @@ ui <- function(request) {
     tabPanel("Warning history",        make_warning_history_tab()),
     tabPanel("Warnings vs FGS",        make_coverage_tab()),
     tabPanel("Hydrometrics",           make_hydrometrics_tab()),
+    tabPanel("Gauges near thresholds", make_threshold_board_tab()),
     tabPanel("Rain gauges",            make_rain_tab()),
     tabPanel("Exports",                make_exports_tab()),
     tabPanel("Guide",                  make_guide_tab()),

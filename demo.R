@@ -782,6 +782,27 @@ fetch_area_coverage <- function() {
              people_high_medium_not_in_area = c(0, round(hm * .45), round(hm * .3)))
 }
 
+fetch_constituency_sites <- function(constituency_code) {
+  none <- data.table(site_id = character(), name = character(), site_group = character(), site_type = character(), band = character(), rofrs_rank = integer())
+  set.seed(sum(utf8ToInt(as.character(constituency_code))))
+  n <- sample(0:9, 1L)
+  if (n == 0L) return(none)
+  type <- sample(c("Hospital", "Care home", "School", "Electricity", "Fire and rescue", "GP surgery"), n, TRUE)
+  rank <- sort(sample(0:4, n, TRUE, prob = c(.2, .15, .2, .25, .2)), decreasing = TRUE)
+  data.table(site_id = sprintf("demo:%s:%d", constituency_code, seq_len(n)), name = sprintf("Demo %s %d", tolower(type), seq_len(n)),
+             site_group = "health", site_type = type, band = c("None", "Very Low", "Low", "Medium", "High")[rank + 1L], rofrs_rank = as.integer(rank))
+}
+
+# The areas under the demo statement's polygons: a third of the demo areas, with a risk rank and a first day.
+fetch_potential_area_list <- function(statement_id, min_rank = 2L) {
+  a <- demo_ea_areas()$table
+  set.seed(77)
+  k <- sample(nrow(a), 30L)
+  out <- data.table(ea_area_code = a$ea_area_code[k], ea_area_name = a$ea_area_name[k], ea_area_type = a$ea_area_type[k],
+                    worst_rank = sample(1:4, 30L, TRUE, prob = c(.35, .35, .2, .1)), first_day = sample(1:5, 30L, TRUE))
+  out[worst_rank >= min_rank]
+}
+
 fetch_constituency_exposure <- function() demo_with_seed(3519, {
   g <- demo_geometry()$table
   n <- nrow(g)
@@ -790,7 +811,8 @@ fetch_constituency_exposure <- function() demo_with_seed(3519, {
   data.table(constituency_code = g$constituency_id, constituency_name = g$constituency_name, people = people,
              people_rs_high_medium = hm, people_fz3 = round(hm * .6),
              people_rs_high_medium_in_warning_area = w, people_rs_high_medium_in_alert_area = a,
-             people_high_medium_not_in_warning_area = hm - w, people_high_medium_not_in_alert_area = hm - a)
+             people_high_medium_not_in_warning_area = hm - w, people_high_medium_not_in_alert_area = hm - a,
+             sites = rpois(n, 12), sites_health = rpois(n, 4), sites_education = rpois(n, 5), sites_emergency = rpois(n, 1), sites_utilities = rpois(n, 1), sites_rs_high_medium = rpois(n, 2))
 })
 
 fetch_area_shape <- function(area_id) {
@@ -1082,6 +1104,21 @@ fetch_area_episodes <- function(area_id) {
                     end_time = start + dur * 60, duration_minutes = dur, peak_level = ifelse(severe, "severe_flood_warning", type), had_severe = severe, stale_open = FALSE)
   out[end_time > Sys.time(), `:=`(end_time = as.POSIXct(NA, tz = "UTC"), duration_minutes = NA_real_)]
   out
+}
+
+# Invented threshold board rows: a dozen demo areas, each with a gauge, a threshold and a level somewhere near it.
+fetch_threshold_board <- function() {
+  d <- demo_area_exposure()
+  set.seed(42)
+  k <- sample(nrow(d), 14L)
+  thr <- round(runif(14L, 1.5, 4), 2)
+  head <- c(-0.2, 0.05, 0.1, 0.2, 0.3, 0.4, 0.6, 0.8, 1.1, 1.4, 1.8, 2.5, 0.15, 0.35)
+  last <- round(thr - head, 2)
+  now <- Sys.time()
+  data.table(measure_uri = sprintf("demo:measure:%d", 1:14), target_area = d$area_id[k], type = ifelse(seq_len(14L) %% 5 == 0, "ACTCON", "RES"), label_prefix = "RES FW",
+             value_in_measure_unit = thr, unit_name = "mAOD", unit_match = "match", link_status = "linked", last_value = last,
+             last_time = now - sample(c(300, 900, 1200, 600), 14L, TRUE), value_3h_ago = round(last - c(0.12, -0.05, 0.2, 0.0, 0.15, 0.1, 0.02, -0.1, 0.08, 0.05, 0, 0.3, 0.06, 0.25), 2),
+             gauge_station = sprintf("%s gauge", sub(" at .*", "", d$area_name[k])), gauge_river = sub(" at .*", "", d$area_name[k]))
 }
 
 fetch_warning_history <- function() demo_memo("warning_history", demo_with_seed(515, {
