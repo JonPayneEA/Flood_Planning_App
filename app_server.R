@@ -1441,7 +1441,7 @@ server <- function(input, output, session) {
     "area_row_click", "download_ea_areas", "download_situation",
     "copy_link_click", "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas", "download_areas", "download_const_exp", "download_exp_bands", "download_area_cells", "download_tb", "download_area_issues", "download_area_brief", "download_area_sites", "download_exp_responders", "area_open", "areas_open_selected",
 
-    "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas", "download_areas", "download_const_exp", "download_exp_bands", "download_area_cells", "download_const_brief", "download_area_issues", "download_area_brief", "download_area_sites", "download_exp_responders", "area_open", "areas_open_selected",
+    "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas", "download_areas", "download_const_exp", "download_exp_bands", "download_area_cells", "goto_gauge", "download_const_brief", "download_area_issues", "download_area_brief", "download_area_sites", "download_exp_responders", "area_open", "areas_open_selected",
     "situation_table_rows_selected", "situation_table_row_last_clicked",
     "situation_table_cell_clicked", "situation_table_rows_current",
     "situation_table_rows_all", "situation_table_state", "situation_table_search",
@@ -2585,6 +2585,60 @@ server <- function(input, output, session) {
     tags$p(nm)
   })
 
+  # ---- Gauges linked to the chosen area (job 28's thresholds) -----------------------------------------------------------------
+  area_gauges_raw <- reactive({
+    req(input$area_pick)
+    invalidateLater(120000, session)
+    tryCatch(fetch_area_gauges(input$area_pick), error = function(e) NULL)
+  })
+
+  area_gauges <- reactive({
+    raw <- area_gauges_raw()
+    if (is.null(raw)) return(NULL)
+    area_gauge_rows(raw)
+  })
+
+  output$area_gauges_note <- renderUI({
+    g <- area_gauges()
+    if (is.null(g)) return(tags$p(class = "text-muted", "The linked gauges could not be loaded. The thresholds are in the restricted schema, and notebook 28 builds the links."))
+    if (nrow(g) == 0L) return(tags$p("No gauge is linked to this area's flood warning thresholds yet (notebook 28 links the thresholds that match a gauge by its FFFS id and unit)."))
+    live <- g[g$status != "No recent reading", , drop = FALSE]
+    if (nrow(live) == 0L) return(tags$p(class = "text-muted", "No linked gauge has a reading from the last three hours."))
+    near <- live[order(live$headroom), ][1L, ]
+    tags$p(sprintf("%d threshold%s on %d gauge%s. Closest: %s at %.2f m against %s %.2f m, %s (%s).", nrow(g), if (nrow(g) == 1L) "" else "s", length(unique(g$measure_uri)), if (length(unique(g$measure_uri)) == 1L) "" else "s",
+                   if (nzchar(near$gauge)) near$gauge else "a gauge", near$last_value, near$label, near$threshold,
+                   if (near$headroom <= 0) sprintf("%.2f m above it", -near$headroom) else sprintf("%.2f m below it", near$headroom), tolower(near$status)))
+  })
+
+  output$area_gauges_table <- DT::renderDataTable({
+    g <- area_gauges()
+    if (is.null(g) || nrow(g) == 0L) return(DT::datatable(data.frame(Note = "Nothing to list."), rownames = FALSE, selection = "none", options = list(dom = "t")))
+    d <- data.table(
+      Gauge = vapply(seq_len(nrow(g)), function(i) gauge_open_link(g$measure_uri[i], if (nzchar(g$gauge[i])) g$gauge[i] else "gauge"), character(1)),
+      River = g$river, Threshold = g$label, `Threshold (m)` = round(g$threshold, 2), `Level (m)` = round(g$last_value, 2),
+      `Headroom (m)` = round(g$headroom, 2), Trend = trend_label(g$rate), Status = g$status,
+      Read = ifelse(is.na(g$last_time), "", format(g$last_time, "%d %b %H:%M", tz = "UTC")))
+    DT::datatable(d, rownames = FALSE, selection = "none", escape = FALSE, options = list(pageLength = 10, dom = "tip", order = list(), scrollX = TRUE,
+                                                                                         columnDefs = list(list(orderable = FALSE, targets = 0L)))) |>
+      DT::formatStyle("Status", fontWeight = DT::styleEqual(c("At or above", "Close and rising"), c("700", "600")),
+                      color = DT::styleEqual(c("At or above", "Close and rising", "Close"), c(APP_SEVERE_HEX, APP_WARNING_HEX, APP_PALETTE$ink)))
+  })
+
+  # A gauge link anywhere sends the app to River levels and flows with that gauge's station chosen and the thresholds drawn.
+  rt_goto_uri <- reactiveVal(NULL)
+  observeEvent(input$goto_gauge, {
+    rt_goto_uri(gsub("[^A-Za-z0-9:/._#-]", "", input$goto_gauge))
+    updateTabsetPanel(session, "main_tabs", selected = "Hydrometrics")
+    updateCheckboxInput(session, "rt_thresholds", value = TRUE)
+  })
+  observeEvent(list(rt_goto_uri(), rt_reg()), {
+    uri <- rt_goto_uri(); reg <- rt_reg()
+    req(uri, reg)
+    rt_goto_uri(NULL)
+    st <- reg$station[match(uri, reg$measure_uri)]
+    if (!is.na(st)) rt_sync(reg, RT_ALL, RT_ALL, RT_ALL, st, RT_ALL)
+  })
+
   # ---- Warning issue history for the chosen area (job 25's episodes) ----------------------------------------------------
   area_episodes <- reactive({
     req(input$area_pick)
@@ -2679,7 +2733,8 @@ server <- function(input, output, session) {
   tb_display <- function(x) {
     data.table(
       Area = vapply(seq_len(nrow(x)), function(i) area_open_link(x$area_id[i], x$area_name[i]), character(1)),
-      Gauge = ifelse(is.na(x$gauge), "", x$gauge), River = ifelse(is.na(x$river), "", x$river),
+      Gauge = vapply(seq_len(nrow(x)), function(i) gauge_open_link(x$measure_uri[i], if (is.na(x$gauge[i]) || !nzchar(x$gauge[i])) "gauge" else x$gauge[i]), character(1)),
+      River = ifelse(is.na(x$river), "", x$river),
       Status = x$status, `In force now` = x$in_force, `Potential (forecast)` = x$potential, `Level (m)` = round(x$last_value, 2), `Threshold (m)` = round(x$threshold, 2), `Headroom (m)` = round(x$headroom, 2),
       Trend = trend_label(x$rate), `Time to threshold` = ifelse(is.na(x$eta_hours), "", duration_label(x$eta_hours * 60)),
       `People at risk` = round(x$people_at_risk), Read = format(x$last_time, "%d %b %H:%M", tz = "UTC"))
@@ -2689,7 +2744,7 @@ server <- function(input, output, session) {
     x <- tryCatch(tb_rows(), error = function(e) NULL)
     if (is.null(x) || nrow(x) == 0L) return(DT::datatable(data.frame(Note = "No linked gauge is within that distance of its threshold."), rownames = FALSE, selection = "none", options = list(dom = "t")))
     DT::datatable(tb_display(x), rownames = FALSE, selection = "none", escape = FALSE,
-                  options = list(pageLength = 15, dom = "ftip", scrollX = TRUE, order = list(), columnDefs = list(list(orderable = FALSE, targets = 0L)))) |>
+                  options = list(pageLength = 15, dom = "ftip", scrollX = TRUE, order = list(), columnDefs = list(list(orderable = FALSE, targets = c(0L, 1L))))) |>
       DT::formatStyle("In force now", fontWeight = "600", color = APP_SEVERE_HEX) |>
       DT::formatStyle("Potential (forecast)", color = APP_WARNING_HEX) |>
       DT::formatStyle("Status", fontWeight = DT::styleEqual(c("At or above", "Close and rising"), c("700", "600")),

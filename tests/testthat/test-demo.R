@@ -66,6 +66,8 @@ test_that("no demo fetcher reaches for the warehouse", {
     expect_true(all(c("ea_area_code", "ea_area_name", "ea_area_type", "worst_rank", "first_day") %in% names(pl))); expect_true(all(pl$worst_rank >= 2L))
     cs <- demo_env$fetch_constituency_sites("DEMO-C001"); expect_true(all(c("name", "site_type", "band", "rofrs_rank") %in% names(cs)))
     expect_true(all(c("sites", "sites_rs_high_medium") %in% names(demo_env$fetch_constituency_exposure())))
+    ag <- demo_env$fetch_area_gauges(tbd$target_area[1L])
+    expect_gt(nrow(ag), 0L); expect_true(all(ag$target_area == tbd$target_area[1L])); expect_equal(nrow(demo_env$fetch_area_gauges("nope")), 0L)
     ov <- demo_env$fetch_area_overlaps(ae$area_id[1L])
     expect_true(all(c("area_id_a", "area_id_b", "people", "name_a", "name_b") %in% names(ov)))
     expect_no_error(demo_env$fetch_warning_episodes(demo_env$fetch_warning_history()$constituency_id[1L]))
