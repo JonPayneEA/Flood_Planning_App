@@ -1248,3 +1248,11 @@ test_that("every fetch_ function the app calls is defined in data.R, so a merge 
   defined <- unique(sub("\\s*<-.*$", "", grep("^fetch_[a-z_0-9]+\\s*<-\\s*function", readLines(file.path(app_root, "data.R"), warn = FALSE), value = TRUE)))
   expect_equal(setdiff(used, defined), character())
 })
+
+test_that("an area link keeps its choice: the area picker is filled once, and the link passes the choices with the selection", {
+  srv <- paste(readLines(file.path(app_root, "app_server.R"), warn = FALSE), collapse = "\n")
+  expect_true(grepl("if (!isolate(area_picker_ready()))", srv, fixed = TRUE))                       # the tab-change observer cannot reset the selection
+  expect_equal(lengths(regmatches(srv, gregexpr('updateSelectizeInput(session, "area_pick"', srv, fixed = TRUE))), 3L)
+  picks <- regmatches(srv, gregexpr("updateSelectizeInput\\(session, \"area_pick\"[^\n]*", srv))[[1L]]
+  expect_true(all(grepl("server = TRUE", picks, fixed = TRUE)) && all(grepl("area_choices_of", picks, fixed = TRUE)))        # a server-side picker ignores a selection sent without its choices
+})
