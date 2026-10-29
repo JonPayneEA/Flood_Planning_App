@@ -792,16 +792,40 @@ make_situation_tab <- function() tags$div(
 
 
 # -----------------------------------------------------------------------------
-# Warning history tab.
+# Constituency history tab (was Warning history).
 #
 # One row per constituency: how many flood alerts and flood warnings have been
 # issued for areas inside it, and the total. Select a row to see each area.
 # Counts come from ea_warning_episodes (job 25). The slider narrows the period.
 # -----------------------------------------------------------------------------
 
-make_warning_history_tab <- function() tags$div(
+# Warning history tab: how often each flood warning area and flood alert area (each Target Area) has been issued, and for how long.
+make_area_history_tab <- function() tags$div(
   class = "wh-page",
   tags$h1(class = "app-title", "Warning history"),
+  tags$p(class = "app-lead", "How many times each flood warning area and flood alert area has been issued, and for how long it was in force. Select a row to see each time it was issued."),
+  uiOutput("ah_note"),
+  tags$div(
+    class = "filter-row",
+    sliderInput("ah_range", "Issued between",
+                min = Sys.Date() - 3650L, max = Sys.Date(), value = c(Sys.Date() - 3650L, Sys.Date()),
+                timeFormat = "%d %b %Y", width = "420px"),
+    selectInput("ah_kind", "Kind", choices = c("Flood warning and alert" = "both", "Flood warning" = "flood_warning", "Flood alert" = "flood_alert"), width = "220px"),
+    textInput("ah_search", "Search", placeholder = "Area name or code", width = "220px"),
+    downloadButton("download_ah", "Export CSV", class = "btn-sm btn-outline-secondary")
+  ),
+  uiOutput("ah_kpis"),
+  tags$h2("Target Areas"),
+  DT::dataTableOutput("ah_table"),
+  tags$h2(class = "sit-briefing-h", "Each time it was issued"),
+  uiOutput("ah_detail_title"),
+  DT::dataTableOutput("ah_detail"),
+  tags$div(class = "mt-2", downloadButton("download_ah_detail", "Export this table", class = "btn-sm btn-outline-secondary"))
+)
+
+make_warning_history_tab <- function() tags$div(
+  class = "wh-page",
+  tags$h1(class = "app-title", "Constituency history"),
   tags$p(class = "app-lead", "How many flood alerts and flood warnings have been issued for areas in each constituency. Select a row to see each area."),
   uiOutput("wh_note"),
   tags$div(
@@ -1344,7 +1368,8 @@ ui <- function(request) {
     tabPanel("Target Area",            make_area_detail_tab()),
     tabPanel("Constituency exposure",  make_const_exposure_tab()),
     tabPanel("Exposure history",       make_exposure_tab()),
-    tabPanel("Warning history",        make_warning_history_tab()),
+    tabPanel("Warning history",        make_area_history_tab()),
+    tabPanel("Constituency history",   make_warning_history_tab()),
     tabPanel("Warnings vs FGS",        make_coverage_tab()),
     tabPanel("Hydrometrics",           make_hydrometrics_tab()),
     tabPanel("Gauges near thresholds", make_threshold_board_tab()),

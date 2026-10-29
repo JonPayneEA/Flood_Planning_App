@@ -790,6 +790,34 @@ fetch_warning_history <- function() {
 }
 
 
+# fetch_area_history(): every alert and warning episode counted by area and day of issue, with the time each was in force, so the app can narrow the
+#   period in R. minutes_timed adds the durations of episodes that have ended; n_timed counts them; an episode with no end message (open, or open for
+#   over 30 days and treated as having lost it) has no duration and is counted in n_open. longest_minutes is the longest one that ended.
+fetch_area_history <- function() {
+  db_query(sprintf("
+    SELECT
+      e.ea_area_code,
+      MAX(n.ea_area_name)                                              AS ea_area_name,
+      LOWER(e.area_type)                                               AS ea_area_type,
+      CAST(e.start_time AS DATE)                                       AS issued_date,
+      COUNT(*)                                                         AS n_issued,
+      SUM(CASE WHEN e.had_severe THEN 1 ELSE 0 END)                    AS n_severe,
+      SUM(CASE WHEN e.end_time IS NOT NULL THEN e.duration_minutes ELSE 0 END) AS minutes_timed,
+      SUM(CASE WHEN e.end_time IS NOT NULL THEN 1 ELSE 0 END)          AS n_timed,
+      MAX(CASE WHEN e.end_time IS NOT NULL THEN e.duration_minutes END) AS longest_minutes,
+      SUM(CASE WHEN e.end_time IS NULL THEN 1 ELSE 0 END)              AS n_open
+    FROM %s e
+    LEFT JOIN (
+      SELECT ea_area_code, ea_area_name FROM %s
+      UNION ALL
+      SELECT ea_area_code, ea_area_name FROM %s
+    ) n ON n.ea_area_code = e.ea_area_code
+    WHERE LOWER(e.area_type) IN ('flood_alert', 'flood_warning')
+    GROUP BY e.ea_area_code, LOWER(e.area_type), CAST(e.start_time AS DATE)
+  ", TBL_WARNING_EPISODES, TBL_EA_FWA, TBL_EA_FAA))
+}
+
+
 # -----------------------------------------------------------------------------
 # Warnings against the FGS (ea_warning_fgs_coverage, job 26)
 #
@@ -1645,6 +1673,7 @@ fetch_situation                    <- with_cache(fetch_situation,               
 fetch_briefing_drafts              <- with_cache(fetch_briefing_drafts,              "briefings", ttl = 0)
 fetch_exposure                     <- with_cache(fetch_exposure,                     "exposure",  ttl = 0)
 fetch_warning_history              <- with_cache(fetch_warning_history,              "warning_history", ttl = 0)
+fetch_area_history                 <- with_cache(fetch_area_history,                 "area_history", ttl = 0)
 fetch_warning_episodes             <- with_cache(fetch_warning_episodes,             "warning_episodes", ttl = min(CACHE_TTL_SECONDS, 300))
 fetch_coverage_summary             <- with_cache(fetch_coverage_summary,             "cov_summary", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_coverage_warnings            <- with_cache(fetch_coverage_warnings,            "cov_warnings", ttl = max(CACHE_TTL_SECONDS, 0) * 6)

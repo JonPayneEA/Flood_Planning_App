@@ -1233,6 +1233,24 @@ fetch_warning_history <- function() demo_memo("warning_history", demo_with_seed(
   d[]
 }))
 
+# Invented history by area: each demo area issued a few times a year for a few hours, the warnings fewer and shorter than the alerts.
+fetch_area_history <- function() demo_memo("area_history", demo_with_seed(616, {
+  ea <- demo_ea_areas()$table
+  rate <- ifelse(ea$ea_area_type == "flood_warning", 2.5, 6)
+  rows <- rbindlist(lapply(seq_len(nrow(ea)), function(i) {
+    n <- rpois(1L, rate[i] * 2)
+    if (n == 0L) return(NULL)
+    day <- as.Date(Sys.Date() - sample.int(730L, n, replace = TRUE))
+    dur <- round(rexp(n, 1 / ifelse(ea$ea_area_type[i] == "flood_alert", 2400, 900))) + 30
+    open <- as.integer(day >= Sys.Date() - 1L & runif(n) < .5)
+    data.table(ea_area_code = ea$ea_area_code[i], ea_area_name = ea$ea_area_name[i], ea_area_type = ea$ea_area_type[i], issued_date = day,
+               dur = dur, sev = as.integer(ea$ea_area_type[i] == "flood_warning" & runif(n) < .12), open = open)
+  }))
+  rows[, .(n_issued = .N, n_severe = sum(sev), minutes_timed = sum(ifelse(open == 1L, 0, dur)), n_timed = sum(open == 0L),
+           longest_minutes = if (any(open == 0L)) max(dur[open == 0L]) else NA_real_, n_open = sum(open)),
+       by = .(ea_area_code, ea_area_name, ea_area_type, issued_date)]
+}))
+
 fetch_constituency_shape <- function(constituency_id) {
   g <- demo_geometry(); i <- match(constituency_id, g$table$constituency_id)
   if (is.na(i)) return(NULL)

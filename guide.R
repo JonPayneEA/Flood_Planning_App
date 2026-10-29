@@ -373,7 +373,28 @@ guide_products <- function(s) {
     ),
 
     list(
-      id = "warning_history", title = "Warning history", where = "Warning history",
+      id = "warning_history_areas", title = "Warning history", where = "Warning history",
+      answers = "How many times has each flood warning area and flood alert area been issued, and for how long was it in force?",
+      tables = c("ea_warning_episodes", "ea_flood_warning_areas", "ea_flood_alert_areas"),
+      steps = c(
+        "Notebook 25 turns the Environment Agency's message history, and then the live warnings log, into episodes. An episode runs from the message that switched an area on to the message that ended it, at any level.",
+        "An issue is one episode. Alerts and warnings are counted separately. Reached severe counts the warning episodes that went to severe at any point, so it is part of the issues and not added to them.",
+        "Each issue is dated by the day it was switched on. The slider keeps the issues dated inside the chosen period, and the kind and search narrow the areas.",
+        "Time in force adds up how long each issue that has ended was in force. The average and the longest are of those that ended. Select a row to list each time the area was issued, with when it started, when it ended and how long it lasted."
+      ),
+      read = c(
+        "Time in force is time with an alert or warning on, not time with water on the ground, and not people affected.",
+        "An issue still in force, or open for over 30 days with no end message, is counted as issued but not timed. The Still open column says how many.",
+        "Areas with no issue in the period are left out of the table."
+      ),
+      limits = c(
+        "The history only goes back as far as the pipeline holds it.",
+        "An alert or warning that is withdrawn and reissued within hours is two issues."
+      )
+    ),
+
+    list(
+      id = "warning_history", title = "Constituency history", where = "Constituency history",
       answers = "How many flood alerts and flood warnings have been issued for each constituency, and for which areas?",
       tables = c("ea_warning_episodes", "ea_area_constituency_lookup", "ea_flood_warning_areas", "ea_flood_alert_areas"),
       steps = c(
@@ -385,7 +406,7 @@ guide_products <- function(s) {
         "The graph under the table counts the alerts and warnings in force at the same time. Each issue steps the line up when it starts and down when it ends. It counts areas, not people or properties."
       ),
       read = c(
-        "The total counts issues, not days in force and not people affected. Duration is held in the episodes table but is not shown here.",
+        "The total counts issues, not days in force and not people affected. The Warning history tab gives the time in force for each area.",
         "Constituencies with no issue in the period are left out of the table.",
         "In the graph and the Detailed table, an alert or warning with no end message for over 30 days is treated as one that never received it. The table marks it as still open; the graph leaves it out.",
         "The Nations filter at the top applies."
