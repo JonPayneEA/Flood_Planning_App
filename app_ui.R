@@ -915,6 +915,22 @@ make_coverage_tab <- function() tags$div(
 
 # Gauges near thresholds tab: for each warning area, the gauge linked to its Observed flood warning threshold, how close the level is, whether it is
 # rising, and who is below it. The thresholds and links are job 28's (restricted); levels are the live feed's.
+# Gauge value tab: what each gauge stands behind. A gauge's thresholds belong to warning areas (pipeline notebook 28); the value is the indicative expected
+# annual damage in those areas, gross (all of it) and split (an area's value shared between the gauges that drive it, so the split figures add up).
+make_gauge_value_tab <- function() tags$div(
+  class = "areas-page",
+  tags$h1(class = "app-title", "Gauge value"),
+  tags$p(class = "app-lead", "What each gauge stands behind: the indicative expected annual damage in the warning areas its thresholds belong to. Ranked by the split value."),
+  uiOutput("gv_note"),
+  uiOutput("gv_kpis"),
+  tags$div(class = "filter-row", downloadButton("download_gv", "Export CSV", class = "btn-sm btn-outline-secondary")),
+  DT::dataTableOutput("gv_table"),
+  tags$h2(class = "sit-briefing-h", "Areas behind the selected gauge"),
+  uiOutput("gv_detail_title"),
+  DT::dataTableOutput("gv_detail"),
+  uiOutput("gv_basis")
+)
+
 make_threshold_board_tab <- function() tags$div(
   class = "areas-page",
   tags$h1(class = "app-title", "Gauges near thresholds"),
@@ -1148,7 +1164,7 @@ make_areas_tab <- function() tags$div(
     selectInput("areas_county", "County", choices = c("All" = ""), width = "200px"),
     selectInput("areas_source", "Flood source", choices = c("Rivers and the sea" = "any", "Fluvial (rivers)" = "fluvial", "Coastal" = "coastal"), width = "200px"),
     selectInput("areas_sort", "Sort by", choices = c("Risk score" = "risk_score", "People at risk" = "people_rs_high_medium", "Share at risk" = "share_people_high_medium", "People" = "people",
-                                                    "Households at High or Medium" = "households_rs_high_medium", "Critical sites" = "sites", "Area name" = "area_name"), width = "230px"),
+                                                    "Households at High or Medium" = "households_rs_high_medium", "Expected annual damage" = "econ_sort", "Critical sites" = "sites", "Area name" = "area_name"), width = "230px"),
     textInput("areas_search", "Search", placeholder = "Area name", width = "200px"),
     downloadButton("download_areas", "Download CSV", class = "btn-primary")
   ),
@@ -1195,6 +1211,8 @@ make_area_detail_tab <- function() tags$div(
       tags$h2("By flood band"),
       tags$p(class = "app-caption", "Rivers and the sea. Surface water is not counted."),
       uiOutput("area_bands"),
+      tags$h2("Expected annual damage (indicative)"),
+      uiOutput("area_econ"),
       tags$h2("Who is vulnerable"),
       uiOutput("area_vuln"),
       tags$h2("Surface water (context)"),
@@ -1373,6 +1391,7 @@ ui <- function(request) {
     tabPanel("Warnings vs FGS",        make_coverage_tab()),
     tabPanel("Hydrometrics",           make_hydrometrics_tab()),
     tabPanel("Gauges near thresholds", make_threshold_board_tab()),
+    tabPanel("Gauge value",            make_gauge_value_tab()),
     tabPanel("Rain gauges",            make_rain_tab()),
     tabPanel("Exports",                make_exports_tab()),
     tabPanel("Guide",                  make_guide_tab()),

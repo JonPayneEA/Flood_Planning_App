@@ -1216,6 +1216,25 @@ fetch_threshold_board <- function() {
              gauge_station = sprintf("%s gauge", sub(" at .*", "", d$area_name[k])), gauge_river = sub(" at .*", "", d$area_name[k]))
 }
 
+# Demo assumptions: the probabilities as the app expects them, and invented damage figures so the pound figures can be seen working. NOT real figures.
+fetch_econ_assumptions <- function() {
+  p <- list(high = c(0.033, 0.05, 0.10), medium = c(0.01, 0.0182, 0.033), low = c(0.001, 0.00316, 0.01), very_low = c(0.0001, 0.000316, 0.001))
+  rbind(rbindlist(lapply(names(p), function(b) data.table(item = paste0("prob_", b), scenario = c("low", "central", "high"), value = p[[b]], unit = "annual probability",
+                                                         source = "NaFRA2 band range", price_year = NA_character_, note = ""))),
+        data.table(item = "damage_per_household", scenario = c("low", "central", "high"), value = c(12000, 28000, 55000), unit = "GBP per household per flood event",
+                   source = "Demo figures, not real", price_year = "demo", note = ""))
+}
+
+# Demo links from gauges to areas: each demo threshold gauge drives its own area, one area has a second gauge, and one gauge drives a second area.
+fetch_gauge_area_links <- function() {
+  b <- fetch_threshold_board()
+  l <- unique(b[, .(area_id = target_area, measure_uri, gauge = gauge_station, river = gauge_river)])
+  d <- demo_area_exposure()
+  extra <- rbind(data.table(area_id = l$area_id[1L], measure_uri = "demo:measure:99", gauge = "Demo second gauge", river = "Demo river"),
+                 data.table(area_id = d$area_id[setdiff(seq_len(nrow(d)), match(l$area_id, d$area_id))[1L]], measure_uri = l$measure_uri[2L], gauge = l$gauge[2L], river = l$river[2L]))
+  rbind(l, extra)
+}
+
 fetch_area_gauges <- function(area_id) {
   b <- fetch_threshold_board()
   b[target_area == area_id]
