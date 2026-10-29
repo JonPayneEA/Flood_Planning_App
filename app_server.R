@@ -2668,15 +2668,16 @@ server <- function(input, output, session) {
   econ_assump_d <- reactive(tryCatch(as.data.table(fetch_econ_assumptions()), error = function(e) NULL))
   # Damage figures typed in by the user for this session only (nothing is written anywhere). NULL means the saved assumptions are used.
   econ_override <- reactiveVal(NULL)
-  econ_p <- reactive(econ_apply_override(econ_params(econ_assump_d()), econ_override()))
+  econ_p <- reactive(econ_apply_override(econ_with_provisional(econ_params(econ_assump_d())), econ_override()))
 
   # The line above the figures: a link to try one's own figures, and, while they are in use, a plain statement of it and a way back.
   econ_try_bar <- function(id) renderUI({
     o <- econ_override()
-    p <- econ_params(econ_assump_d())
+    p <- econ_with_provisional(econ_params(econ_assump_d()))
     if (!isTRUE(p$has_prob)) return(NULL)
     tags$p(class = "app-caption",
-           if (is.null(o)) tagList(if (!isTRUE(p$has_damage)) "No damage figures are set yet. " else NULL, actionLink(id, "Try your own damage figures"), " to see the pounds and the range. Nothing is saved.")
+           if (is.null(o)) tagList(if (isTRUE(p$provisional)) tags$strong(sprintf("Provisional damage figures (%s, %s and %s per household per flood event), not agreed or sourced. ", fmt_gbp(p$damage[["low"]]), fmt_gbp(p$damage[["central"]]), fmt_gbp(p$damage[["high"]]))) else NULL,
+                                   actionLink(id, "Try your own damage figures"), " to see the pounds and the range for them. Nothing is saved.")
            else tagList(tags$strong("Showing your own damage figures, not saved or agreed. "), actionLink(id, "Change them"), " or ", actionLink(paste0(id, "_clear"), "go back to the saved assumptions"), "."))
   })
   output$area_econ_bar <- econ_try_bar("econ_try_open_a")
@@ -3215,7 +3216,7 @@ server <- function(input, output, session) {
                                                                    `Split low` = round(split_low), `Split central` = round(split_central), `Split high` = round(split_high),
                                                                    `Gross low` = round(gross_low), `Gross central` = round(gross_central), `Gross high` = round(gross_high),
                                                                    `Households a year, split` = ehh_split, `Households a year, gross` = ehh_gross,
-                                                                   Basis = if (isTRUE(econ_p()$override)) "your own damage figures, not saved or agreed" else "assumptions table")], file, bom = TRUE)
+                                                                   Basis = if (isTRUE(econ_p()$override)) "your own damage figures, not saved or agreed" else if (isTRUE(econ_p()$provisional)) "provisional damage figures, not agreed or sourced" else "assumptions table")], file, bom = TRUE)
     })
 
   # ---- Gauges near thresholds ----------------------------------------------------------------------------------------------
@@ -3263,6 +3264,12 @@ server <- function(input, output, session) {
     round(g$split_central[match(uris, g$measure_uri)])
   }
 
+  # The board's value column says when the pounds rest on provisional damage figures, or on figures typed in for the session.
+  tb_value_col <- function() {
+    p <- econ_p()
+    if (isTRUE(p$override)) "Value behind it (your figures, not saved)" else if (isTRUE(p$provisional)) "Value behind it (provisional)" else "Value behind it (split, central)"
+  }
+
   tb_display <- function(x) {
     data.table(
       Area = vapply(seq_len(nrow(x)), function(i) area_open_link(x$area_id[i], x$area_name[i]), character(1)),
@@ -3270,7 +3277,7 @@ server <- function(input, output, session) {
       River = ifelse(is.na(x$river), "", x$river),
       Status = x$status, `In force now` = x$in_force, `Potential (forecast)` = x$potential, `Level (m)` = round(x$last_value, 2), `Threshold (m)` = round(x$threshold, 2), `Headroom (m)` = round(x$headroom, 2),
       Trend = trend_label(x$rate), `Time to threshold` = ifelse(is.na(x$eta_hours), "", duration_label(x$eta_hours * 60)),
-      `People at risk` = round(x$people_at_risk), `Value behind it (split, central)` = gv_value_of(x$measure_uri), Read = format(x$last_time, "%d %b %H:%M", tz = "UTC"))
+      `People at risk` = round(x$people_at_risk), Read = format(x$last_time, "%d %b %H:%M", tz = "UTC"))[, (tb_value_col()) := gv_value_of(x$measure_uri)][]
   }
 
   output$tb_table <- DT::renderDataTable({
@@ -3283,7 +3290,7 @@ server <- function(input, output, session) {
       DT::formatStyle("Status", fontWeight = DT::styleEqual(c("At or above", "Close and rising"), c("700", "600")),
                       color = DT::styleEqual(c("At or above", "Close and rising", "Close"), c(APP_SEVERE_HEX, APP_WARNING_HEX, APP_PALETTE$ink))) |>
       DT::formatRound("People at risk", digits = 0, mark = ",") |>
-      DT::formatCurrency("Value behind it (split, central)", currency = "\u00a3", digits = 0)
+      DT::formatCurrency(tb_value_col(), currency = "\u00a3", digits = 0)
   })
 
   output$download_tb <- downloadHandler(

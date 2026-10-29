@@ -505,7 +505,7 @@ guide_products <- function(s) {
       ),
       read = c(
         "Every figure is indicative. It uses no flood depth, property type or property value, only the band a household sits in.",
-        "Until the damage figures are set, no pound figure is shown and gauges are ranked by the households expected to flood in a year.",
+        "Until the damage figures are set in the assumptions table, the app uses provisional planning values (15,000, 30,000 and 60,000 pounds per household per flood event). They are round numbers chosen for the right order of magnitude, not taken from the Multi-Coloured Handbook, and every figure that uses them says so. Setting the three rows in the table replaces them.",
         "Gross figures count an area once for each gauge that drives it, so do not add them across gauges."
       ),
       limits = c(

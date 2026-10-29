@@ -1390,3 +1390,17 @@ test_that("typed-in damage figures are checked, and when used every figure says 
   expect_equal(econ_area(ex, o)$ead_central, 100 * 0.05 * 30000)
   expect_identical(econ_apply_override(econ_params(NULL), c(low = 1, central = 2, high = 3))$has_damage, FALSE)   # no probabilities: nothing to apply to
 })
+
+test_that("provisional damage figures fill in only when none are set, and say so", {
+  none <- econ_params(econ_assump(damage = c(NA, NA, NA)))
+  p <- econ_with_provisional(none)
+  expect_true(p$has_damage && isTRUE(p$provisional)); expect_equal(p$damage[["central"]], 30000)
+  expect_match(econ_basis_text(p), "^PROVISIONAL DAMAGE FIGURES, NOT AGREED OR SOURCED"); expect_match(econ_basis_text(p), "not from the Multi-Coloured Handbook")
+  set <- econ_with_provisional(econ_params(econ_assump()))                                  # figures in the table are used as they are
+  expect_false(isTRUE(set$provisional)); expect_equal(set$damage[["central"]], 30000)
+  expect_no_match(econ_basis_text(set), "PROVISIONAL")
+  expect_false(isTRUE(econ_with_provisional(econ_params(NULL))$has_damage))               # no probabilities: nothing to apply to
+  o <- econ_apply_override(p, c(low = 1, central = 2, high = 3))                          # the user's own figures replace the provisional ones, and say so
+  expect_false(isTRUE(o$provisional)); expect_match(econ_basis_text(o), "^YOUR OWN")
+  expect_true(all(ECON_PROVISIONAL_DAMAGE == sort(ECON_PROVISIONAL_DAMAGE)))
+})

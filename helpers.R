@@ -1552,6 +1552,20 @@ econ_params <- function(assump) {
   list(prob = prob, damage = damage, has_prob = !anyNA(prob), has_damage = !anyNA(damage), source = source, price_year = price_year)
 }
 
+# PROVISIONAL damage per household per flood event, in pounds. Used only while the assumptions table has no damage figures, so the pounds and the range can be
+# seen. They are round planning values chosen for the right order of magnitude; they are NOT from the Multi-Coloured Handbook and have not been agreed. Every
+# figure that uses them says so. Setting the three damage rows in the assumptions table (FGS_Notebooks job 38) replaces them with no change to the app.
+ECON_PROVISIONAL_DAMAGE <- c(low = 15000, central = 30000, high = 60000)
+
+econ_with_provisional <- function(params) {
+  if (!isTRUE(params$has_prob) || isTRUE(params$has_damage)) return(params)
+  params$damage <- ECON_PROVISIONAL_DAMAGE
+  params$has_damage <- TRUE
+  params$provisional <- TRUE
+  params$source <- "provisional planning values"; params$price_year <- NA_character_
+  params
+}
+
 # econ_try_validate(): the three damage figures typed into the "try your own figures" box. Each must be a number, not negative, and they must run low,
 #   central, high in order. Returns list(ok, msg, damage) with damage a named vector.
 econ_try_validate <- function(low, central, high) {
@@ -1569,6 +1583,7 @@ econ_apply_override <- function(params, damage) {
   params$has_damage <- TRUE
   params$source <- NA_character_; params$price_year <- NA_character_
   params$override <- TRUE
+  params$provisional <- FALSE
   params
 }
 
@@ -1611,9 +1626,9 @@ econ_range_text <- function(low, central, high, ehh_central = NA_real_) {
 econ_basis_text <- function(params) {
   if (!isTRUE(params$has_prob)) return("The assumptions are not available yet (pipeline notebook 38).")
   p <- params$prob
-  paste0(if (isTRUE(params$override)) "YOUR OWN DAMAGE FIGURES, NOT SAVED OR AGREED. " else "", "Indicative. Households in each rivers and sea band x the band's annual chance (High ", sprintf("%.1f%%", 100 * p["high", "central"]), ", Medium ", sprintf("%.1f%%", 100 * p["medium", "central"]),
+  paste0(if (isTRUE(params$override)) "YOUR OWN DAMAGE FIGURES, NOT SAVED OR AGREED. " else if (isTRUE(params$provisional)) "PROVISIONAL DAMAGE FIGURES, NOT AGREED OR SOURCED. " else "", "Indicative. Households in each rivers and sea band x the band's annual chance (High ", sprintf("%.1f%%", 100 * p["high", "central"]), ", Medium ", sprintf("%.1f%%", 100 * p["medium", "central"]),
          ", Low ", sprintf("%.2f%%", 100 * p["low", "central"]), ", Very Low ", sprintf("%.3f%%", 100 * p["very_low", "central"]), " in the central case) x damage per household per flood event",
-         if (isTRUE(params$has_damage)) sprintf(" (%s central; %s%s)", fmt_gbp(params$damage[["central"]]), if (isTRUE(params$override)) "typed in for this session" else if (is.na(params$source) || !nzchar(params$source)) "source not recorded" else params$source,
+         if (isTRUE(params$has_damage)) sprintf(" (%s central; %s%s)", fmt_gbp(params$damage[["central"]]), if (isTRUE(params$override)) "typed in for this session" else if (isTRUE(params$provisional)) "provisional planning values, not from the Multi-Coloured Handbook" else if (is.na(params$source) || !nzchar(params$source)) "source not recorded" else params$source,
                                                 if (is.na(params$price_year) || !nzchar(params$price_year)) "" else paste0(", ", params$price_year)) else " (not set yet)",
          ". The low and high figures use the bottom and top of each band's range with the low and high damage together. No flood depth, property type or value is used.")
 }
