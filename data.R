@@ -975,18 +975,18 @@ fetch_area_geographies <- function(area_id = NULL) {
 # fetch_area_overlap_pairs(): every pair of areas of one kind that share people (a few thousand rows), for working out the people in a set of
 #   areas without counting a shared person twice.
 fetch_area_overlap_pairs <- function() {
-  db_query(sprintf("SELECT kind, area_id_a, area_id_b, addresses, people FROM %s", TBL_AREA_OVERLAPS))
+  db_query(sprintf("SELECT kind, area_a AS area_id_a, area_b AS area_id_b, addresses, people FROM %s", TBL_AREA_OVERLAPS))
 }
 
 fetch_area_overlaps <- function(area_id) {
   id <- gsub("[^A-Za-z0-9_.-]", "", as.character(area_id))
   db_query(sprintf("
-    SELECT o.kind, o.area_id_a, o.area_id_b, o.addresses, o.people,
+    SELECT o.kind, o.area_a AS area_id_a, o.area_b AS area_id_b, o.addresses, o.people,
            a.area_name AS name_a, b.area_name AS name_b
     FROM %s o
-    LEFT JOIN %s a ON a.kind = o.kind AND a.area_id = o.area_id_a
-    LEFT JOIN %s b ON b.kind = o.kind AND b.area_id = o.area_id_b
-    WHERE o.area_id_a = '%s' OR o.area_id_b = '%s'
+    LEFT JOIN %s a ON a.kind = o.kind AND a.area_id = o.area_a
+    LEFT JOIN %s b ON b.kind = o.kind AND b.area_id = o.area_b
+    WHERE o.area_a = '%s' OR o.area_b = '%s'
     ORDER BY o.people DESC
   ", TBL_AREA_OVERLAPS, TBL_AREA_EXPOSURE, TBL_AREA_EXPOSURE, id, id))
 }

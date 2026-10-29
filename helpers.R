@@ -1100,7 +1100,7 @@ missing_table_info <- function(msg) {
 }
 
 is_connection_error <- function(msg) {
-  grepl("Failed to connect to warehouse|Failed to perform HTTP request|Could not resolve host|Timeout was reached|Connection (refused|reset)",
+  grepl("Failed to connect to warehouse|Failed to perform HTTP request|Could not resolve host|Timeout was reached|Connection (refused|reset)|Failed to parse error body|Unexpected content type .?text/html",
         paste(as.character(msg), collapse = " "))
 }
 

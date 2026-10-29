@@ -2385,7 +2385,7 @@ server <- function(input, output, session) {
     x <- as.data.table(x)
     updateSelectInput(session, "areas_county", choices = c("All" = "", sort(unique(na.omit(x$county)))), selected = isolate(input$areas_county))
     ord <- x[order(area_name)]
-    updateSelectizeInput(session, "area_pick", selected = isolate(restored_area() %||% input$area_pick),
+    updateSelectizeInput(session, "area_pick", selected = isolate(restored_area() %||% input$area_pick), server = TRUE,
                          choices = stats::setNames(ord$area_id, sprintf("%s (%s)", ord$area_name, ifelse(ord$kind == "flood_warning", "warning", "alert"))))
   })
 
@@ -2494,7 +2494,7 @@ server <- function(input, output, session) {
     req(x, id %in% x$area_id)
     updateTabsetPanel(session, "main_tabs", selected = "Area detail")
     ord <- as.data.table(x)[order(area_name)]
-    updateSelectizeInput(session, "area_pick", selected = id,
+    updateSelectizeInput(session, "area_pick", selected = id, server = TRUE,
                          choices = stats::setNames(ord$area_id, sprintf("%s (%s)", ord$area_name, ifelse(ord$kind == "flood_warning", "warning", "alert"))))
   })
 

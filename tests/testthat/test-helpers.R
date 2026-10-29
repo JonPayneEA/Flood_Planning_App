@@ -1204,3 +1204,22 @@ test_that("the threshold board flags areas in force and potential ones, and does
   plain <- threshold_board_rows(raw, NULL, now, within_m = 1)
   expect_true(all(plain$in_force == "") && all(plain$potential == ""))
 })
+
+test_that("an HTML error page from the warehouse gateway counts as a connection error, so it is retried and not fatal", {
+  expect_true(is_connection_error("Error in `httr2::req_perform()`: ! Failed to parse error body with method defined in `req_error()`."))
+  expect_true(is_connection_error("Caused by error in `httr2::resp_body_json()`: ! Unexpected content type \"text/html\"."))
+  expect_false(is_connection_error("[TABLE_OR_VIEW_NOT_FOUND] The table or view cannot be found"))
+})
+
+test_that("the overlap queries read the columns job 35 writes (area_a and area_b)", {
+  src <- paste(readLines(file.path(app_root, "data.R"), warn = FALSE), collapse = "\n")
+  expect_false(grepl("o.area_id_a|o.area_id_b", src))
+  expect_true(grepl("o.area_a AS area_id_a", src, fixed = TRUE) && grepl("area_a AS area_id_a, area_b AS area_id_b", src, fixed = TRUE))
+})
+
+test_that("plot styling puts height on the widget and does not use the deprecated layout height", {
+  skip_if_not_installed("plotly")
+  fig <- plotly::plot_ly(x = 1:3, y = 1:3, type = "scatter", mode = "lines")
+  expect_no_warning(styled <- app_plot_style(fig, height = 240, margin = list(t = 10)))
+  expect_equal(styled$height, 240)
+})

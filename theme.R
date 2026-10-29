@@ -185,10 +185,13 @@ app_plot_axis <- function(title = NULL, grid = FALSE, ...) {
 # Applies the common look to a plotly figure.
 app_plot_style <- function(fig, ...) {
   p <- APP_PALETTE
-  plotly::layout(fig,
+  extra <- list(...)
+  # plotly deprecated height and width inside layout(): they belong on the widget
+  if (!is.null(extra$height)) { fig$height <- extra$height; extra$height <- NULL }
+  if (!is.null(extra$width)) { fig$width <- extra$width; extra$width <- NULL }
+  do.call(plotly::layout, c(list(fig,
     font = list(family = "Arial, 'Helvetica Neue', Helvetica, sans-serif", color = p$ink, size = 12),
     paper_bgcolor = "rgba(0,0,0,0)", plot_bgcolor = "rgba(0,0,0,0)",
     hoverlabel = list(bgcolor = p$navy, bordercolor = p$navy, font = list(color = "#FFFFFF", size = 12)),
-    legend = list(orientation = "h", x = 1, xanchor = "right", y = 1.04, yanchor = "bottom", font = list(size = 12, color = p$ink)),
-    ...)
+    legend = list(orientation = "h", x = 1, xanchor = "right", y = 1.04, yanchor = "bottom", font = list(size = 12, color = p$ink))), extra))
 }
