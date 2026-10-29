@@ -922,6 +922,7 @@ make_gauge_value_tab <- function() tags$div(
   tags$h1(class = "app-title", "Gauge value"),
   tags$p(class = "app-lead", "What each gauge stands behind: the indicative expected annual damage in the warning areas its thresholds belong to. Ranked by the split value."),
   uiOutput("gv_note"),
+  uiOutput("gv_econ_bar"),
   uiOutput("gv_kpis"),
   tags$div(class = "filter-row", downloadButton("download_gv", "Export CSV", class = "btn-sm btn-outline-secondary")),
   DT::dataTableOutput("gv_table"),
@@ -1158,6 +1159,7 @@ make_areas_tab <- function() tags$div(
   tags$p(class = "app-lead", "Who and what sits inside each flood warning and flood alert area, and how much of it lies in each flood risk band."),
   uiOutput("areas_note"),
   uiOutput("areas_forecast"),
+  uiOutput("areas_econ_bar"),
   tags$div(
     class = "filter-row",
     selectInput("areas_kind", "Kind", choices = c("Flood warning and alert" = "both", "Flood warning" = "flood_warning", "Flood alert" = "flood_alert"), width = "220px"),
@@ -1212,6 +1214,7 @@ make_area_detail_tab <- function() tags$div(
       tags$p(class = "app-caption", "Rivers and the sea. Surface water is not counted."),
       uiOutput("area_bands"),
       tags$h2("Expected annual damage (indicative)"),
+      uiOutput("area_econ_bar"),
       uiOutput("area_econ"),
       tags$h2("Who is vulnerable"),
       uiOutput("area_vuln"),

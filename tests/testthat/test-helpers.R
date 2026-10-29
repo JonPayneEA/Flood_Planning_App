@@ -1375,3 +1375,32 @@ test_that("the area brief carries the indicative damage sentence when it is give
   expect_match(k$summary, "Indicative expected annual damage: £1.2m\\.")
   expect_false(grepl("Indicative expected", area_brief_content(brief_area())$summary))
 })
+
+test_that("typed-in damage figures are checked, and when used every figure says so", {
+  expect_true(econ_try_validate(10000, 30000, 60000)$ok)
+  expect_false(econ_try_validate(10000, NA, 60000)$ok); expect_false(econ_try_validate(-1, 30000, 60000)$ok); expect_false(econ_try_validate(50000, 30000, 60000)$ok)
+  expect_false(econ_try_validate("abc", 1, 2)$ok)
+  p <- econ_params(econ_assump(damage = c(NA, NA, NA)))
+  expect_false(p$has_damage)
+  o <- econ_apply_override(p, econ_try_validate(10000, 30000, 60000)$damage)
+  expect_true(o$has_damage && isTRUE(o$override)); expect_equal(o$damage[["central"]], 30000)
+  expect_match(econ_basis_text(o), "^YOUR OWN DAMAGE FIGURES, NOT SAVED OR AGREED"); expect_match(econ_basis_text(o), "typed in for this session")
+  expect_no_match(econ_basis_text(econ_params(econ_assump())), "YOUR OWN")
+  ex <- data.table(area_id = "A", households_rs_high = 100, households_rs_medium = 0, households_rs_low = 0, households_rs_very_low = 0)
+  expect_equal(econ_area(ex, o)$ead_central, 100 * 0.05 * 30000)
+  expect_identical(econ_apply_override(econ_params(NULL), c(low = 1, central = 2, high = 3))$has_damage, FALSE)   # no probabilities: nothing to apply to
+})
+
+test_that("provisional damage figures fill in only when none are set, and say so", {
+  none <- econ_params(econ_assump(damage = c(NA, NA, NA)))
+  p <- econ_with_provisional(none)
+  expect_true(p$has_damage && isTRUE(p$provisional)); expect_equal(p$damage[["central"]], 30000)
+  expect_match(econ_basis_text(p), "^PROVISIONAL DAMAGE FIGURES, NOT AGREED OR SOURCED"); expect_match(econ_basis_text(p), "not from the Multi-Coloured Handbook")
+  set <- econ_with_provisional(econ_params(econ_assump()))                                  # figures in the table are used as they are
+  expect_false(isTRUE(set$provisional)); expect_equal(set$damage[["central"]], 30000)
+  expect_no_match(econ_basis_text(set), "PROVISIONAL")
+  expect_false(isTRUE(econ_with_provisional(econ_params(NULL))$has_damage))               # no probabilities: nothing to apply to
+  o <- econ_apply_override(p, c(low = 1, central = 2, high = 3))                          # the user's own figures replace the provisional ones, and say so
+  expect_false(isTRUE(o$provisional)); expect_match(econ_basis_text(o), "^YOUR OWN")
+  expect_true(all(ECON_PROVISIONAL_DAMAGE == sort(ECON_PROVISIONAL_DAMAGE)))
+})
