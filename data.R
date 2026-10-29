@@ -899,6 +899,20 @@ fetch_coverage_span <- function() {
 
 # fetch_area_episodes(): every alert or warning issued for one area (the same episodes as above, by area instead of by constituency), for the
 #   area detail page's warning issue history. end_time is NULL while an episode is open. The id reaches the SQL as safe characters only.
+# ---- Economics (FGS_Notebooks job 38) ---------------------------------------------------------------------------------------------
+fetch_econ_assumptions <- function() {
+  db_query(sprintf("SELECT item, scenario, value, unit, source, price_year, note FROM %s", TBL_ECON_ASSUMPTIONS))
+}
+
+# fetch_gauge_area_links(): which warning areas each gauge's thresholds belong to (job 28), one row per area and gauge measure.
+fetch_gauge_area_links <- function() {
+  db_query(sprintf("
+    SELECT DISTINCT t.target_area AS area_id, t.measure_uri, r.station_label AS gauge, r.river_name AS river
+    FROM (SELECT * FROM %s WHERE link_status IN ('linked', 'linked_chosen') AND target_area IS NOT NULL) t
+    LEFT JOIN %s r ON r.measure_uri = t.measure_uri
+  ", TBL_FW_THRESHOLDS, TBL_RT_REGISTER))
+}
+
 # ---- Rapid Flood Guidance (FGS_Notebooks jobs 36 and 37) ---------------------------------------------------------------------
 # The update id reaches the SQL as safe characters only (ids are numbers, or none_<time> for a "no guidance" state).
 rfg_key_safe <- function(update_key) gsub("[^A-Za-z0-9_.:-]", "", as.character(update_key))
@@ -1685,6 +1699,8 @@ fetch_area_constituency_links      <- with_cache(fetch_area_constituency_links, 
 fetch_area_sites                   <- with_cache(fetch_area_sites,                   "area_sites", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_area_geographies              <- with_cache(fetch_area_geographies,              "area_geographies", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_area_overlap_pairs            <- with_cache(fetch_area_overlap_pairs,            "area_pairs", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
+fetch_econ_assumptions               <- with_cache(fetch_econ_assumptions,               "econ_assumptions", ttl = min(CACHE_TTL_SECONDS, 120))
+fetch_gauge_area_links              <- with_cache(fetch_gauge_area_links,              "gauge_area_links", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_rfg_updates                   <- with_cache(fetch_rfg_updates,                   "rfg_updates", ttl = min(CACHE_TTL_SECONDS, 60))
 fetch_rfg_totals                    <- with_cache(fetch_rfg_totals,                    "rfg_totals", ttl = min(CACHE_TTL_SECONDS, 60))
 fetch_rfg_polygons                  <- with_cache(fetch_rfg_polygons,                  "rfg_polygons", ttl = min(CACHE_TTL_SECONDS, 300), group = "geometry")

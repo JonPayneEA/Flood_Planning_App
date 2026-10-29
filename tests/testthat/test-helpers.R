@@ -1316,3 +1316,62 @@ test_that("area_history_summary counts the issues and the time in force by area,
   expect_equal(nrow(area_history_summary(h, "2030-01-01", "2030-12-31")), 0L); expect_equal(nrow(area_history_summary(NULL)), 0L)
   expect_equal(fmt_span(c(NA, 45, 200, 3000)), c("", "45 min", "3 h 20 min", "2 d 2 h"))
 })
+
+# ---- economics ------------------------------------------------------------------------------------------------------------
+econ_assump <- function(damage = c(10000, 30000, 60000)) {
+  p <- list(high = c(0.033, 0.05, 0.10), medium = c(0.01, 0.0182, 0.033), low = c(0.001, 0.00316, 0.01), very_low = c(0.0001, 0.000316, 0.001))
+  rows <- do.call(rbind, lapply(names(p), function(b) data.frame(item = paste0("prob_", b), scenario = c("low", "central", "high"), value = p[[b]], source = NA, price_year = NA)))
+  rbind(rows, data.frame(item = "damage_per_household", scenario = c("low", "central", "high"), value = damage, source = "MCM test", price_year = "2024"))
+}
+
+test_that("econ_params reads the table, and anything missing stays NA", {
+  p <- econ_params(econ_assump())
+  expect_true(p$has_prob && p$has_damage); expect_equal(p$prob["high", "central"], 0.05); expect_equal(p$damage[["high"]], 60000); expect_equal(p$source, "MCM test")
+  q <- econ_params(econ_assump(damage = c(NA, NA, NA)))
+  expect_true(q$has_prob); expect_false(q$has_damage)
+  r <- econ_params(NULL); expect_false(r$has_prob); expect_false(r$has_damage)
+  expect_false(econ_params(econ_assump()[-1, ])$has_prob)                      # one probability missing
+})
+
+test_that("expected annual damage is households x band probability x damage, in three scenarios that vary together", {
+  ex <- data.table(area_id = c("A", "B"), households_rs_high = c(100, 0), households_rs_medium = c(200, 0), households_rs_low = c(0, 1000), households_rs_very_low = c(0, 0))
+  e <- econ_area(ex, econ_params(econ_assump()))
+  expect_equal(e$ehh_central[1], 100 * 0.05 + 200 * 0.0182)
+  expect_equal(e$ead_central[1], (100 * 0.05 + 200 * 0.0182) * 30000)
+  expect_equal(e$ead_low[1], (100 * 0.033 + 200 * 0.01) * 10000); expect_equal(e$ead_high[1], (100 * 0.10 + 200 * 0.033) * 60000)
+  expect_true(all(e$ead_low <= e$ead_central & e$ead_central <= e$ead_high))
+  n <- econ_area(ex, econ_params(econ_assump(damage = c(NA, NA, NA))))           # no damage figures: expected households, no pounds
+  expect_true(all(is.na(n$ead_central))); expect_equal(n$ehh_central, e$ehh_central)
+  expect_true(all(is.na(econ_area(ex, econ_params(NULL))$ehh_central)))
+  expect_equal(nrow(econ_area(NULL, econ_params(econ_assump()))), 0L); expect_equal(nrow(econ_area(data.table(area_id = "A"), econ_params(econ_assump()))), 0L)
+})
+
+test_that("a gauge's value is gross (every area it drives) and split (an area shared between its gauges), and the split adds up", {
+  ex <- data.table(area_id = c("A", "B", "C"), people = c(500, 300, 100), households_rs_high = c(100, 40, 0), households_rs_medium = 0, households_rs_low = 0, households_rs_very_low = 0)
+  ea <- econ_area(ex, econ_params(econ_assump()))
+  links <- data.table(area_id = c("A", "A", "B", "C"), measure_uri = c("g1", "g2", "g1", "g3"), gauge = c("One", "Two", "One", "Three"), river = "R")
+  gv <- econ_gauge_value(links, ea, ex)
+  g1 <- gv[measure_uri == "g1"]; g2 <- gv[measure_uri == "g2"]
+  a <- ea[area_id == "A"]$ead_central; b <- ea[area_id == "B"]$ead_central
+  expect_equal(g1$gross_central, a + b); expect_equal(g1$split_central, a / 2 + b)
+  expect_equal(g2$gross_central, a); expect_equal(g2$split_central, a / 2)
+  expect_equal(g1$areas, 2L); expect_equal(g1$sole_areas, 1L); expect_equal(g2$sole_areas, 0L); expect_equal(g1$people, 800)
+  expect_equal(sum(gv$split_central), sum(ea$ead_central))                           # the split figures add up to the total
+  expect_equal(gv$measure_uri[1], "g1")                                              # ranked by split, largest first
+  expect_equal(nrow(econ_gauge_value(NULL, ea, ex)), 0L)
+  none <- econ_gauge_value(links, econ_area(ex, econ_params(econ_assump(damage = c(NA, NA, NA)))), ex)
+  expect_true(all(is.na(none$split_central))); expect_equal(none$measure_uri[1], "g1")   # ranked by expected households when there are no pounds
+})
+
+test_that("pounds are written short, and the range text falls back when the damage is not set", {
+  expect_equal(fmt_gbp(c(NA, 850, 12300, 250000, 1260000)), c("", "£850", "£12.3k", "£250k", "£1.3m"))
+  expect_equal(econ_range_text(4e5, 1.2e6, 3.1e6), "£1.2m (range £400k to £3.1m)")
+  expect_match(econ_range_text(NA, NA, NA, 3.4), "3.4 households a year \\(no pound figure yet\\)"); expect_equal(econ_range_text(NA, NA, NA, NA), "")
+  expect_match(econ_basis_text(econ_params(econ_assump())), "Indicative"); expect_match(econ_basis_text(econ_params(NULL)), "not available")
+})
+
+test_that("the area brief carries the indicative damage sentence when it is given", {
+  k <- area_brief_content(brief_area(), NULL, NULL, NA_character_, econ = "Indicative expected annual damage: £1.2m.")
+  expect_match(k$summary, "Indicative expected annual damage: £1.2m\\.")
+  expect_false(grepl("Indicative expected", area_brief_content(brief_area())$summary))
+})

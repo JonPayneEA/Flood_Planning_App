@@ -48,12 +48,12 @@ GUIDE_TABLES <- data.frame(
             "ea_area_constituency_lookup", "mp_contact_details",
             "fgs_constituency_changes", "fgs_changes_log", "constituency_flood_situation", "mp_briefing_drafts",
             "fgs_constituency_exposure", "pipeline_health", "ea_warning_episodes",
-            "ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_readings_bronze", "ea_warning_fgs_coverage", "ea_rt_measures_mapped", "ea_rt_latest", "flood_warnings_current", "ea_fw_threshold_gauge_links", "ea_area_exposure", "ea_area_overlaps", "ea_area_coverage", "constituency_flood_exposure", "exposure_grid_100m", "ea_area_sites", "ea_area_geographies", "constituency_sites", "rfg_updates", "rfg_polygons", "rfg_polygon_exposure", "rfg_polygon_constituencies", "rfg_polygon_areas", "rfg_polygon_sites"),
-  notebook = c("01", "01", "07", "07", "03", "03", "05", "06", "04", "18", "18", "19", "20", "21", "22", "25", "09", "23", "10", "26", "16", "23", "11", "28", "35", "35", "35", "35", "34", "35", "35", "35", "36", "36", "37", "37", "37", "37"),
+            "ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_readings_bronze", "ea_warning_fgs_coverage", "ea_rt_measures_mapped", "ea_rt_latest", "flood_warnings_current", "ea_fw_threshold_gauge_links", "ea_area_exposure", "ea_area_overlaps", "ea_area_coverage", "constituency_flood_exposure", "exposure_grid_100m", "ea_area_sites", "ea_area_geographies", "constituency_sites", "rfg_updates", "rfg_polygons", "rfg_polygon_exposure", "rfg_polygon_constituencies", "rfg_polygon_areas", "rfg_polygon_sites", "economics_assumptions"),
+  notebook = c("01", "01", "07", "07", "03", "03", "05", "06", "04", "18", "18", "19", "20", "21", "22", "25", "09", "23", "10", "26", "16", "23", "11", "28", "35", "35", "35", "35", "34", "35", "35", "35", "36", "36", "37", "37", "37", "37", "38"),
   refresh = c("Each FGS issue or amendment", "Each FGS issue or amendment", "Each FGS issue", "Each FGS issue",
               "Weekly", "Weekly", "Quarterly, or after an election", "Weekly and quarterly", "Weekly",
               "Every poll", "Every poll", "Every poll", "Every poll", "Daily", "Every poll", "Every poll",
-              "Weekly", "Every 15 minutes", "Daily", "Daily", "When the mapping file changes", "Every 15 minutes", "Every poll", "Manual, when the mapping or thresholds change", "Manual, when the hazard maps or address points change", "Manual, with the table above", "Manual, with the table above", "Manual, with the table above", "Manual, after notebooks 30 to 33", "Manual, with the table above", "Manual, with the table above", "Manual, with the table above", "Every poll, all day", "Every poll, all day", "When an update is stored", "When an update is stored", "When an update is stored", "When an update is stored"),
+              "Weekly", "Every 15 minutes", "Daily", "Daily", "When the mapping file changes", "Every 15 minutes", "Every poll", "Manual, when the mapping or thresholds change", "Manual, when the hazard maps or address points change", "Manual, with the table above", "Manual, with the table above", "Manual, with the table above", "Manual, after notebooks 30 to 33", "Manual, with the table above", "Manual, with the table above", "Manual, with the table above", "Every poll, all day", "Every poll, all day", "When an update is stored", "When an update is stored", "When an update is stored", "When an update is stored", "By hand; job 38 only adds missing rows"),
   holds = c("One row per statement: the headline and the forecast text.",
             "One row per risk polygon, flood source and day, with impact, likelihood and risk level.",
             "Each FGS shape that overlaps an EA flood warning or alert area.",
@@ -91,7 +91,8 @@ GUIDE_TABLES <- data.frame(
             "Per valid polygon: addresses, people, households, over 65s, people by rivers and sea band, surface water band and Flood Zone 3, and the Census vulnerability counts. Restricted schema.",
             "Each polygon split by constituency, with the people in each. Restricted schema.",
             "The people of each polygon inside each warning or alert area. A person in two areas of one kind is in both. Restricted schema.",
-            "The critical sites inside each polygon, with their rivers and sea band. Restricted schema."),
+            "The critical sites inside each polygon, with their rivers and sea band. Restricted schema.",
+            "The probability of each flood band and the damage per household per flood event, each low, central and high, behind the indicative expected annual damage. The damage figures are set by hand."),
   stringsAsFactors = FALSE
 )
 
@@ -490,6 +491,27 @@ guide_products <- function(s) {
         "Counted from address points, shared out from Census output areas, so a polygon of a few streets is an estimate.",
         "Rapid flood guidance is short lived. An update is superseded when a newer one, or a no-guidance state, is stored.",
         "The figures are restricted. Small counts are shown as they are held; treat them with care before sharing."
+      )
+    ),
+
+    list(
+      id = "gauge-value", title = "Gauge value and expected annual damage", where = "Gauge value",
+      answers = "What is the indicative expected annual damage in each warning area, and which gauges stand behind the most of it?",
+      tables = c("economics_assumptions", "ea_area_exposure", "ea_fw_threshold_gauge_links"),
+      steps = c(
+        "For each area the app takes the households in each rivers and sea band (from notebook 35), multiplies each by the band's annual probability and by the damage per household per flood event, and adds the four bands. That is the expected annual damage.",
+        "Three versions are worked out together: low uses the bottom of each band's probability range with the low damage, central the middle with the central damage, high the top with the high damage. The probabilities and damage figures are in the assumptions table (notebook 38), and the damage figures are set by hand.",
+        "A gauge's thresholds belong to flood warning areas (notebook 28). A gauge's value is the value of those areas. Gross is all of it; split shares an area between the gauges that drive it, so split figures add up. Gauges are ranked by split."
+      ),
+      read = c(
+        "Every figure is indicative. It uses no flood depth, property type or property value, only the band a household sits in.",
+        "Until the damage figures are set, no pound figure is shown and gauges are ranked by the households expected to flood in a year.",
+        "Gross figures count an area once for each gauge that drives it, so do not add them across gauges."
+      ),
+      limits = c(
+        "The High band has no upper limit and the Very Low band no lower limit, so the probabilities use a cap and a floor. They are shown on screen.",
+        "Value behind a gauge says what depends on it. It does not show the gauge prevents that damage.",
+        "Critical sites and non-residential property are not valued."
       )
     ),
 

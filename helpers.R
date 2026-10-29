@@ -1124,7 +1124,7 @@ PIPELINE_TABLE_JOBS <- c(
   fgs_constituency_changes = 18L, constituency_flood_situation = 19L, mp_briefing_drafts = 20L,
   fgs_constituency_exposure = 21L, pipeline_health = 22L, flood_warnings_current = 11L, ea_fw_threshold_gauge_links = 28L, ea_warning_episodes = 25L, ea_warning_fgs_coverage = 26L, ea_rt_measure_register = 9L, ea_rt_readings_all = 23L, ea_rt_latest = 23L, ea_rt_readings_bronze = 10L, fgs_constituency_mp_contacts = 14L,
   flood_warning_constituency_contacts = 13L, fgs_constituency_intersections = 7L,
-  rfg_updates = 36L, rfg_polygons = 36L, rfg_polygon_exposure = 37L, rfg_polygon_constituencies = 37L, rfg_polygon_areas = 37L, rfg_polygon_sites = 37L,
+  economics_assumptions = 38L, rfg_updates = 36L, rfg_polygons = 36L, rfg_polygon_exposure = 37L, rfg_polygon_constituencies = 37L, rfg_polygon_areas = 37L, rfg_polygon_sites = 37L,
   fgs_ea_area_intersections = 7L, ea_area_constituency_lookup = 6L, ea_area_exposure = 35L, ea_area_overlaps = 35L, ea_area_coverage = 35L, constituency_sites = 35L, ea_area_sites = 35L, ea_area_geographies = 35L, exposure_grid_100m = 34L, constituency_flood_exposure = 35L)
 
 missing_table_info <- function(msg) {
@@ -1522,6 +1522,105 @@ FLOOD_BANDS <- data.frame(
   range  = c("over 3.3% a year", "1 to 3.3%", "0.1 to 1%", "under 0.1%"),
   stringsAsFactors = FALSE)
 
+# ---- Economics: indicative expected annual damage -------------------------------------------------------------------------------
+# expected annual damage = households in each rivers and sea band x the band's annual probability x the damage per household per flood event, summed
+# over the four bands, in three scenarios (low, central, high) that vary together. No flood depth, property type or value is used, so it is indicative.
+# The probabilities and damage figures come from the economics_assumptions table (FGS_Notebooks job 38); the damage figures are set by hand.
+ECON_BANDS <- c("high", "medium", "low", "very_low")
+ECON_SCENARIOS <- c("low", "central", "high")
+
+# econ_params(): the assumptions table (item, scenario, value, source, price_year) as a list: prob (4 bands x 3 scenarios), damage (3), whether each is
+#   complete, and the source and price year of the damage figure. Anything missing stays NA, so nothing is guessed.
+econ_params <- function(assump) {
+  prob <- matrix(NA_real_, 4L, 3L, dimnames = list(ECON_BANDS, ECON_SCENARIOS))
+  damage <- stats::setNames(rep(NA_real_, 3L), ECON_SCENARIOS)
+  source <- NA_character_; price_year <- NA_character_
+  if (!is.null(assump) && nrow(assump) > 0L) {
+    a <- as.data.frame(assump)
+    a$value <- suppressWarnings(as.numeric(a$value))
+    for (b in ECON_BANDS) for (s in ECON_SCENARIOS) {
+      v <- a$value[a$item == paste0("prob_", b) & a$scenario == s]
+      if (length(v) >= 1L) prob[b, s] <- v[1L]
+    }
+    for (s in ECON_SCENARIOS) {
+      v <- a$value[a$item == "damage_per_household" & a$scenario == s]
+      if (length(v) >= 1L) damage[[s]] <- v[1L]
+    }
+    d <- a[a$item == "damage_per_household" & a$scenario == "central", , drop = FALSE]
+    if (nrow(d) > 0L) { source <- as.character(d$source[1L]); price_year <- as.character(d$price_year[1L]) }
+  }
+  list(prob = prob, damage = damage, has_prob = !anyNA(prob), has_damage = !anyNA(damage), source = source, price_year = price_year)
+}
+
+# econ_area(): per area, the expected number of households flooded in a year (ehh_*) and the expected annual damage in pounds (ead_*), low, central and high.
+#   `ex` is the exposure table (area_id and households_rs_high, _medium, _low, _very_low). ead_* is NA until the damage figures are set; ehh_* needs only
+#   the probabilities, so a ranking is possible before then.
+econ_area <- function(ex, params) {
+  cols <- paste0("households_rs_", ECON_BANDS)
+  out <- data.table::data.table(area_id = character(), ehh_low = numeric(), ehh_central = numeric(), ehh_high = numeric(),
+                                ead_low = numeric(), ead_central = numeric(), ead_high = numeric())
+  if (is.null(ex) || nrow(ex) == 0L || !all(cols %in% names(ex))) return(out)
+  x <- data.table::as.data.table(ex)
+  H <- as.matrix(x[, cols, with = FALSE]); H[is.na(H)] <- 0
+  ehh <- if (isTRUE(params$has_prob)) H %*% params$prob else matrix(NA_real_, nrow(H), 3L)
+  ead <- if (isTRUE(params$has_prob) && isTRUE(params$has_damage)) sweep(ehh, 2L, params$damage, `*`) else matrix(NA_real_, nrow(H), 3L)
+  data.table::data.table(area_id = as.character(x$area_id), ehh_low = ehh[, 1L], ehh_central = ehh[, 2L], ehh_high = ehh[, 3L],
+                         ead_low = ead[, 1L], ead_central = ead[, 2L], ead_high = ead[, 3L])
+}
+
+# fmt_gbp(): pounds in a short form: 850 -> "£850", 12300 -> "£12k", 1250000 -> "£1.3m". NA gives an empty string.
+fmt_gbp <- function(x) {
+  x <- as.numeric(x)
+  vapply(x, function(v) {
+    if (is.na(v)) return("")
+    if (v < 1000) return(sprintf("\u00a3%d", as.integer(round(v))))
+    if (v < 100000) return(sprintf("\u00a3%.1fk", v / 1000))
+    if (v < 1e6) return(sprintf("\u00a3%dk", as.integer(round(v / 1000))))
+    sprintf("\u00a3%.1fm", v / 1e6)
+  }, character(1))
+}
+
+# econ_range_text(): "£1.2m (range £0.4m to £3.1m)", or the expected flooded households when the damage figures are not set.
+econ_range_text <- function(low, central, high, ehh_central = NA_real_) {
+  ifelse(is.na(central),
+         ifelse(is.na(ehh_central), "", sprintf("%s households a year (no pound figure yet)", format(signif(ehh_central, 2), trim = TRUE))),
+         sprintf("%s (range %s to %s)", fmt_gbp(central), fmt_gbp(low), fmt_gbp(high)))
+}
+
+# econ_basis_text(): one sentence naming the basis, for the foot of every figure.
+econ_basis_text <- function(params) {
+  if (!isTRUE(params$has_prob)) return("The assumptions are not available yet (pipeline notebook 38).")
+  p <- params$prob
+  paste0("Indicative. Households in each rivers and sea band x the band's annual chance (High ", sprintf("%.1f%%", 100 * p["high", "central"]), ", Medium ", sprintf("%.1f%%", 100 * p["medium", "central"]),
+         ", Low ", sprintf("%.2f%%", 100 * p["low", "central"]), ", Very Low ", sprintf("%.3f%%", 100 * p["very_low", "central"]), " in the central case) x damage per household per flood event",
+         if (isTRUE(params$has_damage)) sprintf(" (%s central; %s%s)", fmt_gbp(params$damage[["central"]]), if (is.na(params$source) || !nzchar(params$source)) "source not recorded" else params$source,
+                                                if (is.na(params$price_year) || !nzchar(params$price_year)) "" else paste0(", ", params$price_year)) else " (not set yet)",
+         ". The low and high figures use the bottom and top of each band's range with the low and high damage together. No flood depth, property type or value is used.")
+}
+
+# econ_gauge_value(): what each gauge stands behind. `links` is fetch_gauge_area_links() (area_id, measure_uri, gauge, river): the warning areas each gauge's
+#   thresholds belong to. `ea` is econ_area(), `ex` the exposure table (area_id, people). Gross is the full value of every area the gauge drives; split shares
+#   an area's value equally between the gauges that drive it, so split figures add up. Rank by split.
+econ_gauge_value <- function(links, ea, ex) {
+  empty <- data.table::data.table(measure_uri = character(), gauge = character(), river = character(), areas = integer(), sole_areas = integer(), people = numeric(),
+                                  gross_low = numeric(), gross_central = numeric(), gross_high = numeric(), split_low = numeric(), split_central = numeric(), split_high = numeric(),
+                                  ehh_gross = numeric(), ehh_split = numeric())
+  if (is.null(links) || nrow(links) == 0L || is.null(ea) || nrow(ea) == 0L) return(empty)
+  l <- unique(data.table::as.data.table(links)[!is.na(area_id) & !is.na(measure_uri), .(area_id, measure_uri, gauge, river)], by = c("area_id", "measure_uri"))
+  l[, n_g := .N, by = area_id]
+  l <- merge(l, ea, by = "area_id", all = FALSE)
+  if (nrow(l) == 0L) return(empty)
+  e <- data.table::as.data.table(ex)
+  l[, people := e$people[match(area_id, e$area_id)]]
+  out <- l[, list(gauge = { g <- gauge[!is.na(gauge) & nzchar(gauge)]; if (length(g)) g[1L] else NA_character_ },
+                  river = { r <- river[!is.na(river) & nzchar(river)]; if (length(r)) r[1L] else NA_character_ },
+                  areas = .N, sole_areas = sum(n_g == 1L), people = sum(people, na.rm = TRUE),
+                  gross_low = sum(ead_low), gross_central = sum(ead_central), gross_high = sum(ead_high),
+                  split_low = sum(ead_low / n_g), split_central = sum(ead_central / n_g), split_high = sum(ead_high / n_g),
+                  ehh_gross = sum(ehh_central), ehh_split = sum(ehh_central / n_g)), by = measure_uri]
+  out[order(-(if (all(is.na(out$split_central))) ehh_split else split_central), -areas)]
+}
+
 # ---- Rapid Flood Guidance ----------------------------------------------------------------------------------------------------
 # rfg_current(): the newest update as a one-row list when guidance is in force (is_present), else NULL. `upd` is fetch_rfg_updates(), newest first.
 rfg_current <- function(upd) {
@@ -1690,7 +1789,7 @@ bookmark_noise <- function(input_names) {
 # the grid package that ships with R, so no extra package or browser is needed on the server. `a` is the area's row from the exposure table,
 # `sites` its sites (name, site_type, band, rofrs_rank; NULL when not built), `geos` its responder rows (geography, name, code, people; NULL when
 # not built) and `cons` its constituency names as one string.
-area_brief_content <- function(a, sites = NULL, geos = NULL, cons = NA_character_, generated = Sys.time()) {
+area_brief_content <- function(a, sites = NULL, geos = NULL, cons = NA_character_, generated = Sys.time(), econ = NULL) {
   n <- function(v) ifelse(is.na(v), "none", formatC(round(as.numeric(v)), format = "d", big.mark = ","))
   pct <- function(v) sprintf("%.0f%%", 100 * as.numeric(v))
   has <- function(col) length(a[[col]]) == 1L && !is.na(a[[col]])
@@ -1730,7 +1829,8 @@ area_brief_content <- function(a, sites = NULL, geos = NULL, cons = NA_character
                       label = c("people", "households", sprintf("aged 65 or over (%s)", pct(a$over65 / max(a$people, 1))),
                                 "in the most deprived 20% of neighbourhoods", "critical sites"), stringsAsFactors = FALSE),
     summary = paste0(n(a$people_rs_high_medium), " people (", pct(a$share_people_high_medium), ") and ", n(a$households_rs_high_medium),
-                     " households are in a High or Medium band for flooding from rivers and the sea. ", n(a$people_shared), " people are also in another area of this kind."),
+                     " households are in a High or Medium band for flooding from rivers and the sea. ", n(a$people_shared), " people are also in another area of this kind.",
+                     if (!is.null(econ) && nzchar(econ)) paste0(" ", econ) else ""),
     bands = bands, sites = site_rows, sites_note = sites_note, responders = resp, responders_note = resp_note,
     constituencies = if (is.na(cons) || !nzchar(cons)) "Not available." else cons,
     footer = paste0("Rivers and the sea only: surface water is not counted. People are the Census 2021 output area total shared among the addresses in it, ",

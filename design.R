@@ -75,6 +75,7 @@ APP_SECTIONS <- list(
   list(id = "observed", label = "Observed",
        intro = "What the Environment Agency's gauges are recording.",
        views = list(list(value = "Gauges near thresholds", label = "Gauges near thresholds"),
+                    list(value = "Gauge value", label = "Gauge value"),
                     list(value = "Rain gauges",  label = "Rain gauges"),
                     list(value = "Hydrometrics", label = "River levels and flows"))),
   list(id = "history", label = "History",

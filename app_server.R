@@ -1442,7 +1442,7 @@ server <- function(input, output, session) {
     "area_row_click", "download_ea_areas", "download_situation",
     "copy_link_click", "goto_gauge", "area_open", "areas_open_selected", "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas",
     "download_areas", "download_const_exp", "download_const_brief", "download_exp_bands", "download_exp_responders", "download_area_cells", "download_area_issues",
-    "download_area_brief", "download_area_sites", "download_tb", "download_ah", "download_ah_detail",
+    "download_area_brief", "download_area_sites", "download_tb", "download_ah", "download_ah_detail", "download_gv",
     "situation_table_rows_selected", "situation_table_row_last_clicked",
     "situation_table_cell_clicked", "situation_table_rows_current",
     "situation_table_rows_all", "situation_table_state", "situation_table_search",
@@ -2638,6 +2638,7 @@ server <- function(input, output, session) {
   # ---- Warning areas (FGS_Notebooks job 35) --------------------------------------------------------------
   areas_started <- reactive(input$main_tabs %in% c("Warning areas", "Target Area"))
 
+
   areas_all <- reactive({
     req(areas_started())
     safe_fetch(fetch_area_exposure)
@@ -2661,6 +2662,11 @@ server <- function(input, output, session) {
     }
   })
 
+  # ---- Economics: the indicative expected annual damage (assumptions from FGS_Notebooks job 38) ----------------------------------
+  econ_assump_d <- reactive(tryCatch(as.data.table(fetch_econ_assumptions()), error = function(e) NULL))
+  econ_p <- reactive(econ_params(econ_assump_d()))
+  econ_area_d <- reactive({ x <- areas_all(); req(x); econ_area(x, econ_p()) })
+
   areas_table_data <- reactive({
     x <- areas_all()
     req(x, input$areas_kind, input$areas_source, input$areas_sort)
@@ -2669,6 +2675,9 @@ server <- function(input, output, session) {
     if (nzchar(input$areas_county %||% "")) x <- x[county == input$areas_county]
     if (input$areas_source != "any") x <- x[grepl(input$areas_source, area_source, fixed = TRUE)]
     if (nzchar(trimws(input$areas_search %||% ""))) x <- x[grepl(trimws(input$areas_search), area_name, ignore.case = TRUE, fixed = TRUE)]
+    x <- data.table::copy(x)
+    ec <- tryCatch(econ_area_d(), error = function(e) NULL)
+    x[, econ_sort := if (is.null(ec)) NA_real_ else { v <- ec$ead_central[match(area_id, ec$area_id)]; if (all(is.na(v))) ec$ehh_central[match(area_id, ec$area_id)] else v }]
     if (input$areas_sort == "area_name") x[order(area_name)] else x[order(-get(input$areas_sort), area_name, na.last = TRUE)]
   })
 
@@ -2716,6 +2725,10 @@ server <- function(input, output, session) {
   areas_display <- function(x) {
     ic <- areas_issue_counts()
     issued <- if (is.null(ic)) rep(NA_integer_, nrow(x)) else { n <- ic$issued_12m[match(x$area_id, ic$area_id)]; as.integer(ifelse(is.na(n), 0L, n)) }
+    ec <- tryCatch(econ_area_d(), error = function(e) NULL)
+    m <- if (is.null(ec)) rep(NA_integer_, nrow(x)) else match(x$area_id, ec$area_id)
+    ead_c <- if (is.null(ec)) rep(NA_real_, nrow(x)) else round(ec$ead_central[m])
+    ead_r <- if (is.null(ec)) rep("", nrow(x)) else ifelse(is.na(ec$ead_central[m]), "", sprintf("%s to %s", fmt_gbp(ec$ead_low[m]), fmt_gbp(ec$ead_high[m])))
     data.table(
       Area = vapply(seq_len(nrow(x)), function(i) area_open_link(x$area_id[i], x$area_name[i]), character(1)),
       Kind = ifelse(x$kind == "flood_warning", "Warning", "Alert"),
@@ -2725,7 +2738,8 @@ server <- function(input, output, session) {
       `Households at High or Medium` = round(x$households_rs_high_medium),
       `Critical sites` = x$sites,
       `Risk score` = score_bar_html(x$risk_score),
-      `Issued, last 12 months` = issued)
+      `Issued, last 12 months` = issued,
+      `Expected annual damage (central)` = ead_c, `Range, low to high` = ead_r)
   }
 
   output$areas_table <- DT::renderDataTable({
@@ -2735,7 +2749,8 @@ server <- function(input, output, session) {
                   options = list(pageLength = 15, scrollX = TRUE, dom = "tip", order = list(),
                                  columnDefs = list(list(orderable = FALSE, targets = c(0L, 5L, 8L))),
                                  language = list(info = "Showing _START_ to _END_ of _TOTAL_ areas"))) |>
-      DT::formatRound(c("People", "Aged 65+", "Households at High or Medium"), digits = 0, mark = ",")
+      DT::formatRound(c("People", "Aged 65+", "Households at High or Medium"), digits = 0, mark = ",") |>
+      DT::formatCurrency("Expected annual damage (central)", currency = "\u00a3", digits = 0)
   })
 
   # The row selected in the table: its written description and the areas that share people with it sit below the table.
@@ -2868,6 +2883,22 @@ server <- function(input, output, session) {
       tags$tbody(rows)),
       tags$p(class = "app-caption", sprintf("%s people live outside every band. Unique to this area, not shared with another area of its kind: %s people; split evenly across overlaps: %s.",
                                             area_n(none), area_n(a$people_unique), area_n(a$people_split))))
+  })
+
+  output$area_econ <- renderUI({
+    a <- tryCatch(area_sel(), error = function(e) NULL); req(a)
+    p <- econ_p()
+    if (!isTRUE(p$has_prob)) return(tags$p(class = "text-muted", "Not available yet. It needs the assumptions table (pipeline notebook 38)."))
+    e <- econ_area(a, p)
+    n <- function(v) formatC(round(as.numeric(v)), format = "d", big.mark = ",")
+    tile <- function(big, small) tags$div(tags$b(big), tags$span(small))
+    tags$div(
+      if (isTRUE(p$has_damage))
+        tags$div(class = "kpi-row", tile(fmt_gbp(e$ead_low), "low"), tile(fmt_gbp(e$ead_central), "central"), tile(fmt_gbp(e$ead_high), "high"))
+      else
+        tags$div(tags$p(sprintf("About %s households a year are expected to flood in this area (central case, from the band probabilities).", format(signif(e$ehh_central, 2), trim = TRUE))),
+                 tags$p(class = "text-muted", "No pound figure yet: the damage per household has not been set in the assumptions table (pipeline notebook 38).")),
+      tags$p(class = "app-caption", sprintf("Households by band: High %s, Medium %s, Low %s, Very Low %s. ", n(a$households_rs_high), n(a$households_rs_medium), n(a$households_rs_low), n(a$households_rs_very_low)), econ_basis_text(p)))
   })
 
   output$area_vuln <- renderUI({
@@ -3053,6 +3084,99 @@ server <- function(input, output, session) {
     filename = function() sprintf("area_%s_issue_history_%s.csv", gsub("[^A-Za-z0-9_.-]", "", input$area_pick %||% "none"), format(Sys.Date(), "%Y%m%d")),
     content = function(file) data.table::fwrite(tryCatch(area_issue_rows(), error = function(e) data.table()), file, bom = TRUE))
 
+  # ---- Gauge value ---------------------------------------------------------------------------------------------------------------
+  gv_open <- reactive(input$main_tabs %in% c("Gauge value", "Gauges near thresholds"))
+  gv_links <- reactive({ req(gv_open()); tryCatch(as.data.table(fetch_gauge_area_links()), error = function(e) NULL) })
+  gv_ex <- reactive({ req(gv_open()); tryCatch(as.data.table(fetch_area_exposure()), error = function(e) NULL) })
+  gv_ea <- reactive({ ex <- gv_ex(); req(!is.null(ex)); econ_area(ex, econ_p()) })
+  gv_data <- reactive({
+    l <- gv_links(); ex <- gv_ex(); req(!is.null(l), !is.null(ex))
+    econ_gauge_value(l, gv_ea(), ex)
+  })
+  gv_money <- reactive(isTRUE(econ_p()$has_prob) && isTRUE(econ_p()$has_damage))
+
+  output$gv_note <- renderUI({
+    if (!identical(input$main_tabs, "Gauge value")) return(NULL)
+    if (is.null(gv_links())) return(tags$p(class = "text-muted", "The links from gauges to warning areas could not be loaded (pipeline notebook 28)."))
+    if (!isTRUE(econ_p()$has_prob)) return(tags$p(class = "text-muted", "The assumptions are not available yet (pipeline notebook 38)."))
+    if (!gv_money()) return(tags$p(class = "text-muted", "No pound figure yet: the damage per household has not been set in the assumptions table (pipeline notebook 38). Gauges are ranked by the households expected to flood in a year in the areas they drive."))
+    NULL
+  })
+
+  output$gv_kpis <- renderUI({
+    g <- tryCatch(gv_data(), error = function(e) NULL); req(!is.null(g), nrow(g) > 0L)
+    n <- function(v) formatC(round(as.numeric(v)), format = "d", big.mark = ",")
+    tile <- function(big, small) tags$div(tags$b(big), tags$span(small))
+    tags$div(class = "kpi-row",
+             tile(n(nrow(g)), "gauges linked to a warning area"),
+             tile(n(sum(g$areas)), "gauge and area links"),
+             tile(n(sum(g$sole_areas)), "areas with a single gauge"),
+             tile(if (gv_money()) fmt_gbp(sum(g$split_central, na.rm = TRUE)) else format(signif(sum(g$ehh_split, na.rm = TRUE), 3), trim = TRUE),
+                  if (gv_money()) "expected annual damage behind gauges (central)" else "households a year expected to flood behind gauges"))
+  })
+
+  output$gv_table <- DT::renderDataTable({
+    g <- gv_data()
+    if (nrow(g) == 0L) return(DT::datatable(data.frame(Note = "No gauge is linked to a warning area that has exposure figures."), rownames = FALSE, selection = "none", options = list(dom = "t")))
+    d <- data.table(Gauge = vapply(seq_len(nrow(g)), function(i) gauge_open_link(g$measure_uri[i], if (is.na(g$gauge[i]) || !nzchar(g$gauge[i])) "gauge" else g$gauge[i]), character(1)),
+                    River = ifelse(is.na(g$river), "", g$river), Areas = g$areas, `Only gauge for` = g$sole_areas, `People in its areas` = round(g$people))
+    if (gv_money()) {
+      d[, `:=`(`Split value (central)` = round(g$split_central), `Gross value (central)` = round(g$gross_central),
+               `Split range, low to high` = sprintf("%s to %s", fmt_gbp(g$split_low), fmt_gbp(g$split_high)))]
+    } else {
+      d[, `:=`(`Households a year, split` = signif(g$ehh_split, 3), `Households a year, gross` = signif(g$ehh_gross, 3))]
+    }
+    t <- DT::datatable(d, rownames = FALSE, selection = "single", escape = FALSE,
+                       options = list(pageLength = 15, dom = "ftip", scrollX = TRUE, order = list(), columnDefs = list(list(orderable = FALSE, targets = 0L))))
+    t <- DT::formatRound(t, "People in its areas", digits = 0, mark = ",")
+    if (gv_money()) DT::formatCurrency(t, c("Split value (central)", "Gross value (central)"), currency = "£", digits = 0) else t
+  })
+
+  gv_selected <- reactive({
+    row <- input$gv_table_rows_selected
+    if (is.null(row)) return(NULL)
+    g <- gv_data()
+    if (row > nrow(g)) NULL else g[row]
+  })
+
+  output$gv_detail_title <- renderUI({
+    g <- gv_selected()
+    if (is.null(g)) return(tags$p(class = "text-muted", "Select a gauge to see the areas behind it."))
+    tags$p(tags$strong(if (is.na(g$gauge) || !nzchar(g$gauge)) "This gauge" else g$gauge), sprintf(" drives %d area%s.", g$areas, if (g$areas == 1L) "" else "s"))
+  })
+
+  output$gv_detail <- DT::renderDataTable({
+    g <- gv_selected(); req(g)
+    l <- unique(gv_links()[, .(area_id, measure_uri)]); l[, n_g := .N, by = area_id]
+    x <- l[measure_uri == g$measure_uri]
+    ex <- gv_ex(); ea <- gv_ea()
+    x[, `:=`(name = ex$area_name[match(area_id, ex$area_id)], kind = ex$kind[match(area_id, ex$area_id)], people = ex$people[match(area_id, ex$area_id)],
+             ead = ea$ead_central[match(area_id, ea$area_id)], ehh = ea$ehh_central[match(area_id, ea$area_id)])]
+    x <- x[!is.na(name)][order(-(if (gv_money()) ead else ehh))]
+    d <- data.table(Area = vapply(seq_len(nrow(x)), function(i) area_open_link(x$area_id[i], x$name[i]), character(1)), Kind = ifelse(x$kind == "flood_warning", "Warning", "Alert"),
+                    People = round(x$people), `Gauges driving it` = x$n_g)
+    if (gv_money()) d[, `:=`(`Value of the area (central)` = round(x$ead), `This gauge's share` = round(x$ead / x$n_g))]
+    else d[, `:=`(`Households a year` = signif(x$ehh, 3))]
+    t <- DT::formatRound(DT::datatable(d, rownames = FALSE, selection = "none", escape = FALSE, options = list(pageLength = 10, dom = "tip", order = list(), scrollX = TRUE)), "People", digits = 0, mark = ",")
+    if (gv_money()) DT::formatCurrency(t, c("Value of the area (central)", "This gauge's share"), currency = "£", digits = 0) else t
+  })
+
+  output$gv_basis <- renderUI({
+    if (!identical(input$main_tabs, "Gauge value")) return(NULL)
+    tags$p(class = "app-caption", "A gauge's thresholds belong to flood warning areas (pipeline notebook 28). Gross is the full value of every area the gauge drives, so gross figures should not be added across gauges. ",
+           "Split shares an area's value equally between the gauges that drive it, so split figures add up to the total. This says what depends on a gauge, not what it has been proved to prevent. ", econ_basis_text(econ_p()))
+  })
+
+  output$download_gv <- downloadHandler(
+    filename = function() sprintf("gauge_value_%s.csv", format(Sys.Date(), "%Y%m%d")),
+    content = function(file) {
+      g <- tryCatch(gv_data(), error = function(e) data.table())
+      data.table::fwrite(if (nrow(g) == 0L) data.table() else g[, .(Gauge = gauge, River = river, Measure = measure_uri, Areas = areas, `Only gauge for` = sole_areas, People = round(people),
+                                                                   `Split low` = round(split_low), `Split central` = round(split_central), `Split high` = round(split_high),
+                                                                   `Gross low` = round(gross_low), `Gross central` = round(gross_central), `Gross high` = round(gross_high),
+                                                                   `Households a year, split` = ehh_split, `Households a year, gross` = ehh_gross)], file, bom = TRUE)
+    })
+
   # ---- Gauges near thresholds ----------------------------------------------------------------------------------------------
   tb_open <- reactive(identical(input$main_tabs, "Gauges near thresholds"))
 
@@ -3091,6 +3215,13 @@ server <- function(input, output, session) {
              tile(sum(nzchar(x$potential)), "under the latest forecast, not yet in force"))
   })
 
+  # The split central value of each gauge (NA when the damage figures are not set or the gauge is not linked), for the board's column.
+  gv_value_of <- function(uris) {
+    g <- tryCatch(gv_data(), error = function(e) NULL)
+    if (is.null(g) || nrow(g) == 0L) return(rep(NA_real_, length(uris)))
+    round(g$split_central[match(uris, g$measure_uri)])
+  }
+
   tb_display <- function(x) {
     data.table(
       Area = vapply(seq_len(nrow(x)), function(i) area_open_link(x$area_id[i], x$area_name[i]), character(1)),
@@ -3098,7 +3229,7 @@ server <- function(input, output, session) {
       River = ifelse(is.na(x$river), "", x$river),
       Status = x$status, `In force now` = x$in_force, `Potential (forecast)` = x$potential, `Level (m)` = round(x$last_value, 2), `Threshold (m)` = round(x$threshold, 2), `Headroom (m)` = round(x$headroom, 2),
       Trend = trend_label(x$rate), `Time to threshold` = ifelse(is.na(x$eta_hours), "", duration_label(x$eta_hours * 60)),
-      `People at risk` = round(x$people_at_risk), Read = format(x$last_time, "%d %b %H:%M", tz = "UTC"))
+      `People at risk` = round(x$people_at_risk), `Value behind it (split, central)` = gv_value_of(x$measure_uri), Read = format(x$last_time, "%d %b %H:%M", tz = "UTC"))
   }
 
   output$tb_table <- DT::renderDataTable({
@@ -3110,7 +3241,8 @@ server <- function(input, output, session) {
       DT::formatStyle("Potential (forecast)", color = APP_WARNING_HEX) |>
       DT::formatStyle("Status", fontWeight = DT::styleEqual(c("At or above", "Close and rising"), c("700", "600")),
                       color = DT::styleEqual(c("At or above", "Close and rising", "Close"), c(APP_SEVERE_HEX, APP_WARNING_HEX, APP_PALETTE$ink))) |>
-      DT::formatRound("People at risk", digits = 0, mark = ",")
+      DT::formatRound("People at risk", digits = 0, mark = ",") |>
+      DT::formatCurrency("Value behind it (split, central)", currency = "\u00a3", digits = 0)
   })
 
   output$download_tb <- downloadHandler(
@@ -3203,7 +3335,9 @@ server <- function(input, output, session) {
       sites <- tryCatch(fetch_area_sites(a$area_id), error = function(e) NULL)
       geos <- tryCatch(fetch_area_geographies(a$area_id), error = function(e) NULL)
       cons <- tryCatch(unname(area_constituency_names(fetch_area_constituency_links())[a$area_id]), error = function(e) NA_character_)
-      area_brief_pdf(file, area_brief_content(a, sites, geos, if (length(cons) == 0L) NA_character_ else cons))
+      p <- econ_p(); e <- if (isTRUE(p$has_prob)) econ_area(a, p) else NULL
+      econ <- if (is.null(e)) NULL else if (isTRUE(p$has_damage)) sprintf("Indicative expected annual damage: %s. %s", econ_range_text(e$ead_low, e$ead_central, e$ead_high), econ_basis_text(p)) else NULL
+      area_brief_pdf(file, area_brief_content(a, sites, geos, if (length(cons) == 0L) NA_character_ else cons, econ = econ))
     }, contentType = "application/pdf")
 
   output$download_area_cells <- downloadHandler(
