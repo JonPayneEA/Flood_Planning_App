@@ -2496,6 +2496,19 @@ server <- function(input, output, session) {
     updateSelectizeInput(session, "area_pick", selected = a$area_id, server = TRUE, choices = area_choices_of(areas_all()))
   })
 
+  # A restored link: Shiny hands the saved area back after the first flush (onRestored), usually after the picker was first filled with nothing selected, and a
+  # server-side picker cannot take its restored value by itself. Apply the saved area as soon as both the saved value and the choices are there.
+  observeEvent(list(restored_area(), area_picker_ready()), {
+    id <- restored_area()
+    req(id, nzchar(id), area_picker_ready())
+    restored_area(NULL)
+    x <- tryCatch(areas_all(), error = function(e) NULL); req(x)
+    if (id %in% x$area_id) {
+      area_goto(id)
+      updateSelectizeInput(session, "area_pick", selected = id, server = TRUE, choices = area_choices_of(x))
+    }
+  })
+
   # An area link anywhere (table, map popup) opens its detail page.
   observeEvent(input$area_open, {
     id <- gsub("[^A-Za-z0-9_.-]", "", input$area_open)
