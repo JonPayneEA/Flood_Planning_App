@@ -35,4 +35,10 @@ source("app_server.R", local = TRUE)
 # Application Gateway in front of Connect refuses such addresses with a 403
 # (the quotes and the length). ui is a function of the request (see app_ui.R),
 # which bookmarking requires.
+# Set the store explicitly as well as through shinyApp(): the deployed app
+# reported "url" even with the argument below, so the option is stated here,
+# before the app object is built, and again when each session starts.
+shiny::enableBookmarking("server")
+shiny::shinyOptions(bookmarkStore = "server")
+
 shinyApp(ui = ui, server = server, enableBookmarking = "server")
