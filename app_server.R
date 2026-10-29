@@ -1439,9 +1439,9 @@ server <- function(input, output, session) {
     "refresh_data", "show_health", "goto_constituency", "exp_pick", "nav_to",
     "rv_reviewed", "rv_sent", "rv_rejected", "demo_reset",
     "area_row_click", "download_ea_areas", "download_situation",
-    "copy_link_click", "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas", "download_areas", "download_const_exp", "download_exp_bands", "download_area_cells", "download_tb", "download_area_issues", "download_area_brief", "download_area_sites", "download_exp_responders", "area_open", "areas_open_selected",
-
-    "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas", "download_areas", "download_const_exp", "download_exp_bands", "download_area_cells", "goto_gauge", "download_const_brief", "download_area_issues", "download_area_brief", "download_area_sites", "download_exp_responders", "area_open", "areas_open_selected",
+    "copy_link_click", "goto_gauge", "area_open", "areas_open_selected", "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas",
+    "download_areas", "download_const_exp", "download_const_brief", "download_exp_bands", "download_exp_responders", "download_area_cells", "download_area_issues",
+    "download_area_brief", "download_area_sites", "download_tb",
     "situation_table_rows_selected", "situation_table_row_last_clicked",
     "situation_table_cell_clicked", "situation_table_rows_current",
     "situation_table_rows_all", "situation_table_state", "situation_table_search",
@@ -2380,14 +2380,22 @@ server <- function(input, output, session) {
     safe_fetch(fetch_area_exposure)
   })
 
+  # The area picker's choices (name and kind, by name), and what to select once they are in.
+  area_choices_of <- function(x) { ord <- as.data.table(x)[order(area_name)]; stats::setNames(ord$area_id, sprintf("%s (%s)", ord$area_name, ifelse(ord$kind == "flood_warning", "warning", "alert"))) }
+  area_picker_ready <- reactiveVal(FALSE)
+  area_goto <- reactiveVal(NULL)
+
   # The county list and the area picker are filled once the figures are in.
   observe({
     x <- areas_all(); req(x)
     x <- as.data.table(x)
     updateSelectInput(session, "areas_county", choices = c("All" = "", sort(unique(na.omit(x$county)))), selected = isolate(input$areas_county))
-    ord <- x[order(area_name)]
-    updateSelectizeInput(session, "area_pick", selected = isolate(restored_area() %||% input$area_pick), server = TRUE,
-                         choices = stats::setNames(ord$area_id, sprintf("%s (%s)", ord$area_name, ifelse(ord$kind == "flood_warning", "warning", "alert"))))
+    # The area picker is filled once. This observer re-runs whenever the tab changes (areas_all() depends on it), and filling the picker again would
+    # reset its selection to the old value, undoing the choice an area link has just made.
+    if (!isolate(area_picker_ready())) {
+      area_picker_ready(TRUE)
+      updateSelectizeInput(session, "area_pick", selected = isolate(restored_area() %||% area_goto() %||% input$area_pick), server = TRUE, choices = area_choices_of(x))
+    }
   })
 
   areas_table_data <- reactive({
@@ -2483,8 +2491,9 @@ server <- function(input, output, session) {
 
   observeEvent(input$areas_open_selected, {
     a <- areas_selected(); req(a)
+    area_goto(a$area_id)
     updateTabsetPanel(session, "main_tabs", selected = "Target Area")
-    updateSelectizeInput(session, "area_pick", selected = a$area_id)
+    updateSelectizeInput(session, "area_pick", selected = a$area_id, server = TRUE, choices = area_choices_of(areas_all()))
   })
 
   # An area link anywhere (table, map popup) opens its detail page.
@@ -2493,10 +2502,9 @@ server <- function(input, output, session) {
     x <- tryCatch(areas_all(), error = function(e) NULL)
     if (is.null(x)) x <- safe_fetch(fetch_area_exposure)
     req(x, id %in% x$area_id)
+    area_goto(id)
     updateTabsetPanel(session, "main_tabs", selected = "Target Area")
-    ord <- as.data.table(x)[order(area_name)]
-    updateSelectizeInput(session, "area_pick", selected = id, server = TRUE,
-                         choices = stats::setNames(ord$area_id, sprintf("%s (%s)", ord$area_name, ifelse(ord$kind == "flood_warning", "warning", "alert"))))
+    updateSelectizeInput(session, "area_pick", selected = id, server = TRUE, choices = area_choices_of(x))
   })
 
   area_sel <- reactive({
