@@ -48,12 +48,12 @@ GUIDE_TABLES <- data.frame(
             "ea_area_constituency_lookup", "mp_contact_details",
             "fgs_constituency_changes", "fgs_changes_log", "constituency_flood_situation", "mp_briefing_drafts",
             "fgs_constituency_exposure", "pipeline_health", "ea_warning_episodes",
-            "ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_readings_bronze", "ea_warning_fgs_coverage", "ea_rt_measures_mapped", "ea_rt_latest", "flood_warnings_current", "ea_fw_threshold_gauge_links", "ea_area_exposure", "ea_area_overlaps", "ea_area_coverage", "constituency_flood_exposure", "exposure_grid_100m", "ea_area_sites", "ea_area_geographies"),
-  notebook = c("01", "01", "07", "07", "03", "03", "05", "06", "04", "18", "18", "19", "20", "21", "22", "25", "09", "23", "10", "26", "16", "23", "11", "28", "35", "35", "35", "35", "34", "35", "35"),
+            "ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_readings_bronze", "ea_warning_fgs_coverage", "ea_rt_measures_mapped", "ea_rt_latest", "flood_warnings_current", "ea_fw_threshold_gauge_links", "ea_area_exposure", "ea_area_overlaps", "ea_area_coverage", "constituency_flood_exposure", "exposure_grid_100m", "ea_area_sites", "ea_area_geographies", "constituency_sites"),
+  notebook = c("01", "01", "07", "07", "03", "03", "05", "06", "04", "18", "18", "19", "20", "21", "22", "25", "09", "23", "10", "26", "16", "23", "11", "28", "35", "35", "35", "35", "34", "35", "35", "35"),
   refresh = c("Each FGS issue or amendment", "Each FGS issue or amendment", "Each FGS issue", "Each FGS issue",
               "Weekly", "Weekly", "Quarterly, or after an election", "Weekly and quarterly", "Weekly",
               "Every poll", "Every poll", "Every poll", "Every poll", "Daily", "Every poll", "Every poll",
-              "Weekly", "Every 15 minutes", "Daily", "Daily", "When the mapping file changes", "Every 15 minutes", "Every poll", "Manual, when the mapping or thresholds change", "Manual, when the hazard maps or address points change", "Manual, with the table above", "Manual, with the table above", "Manual, with the table above", "Manual, after notebooks 30 to 33", "Manual, with the table above", "Manual, with the table above"),
+              "Weekly", "Every 15 minutes", "Daily", "Daily", "When the mapping file changes", "Every 15 minutes", "Every poll", "Manual, when the mapping or thresholds change", "Manual, when the hazard maps or address points change", "Manual, with the table above", "Manual, with the table above", "Manual, with the table above", "Manual, after notebooks 30 to 33", "Manual, with the table above", "Manual, with the table above", "Manual, with the table above"),
   holds = c("One row per statement: the headline and the forecast text.",
             "One row per risk polygon, flood source and day, with impact, likelihood and risk level.",
             "Each FGS shape that overlaps an EA flood warning or alert area.",
@@ -84,7 +84,8 @@ GUIDE_TABLES <- data.frame(
             "Per constituency: people, people at risk, and how many of each a warning or alert area covers. Restricted schema.",
             "One row per 100 m cell of England: people, deprivation, rivers and sea band shares, critical sites and a 0 to 100 risk score. Restricted schema; read only for the part of the map in view.",
             "Each critical site inside each warning or alert area, with its rivers and sea band. Restricted schema; read for the area being viewed.",
-            "Each warning or alert area split by the police force, fire and rescue authority, combined authority, district, county, ward, constituency and region it lies in, with the people in each. Restricted schema; read for the area being viewed."),
+            "Each warning or alert area split by the police force, fire and rescue authority, combined authority, district, county, ward, constituency and region it lies in, with the people in each. Restricted schema; read for the area being viewed.",
+            "Each critical site inside each England constituency, with its rivers and sea band. Restricted schema; read for the constituency being viewed."),
   stringsAsFactors = FALSE
 )
 
@@ -464,6 +465,28 @@ guide_products <- function(s) {
         "Uses Environment Agency flood and river level data from the real-time data API (Beta), under the Open Government Licence."
       )
     ),
+    list(
+      id = "constituency-exposure", title = "Constituency exposure", where = "Constituency exposure",
+      answers = "Which constituencies have the most people at risk from rivers and the sea that no warning area covers, and what is in force or possible there now?",
+      tables = c("constituency_flood_exposure", "constituency_sites", "constituency_flood_situation", "flood_warnings_current", "fgs_ea_area_intersections", "ea_area_constituency_lookup", "ea_warning_episodes"),
+      steps = c(
+        "Each address point carries its parliamentary constituency, so the people in a High or Medium rivers and sea band are counted per constituency, and so are those who are in a flood warning area or a flood alert area. The gap is the people at risk who are in none.",
+        "In force now counts the severe flood warnings, flood warnings and flood alerts the Environment Agency feed has in force in areas linked to the constituency.",
+        "Potential counts the flood warning and flood alert areas that lie under a risk polygon in the latest Flood Guidance Statement, at or above the risk you choose. It means a warning could be issued there. It is not a prediction that one will be. An area already in force is listed as in force and not again as potential.",
+        "An area is linked to a constituency when at least the app's minimum share of it lies inside (the same rule as the MP warning contacts), so an area that spans two constituencies counts in both.",
+        "Select a constituency for its detail, and for a one-page PDF brief: the MP, the figures, what is in force, the potential areas, the five day forecast, the critical sites in a High or Medium band and the warning history."
+      ),
+      read = c(
+        "Tick the filter to show only constituencies with something in force or potential.",
+        "The gap is measured against flood warning areas or flood alert areas, as you choose. Warnings are not added to alerts."
+      ),
+      limits = c(
+        "Rivers and the sea only: surface water is not counted.",
+        "The critical sites come from the interim sources until AddressBase Premium is available, so the counts are of the sites those sources hold.",
+        "England only. The figures are restricted."
+      )
+    ),
+
     list(
       id = "rain-gauges", title = "Rain gauges", where = "Rain gauges",
       answers = "How much rain has each gauge caught in the last hour, 12 hours and 24 hours, and where is it falling?",

@@ -782,6 +782,27 @@ fetch_area_coverage <- function() {
              people_high_medium_not_in_area = c(0, round(hm * .45), round(hm * .3)))
 }
 
+fetch_constituency_sites <- function(constituency_code) {
+  none <- data.table(site_id = character(), name = character(), site_group = character(), site_type = character(), band = character(), rofrs_rank = integer())
+  set.seed(sum(utf8ToInt(as.character(constituency_code))))
+  n <- sample(0:9, 1L)
+  if (n == 0L) return(none)
+  type <- sample(c("Hospital", "Care home", "School", "Electricity", "Fire and rescue", "GP surgery"), n, TRUE)
+  rank <- sort(sample(0:4, n, TRUE, prob = c(.2, .15, .2, .25, .2)), decreasing = TRUE)
+  data.table(site_id = sprintf("demo:%s:%d", constituency_code, seq_len(n)), name = sprintf("Demo %s %d", tolower(type), seq_len(n)),
+             site_group = "health", site_type = type, band = c("None", "Very Low", "Low", "Medium", "High")[rank + 1L], rofrs_rank = as.integer(rank))
+}
+
+# The areas under the demo statement's polygons: a third of the demo areas, with a risk rank and a first day.
+fetch_potential_area_list <- function(statement_id, min_rank = 2L) {
+  a <- demo_ea_areas()$table
+  set.seed(77)
+  k <- sample(nrow(a), 30L)
+  out <- data.table(ea_area_code = a$ea_area_code[k], ea_area_name = a$ea_area_name[k], ea_area_type = a$ea_area_type[k],
+                    worst_rank = sample(1:4, 30L, TRUE, prob = c(.35, .35, .2, .1)), first_day = sample(1:5, 30L, TRUE))
+  out[worst_rank >= min_rank]
+}
+
 fetch_constituency_exposure <- function() demo_with_seed(3519, {
   g <- demo_geometry()$table
   n <- nrow(g)
@@ -790,7 +811,8 @@ fetch_constituency_exposure <- function() demo_with_seed(3519, {
   data.table(constituency_code = g$constituency_id, constituency_name = g$constituency_name, people = people,
              people_rs_high_medium = hm, people_fz3 = round(hm * .6),
              people_rs_high_medium_in_warning_area = w, people_rs_high_medium_in_alert_area = a,
-             people_high_medium_not_in_warning_area = hm - w, people_high_medium_not_in_alert_area = hm - a)
+             people_high_medium_not_in_warning_area = hm - w, people_high_medium_not_in_alert_area = hm - a,
+             sites = rpois(n, 12), sites_health = rpois(n, 4), sites_education = rpois(n, 5), sites_emergency = rpois(n, 1), sites_utilities = rpois(n, 1), sites_rs_high_medium = rpois(n, 2))
 })
 
 fetch_area_shape <- function(area_id) {

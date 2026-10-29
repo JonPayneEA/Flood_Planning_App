@@ -1149,9 +1149,15 @@ make_const_exposure_tab <- function() tags$div(
   tags$div(
     class = "filter-row",
     selectInput("const_exp_cover", "Gap measured against", choices = c("Flood warning areas" = "warning", "Flood alert areas" = "alert"), width = "240px"),
+    selectInput("const_pot_rank", "Potential: areas under forecast risk of at least", choices = c("Very Low" = 1, "Low" = 2, "Medium" = 3, "High" = 4), selected = 2, width = "260px"),
+    checkboxInput("const_flagged", "Only constituencies with something in force or potential", FALSE),
     downloadButton("download_const_exp", "Export CSV", class = "btn-sm btn-outline-secondary")
   ),
-  DT::dataTableOutput("const_exp_table")
+  tags$p(class = "app-caption", "In force now is from the Environment Agency feed. Potential is the number of flood warning and flood alert areas that lie under a risk polygon in the latest Flood Guidance Statement, not ones that will be issued. Select a constituency for its detail and a one-page brief."),
+  DT::dataTableOutput("const_exp_table"),
+  tags$h2(class = "sit-briefing-h", "The selected constituency"),
+  uiOutput("const_detail"),
+  downloadButton("download_const_brief", "Download a one-page brief (PDF)", class = "btn-sm btn-primary")
 )
 
 

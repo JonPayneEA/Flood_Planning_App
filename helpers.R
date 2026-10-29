@@ -1088,7 +1088,7 @@ PIPELINE_TABLE_JOBS <- c(
   fgs_constituency_changes = 18L, constituency_flood_situation = 19L, mp_briefing_drafts = 20L,
   fgs_constituency_exposure = 21L, pipeline_health = 22L, flood_warnings_current = 11L, ea_fw_threshold_gauge_links = 28L, ea_warning_episodes = 25L, ea_warning_fgs_coverage = 26L, ea_rt_measure_register = 9L, ea_rt_readings_all = 23L, ea_rt_latest = 23L, ea_rt_readings_bronze = 10L, fgs_constituency_mp_contacts = 14L,
   flood_warning_constituency_contacts = 13L, fgs_constituency_intersections = 7L,
-  fgs_ea_area_intersections = 7L, ea_area_constituency_lookup = 6L, ea_area_exposure = 35L, ea_area_overlaps = 35L, ea_area_coverage = 35L, ea_area_sites = 35L, ea_area_geographies = 35L, exposure_grid_100m = 34L, constituency_flood_exposure = 35L)
+  fgs_ea_area_intersections = 7L, ea_area_constituency_lookup = 6L, ea_area_exposure = 35L, ea_area_overlaps = 35L, ea_area_coverage = 35L, constituency_sites = 35L, ea_area_sites = 35L, ea_area_geographies = 35L, exposure_grid_100m = 34L, constituency_flood_exposure = 35L)
 
 missing_table_info <- function(msg) {
   msg <- paste(as.character(msg), collapse = " ")
@@ -1638,7 +1638,7 @@ area_brief_content <- function(a, sites = NULL, geos = NULL, cons = NA_character
 
 # Draws the content on A4 with grid and writes it to `file`. One page for a normal area; a long list simply starts a second page.
 # cairo_pdf handles any characters in names; without cairo the plain pdf device is used with names reduced to ASCII.
-area_brief_pdf <- function(file, content) {
+brief_pdf <- function(file, title, subtitle, kpis, blocks, footer) {
   use_cairo <- isTRUE(capabilities("cairo"))
   txt <- if (use_cairo) function(x) as.character(x) else function(x) iconv(as.character(x), to = "ASCII//TRANSLIT", sub = "?")
   if (use_cairo) grDevices::cairo_pdf(file, width = 8.27, height = 11.69, family = "sans") else grDevices::pdf(file, width = 8.27, height = 11.69)
@@ -1698,10 +1698,10 @@ area_brief_pdf <- function(file, content) {
   # banner
   grid::grid.rect(x = u(M), y = yy(y), width = u(X1 - M), height = u(0.24), just = c("left", "top"), gp = grid::gpar(fill = "#FFF4D6", col = "#8A5A00", lwd = 0.8))
   put("Restricted: built from address-level data. Handle as the data is classified.", M + 0.08, 8, at = y + 0.055); y <- y + 0.42
-  for (l in wrap(content$title, X1 - M, 21, TRUE)) { put(l, M, 21, TRUE); y <- y + 0.36 }
-  para(content$subtitle, 9.5, grey, gap = 0.12)
+  for (l in wrap(title, X1 - M, 21, TRUE)) { put(l, M, 21, TRUE); y <- y + 0.36 }
+  para(subtitle, 9.5, grey, gap = 0.12)
   # figures
-  k <- content$kpis; cw <- (X1 - M) / nrow(k)
+  k <- kpis; cw <- (X1 - M) / nrow(k)
   for (i in seq_len(nrow(k))) {
     x0 <- M + (i - 1L) * cw
     grid::grid.rect(x = u(x0), y = yy(y), width = u(cw - 0.12), height = u(0.045), just = c("left", "top"), gp = grid::gpar(fill = navy, col = NA))
@@ -1709,31 +1709,43 @@ area_brief_pdf <- function(file, content) {
     ls <- wrap(k$label[i], cw - 0.15, 7.5); for (j in seq_along(ls)) put(ls[j], x0, 7.5, col = grey, at = y + 0.42 + (j - 1L) * 0.12)
   }
   y <- y + 0.88
-  para(content$summary, 9.5)
-  heading("By flood band")
-  b <- content$bands
-  table(c("Band", "", "Share of people", "People", "Households"), cbind(b$band, b$range, b$share, b$people, b$households),
-        xs = c(M, M + 0.9, M + 3.3, M + 4.5, M + 5.8, X1), aligns = c("left", "left", "right", "right", "right"), chips = 1L)
-  heading("Critical sites in a High or Medium band")
-  if (!is.null(content$sites)) table(c("Site", "Type", "Band"), cbind(content$sites$name, content$sites$type, content$sites$band),
-                                     xs = c(M, M + 3.9, M + 5.5), aligns = rep("left", 3), chips = 3L)
-  if (!is.null(content$sites_note)) para(content$sites_note, 8.5, grey)
-  heading("Who responds")
-  if (!is.null(content$responders)) {
-    for (i in seq_len(nrow(content$responders))) {
-      ls <- wrap(content$responders$who[i], X1 - M - 2.1, 8.5); h <- max(length(ls) * 0.15, 0.2); room(h + 0.04)
-      put(content$responders$what[i], M, 8.5, TRUE)
-      for (j in seq_along(ls)) put(ls[j], M + 2.1, 8.5, at = y + (j - 1L) * 0.15)
-      y <- y + h + 0.04; grid::grid.lines(x = u(c(M, X1)), y = yy(c(y - 0.025, y - 0.025)), gp = grid::gpar(col = line, lwd = 0.6))
-    }
+  for (bl in blocks) {
+    if (is.null(bl)) next
+    switch(bl$type,
+      para = para(bl$text, bl$size %||% 9.5, bl$col %||% ink),
+      note = para(bl$text, 8.5, grey),
+      heading = heading(bl$text),
+      table = table(bl$head, as.matrix(bl$rows), xs = c(M + bl$xs, X1), aligns = bl$aligns, chips = bl$chips %||% integer()),
+      kv = for (i in seq_len(nrow(bl$rows))) {
+        ls <- wrap(bl$rows$who[i], X1 - M - 2.1, 8.5); h <- max(length(ls) * 0.15, 0.2); room(h + 0.04)
+        put(bl$rows$what[i], M, 8.5, TRUE)
+        for (j in seq_along(ls)) put(ls[j], M + 2.1, 8.5, at = y + (j - 1L) * 0.15)
+        y <- y + h + 0.04; grid::grid.lines(x = u(c(M, X1)), y = yy(c(y - 0.025, y - 0.025)), gp = grid::gpar(col = line, lwd = 0.6))
+      })
   }
-  if (!is.null(content$responders_note)) para(content$responders_note, 8.5, grey)
-  heading("Constituencies")
-  para(content$constituencies, 9)
   room(0.7); y <- y + 0.1
   grid::grid.lines(x = u(c(M, X1)), y = yy(c(y, y)), gp = grid::gpar(col = line, lwd = 0.6)); y <- y + 0.06
-  para(content$footer, 7.5, grey)
+  para(footer, 7.5, grey)
   invisible(file)
+}
+
+# The area brief: the figures, the bands, the sites in a High or Medium band, who responds, the constituencies (see area_brief_content()).
+area_brief_pdf <- function(file, content) {
+  b <- content$bands
+  brief_pdf(file, content$title, content$subtitle, content$kpis, footer = content$footer, blocks = list(
+    list(type = "para", text = content$summary),
+    list(type = "heading", text = "By flood band"),
+    list(type = "table", head = c("Band", "", "Share of people", "People", "Households"), rows = cbind(b$band, b$range, b$share, b$people, b$households),
+         xs = c(0, 0.9, 3.3, 4.5, 5.8), aligns = c("left", "left", "right", "right", "right"), chips = 1L),
+    list(type = "heading", text = "Critical sites in a High or Medium band"),
+    if (!is.null(content$sites)) list(type = "table", head = c("Site", "Type", "Band"), rows = cbind(content$sites$name, content$sites$type, content$sites$band),
+                                      xs = c(0, 3.9, 5.5), aligns = rep("left", 3), chips = 3L),
+    if (!is.null(content$sites_note)) list(type = "note", text = content$sites_note),
+    list(type = "heading", text = "Who responds"),
+    if (!is.null(content$responders)) list(type = "kv", rows = content$responders),
+    if (!is.null(content$responders_note)) list(type = "note", text = content$responders_note),
+    list(type = "heading", text = "Constituencies"),
+    list(type = "para", text = content$constituencies, size = 9)))
 }
 
 # Columns the area pages read that an older ea_area_exposure may not have yet. Missing ones are added empty (NA), so a page built before the
@@ -1841,4 +1853,112 @@ issue_counts_by_month <- function(ep, now = Sys.time(), months = 36L) {
     grid[is.na(N), N := 0L]; data.table::setnames(grid, "N", "n")
   }
   grid[order(month, level)]
+}
+
+
+# ---- Constituency brief and the flags -------------------------------------------------------------------------------------
+CONST_OPTIONAL_COLUMNS <- c("sites", "sites_health", "sites_education", "sites_emergency", "sites_utilities", "sites_rs_high_medium")
+ensure_const_columns <- function(x) {
+  x <- data.table::as.data.table(x)
+  for (cn in setdiff(CONST_OPTIONAL_COLUMNS, names(x))) data.table::set(x, j = cn, value = NA_real_)
+  x
+}
+
+IN_FORCE_LABELS <- c(`1` = "Severe flood warning", `2` = "Flood warning", `3` = "Flood alert")
+
+# The areas in force now, and the potential ones under the latest forecast, that belong to one constituency by the app's overlap rule (an area is in a
+# constituency when at least min_pct of it lies inside). `f` is fetch_warnings_in_force() (flood_area_id, severity_level, description, time_raised),
+# `pot` is fetch_potential_area_list() (ea_area_code, ea_area_name, ea_area_type, worst_rank, first_day) and `links` is fetch_area_constituency_links().
+# Both are sorted: severest first, then the highest risk and the soonest day.
+constituency_flags <- function(f, pot, links, constituency_id, min_pct = get0("TARGET_AREA_MIN_PCT", ifnotfound = 0.01)) {
+  codes <- if (is.null(links) || nrow(links) == 0L) character() else {
+    l <- as.data.frame(links); l <- l[l$constituency_id == constituency_id & (is.na(l$share_of_area_in_constituency) | l$share_of_area_in_constituency >= min_pct), , drop = FALSE]
+    unique(l$ea_area_code)
+  }
+  inf <- data.frame(area = character(), level = character(), since = as.POSIXct(character(), tz = "UTC"), severity = integer(), stringsAsFactors = FALSE)
+  if (!is.null(f) && nrow(f) > 0L) {
+    x <- as.data.frame(f); x <- x[x$flood_area_id %in% codes & x$severity_level %in% 1:3, , drop = FALSE]
+    if (nrow(x) > 0L) {
+      inf <- data.frame(area = ifelse(is.na(x$description) | !nzchar(x$description), x$flood_area_id, x$description), level = unname(IN_FORCE_LABELS[as.character(x$severity_level)]),
+                        since = as.POSIXct(x$time_raised, tz = "UTC"), severity = as.integer(x$severity_level), stringsAsFactors = FALSE)
+      inf <- inf[order(inf$severity, inf$area), , drop = FALSE]
+    }
+  }
+  potd <- data.frame(area = character(), type = character(), risk = character(), first_day = integer(), rank = integer(), stringsAsFactors = FALSE)
+  if (!is.null(pot) && nrow(pot) > 0L) {
+    y <- as.data.frame(pot); y <- y[y$ea_area_code %in% codes & !(y$ea_area_code %in% (if (!is.null(f) && nrow(f) > 0L) f$flood_area_id[f$severity_level %in% 1:3] else character())), , drop = FALSE]
+    if (nrow(y) > 0L) {
+      potd <- data.frame(area = y$ea_area_name, type = ifelse(y$ea_area_type == "flood_alert", "Flood alert", "Flood warning"), risk = RANK_LABELS[y$worst_rank + 1L],
+                         first_day = as.integer(y$first_day), rank = as.integer(y$worst_rank), stringsAsFactors = FALSE)
+      potd <- potd[order(-potd$rank, potd$first_day, potd$area), , drop = FALSE]
+    }
+  }
+  list(in_force = inf, potential = potd)
+}
+
+# Plain text for one constituency's brief. `c` is its row of the constituency exposure table, `sit` its row of the situation table (MP, five day
+# forecast, counts in force), `sites` its sites, `flags` from constituency_flags(), `hist` from area_issue_summary() over its episodes.
+constituency_brief_content <- function(c, sit = NULL, sites = NULL, flags = NULL, hist = NULL, statement_label = NA_character_, pot_label = "Low",
+                                       generated = Sys.time()) {
+  n <- function(v) ifelse(is.na(v), "none", formatC(round(as.numeric(v)), format = "d", big.mark = ","))
+  pct <- function(v) sprintf("%.0f%%", 100 * as.numeric(v))
+  has <- function(x, col) !is.null(x) && length(x[[col]]) == 1L && !is.na(x[[col]])
+  gap_w <- c$people_high_medium_not_in_warning_area; gap_a <- c$people_high_medium_not_in_alert_area
+  mp <- if (has(sit, "mp_name")) paste0(" - MP: ", sit$mp_name, if (has(sit, "mp_party")) paste0(" (", sit$mp_party, ")") else "") else ""
+  site_rows <- NULL; sites_note <- NULL
+  if (is.null(sites)) sites_note <- "The list of named sites is not available."
+  else {
+    s <- as.data.frame(sites); s <- s[!is.na(s$rofrs_rank) & s$rofrs_rank >= 3, , drop = FALSE]
+    if (nrow(s) == 0L) sites_note <- "None of the critical sites is in a High or Medium band."
+    else {
+      k <- seq_len(min(nrow(s), 14L))
+      site_rows <- data.frame(name = s$name[k], type = s$site_type[k], band = s$band[k], stringsAsFactors = FALSE)
+      if (nrow(s) > 14L) sites_note <- sprintf("The first 14 of %d.", nrow(s))
+    }
+  }
+  forecast <- NULL
+  if (!is.null(sit) && all(paste0("fgs_rank_day", 1:5) %in% names(sit))) {
+    r <- vapply(1:5, function(d) { v <- suppressWarnings(as.integer(sit[[paste0("fgs_rank_day", d)]])); if (is.na(v)) 0L else v }, integer(1))
+    base <- tryCatch(as.Date(substr(sit$fgs_issued_at[1L], 1L, 10L)), error = function(e) NA)
+    forecast <- data.frame(day = paste("Day", 1:5), date = if (is.na(base)) "" else format(base + 0:4, "%a %d %b"), risk = RANK_LABELS[r + 1L], stringsAsFactors = FALSE)
+  }
+  list(
+    title = as.character(c$constituency_name),
+    subtitle = paste0("Constituency ", c$constituency_code, mp),
+    kpis = data.frame(value = c(n(c$people), n(c$people_rs_high_medium), n(gap_w), n(c$sites), if (is.null(hist)) "-" else as.character(hist$last12)),
+                      label = c("people", sprintf("in a High or Medium band for rivers and the sea (%s)", pct(c$people_rs_high_medium / max(c$people, 1))),
+                                "of those in no flood warning area", "critical sites", "alerts or warnings issued in the last 12 months"), stringsAsFactors = FALSE),
+    summary = paste0(n(c$people_rs_high_medium), " people are in a High or Medium band, and ", n(gap_w), " of them (", pct(gap_w / max(c$people_rs_high_medium, 1)),
+                     ") are in no flood warning area; ", n(gap_a), " are in no flood alert area. ", n(c$people_fz3), " people are in Flood Zone 3."),
+    in_force = flags$in_force, potential = flags$potential, pot_label = pot_label, statement_label = statement_label, forecast = forecast,
+    sites = site_rows, sites_note = sites_note,
+    history = if (is.null(hist)) "The warning history is not available." else
+      sprintf("%d alerts or warnings were issued for the areas in this constituency in the last 12 months and %d in all; %d reached a severe flood warning.", hist$last12, hist$total, hist$severe),
+    footer = paste0("Rivers and the sea only: surface water is not counted. People are the Census 2021 output area total shared among the addresses in it, so small counts ",
+                    "are estimates. In force is as the Environment Agency feed reports it. Potential means an area lies under a forecast risk polygon, not that a warning will be issued. ",
+                    "Prepared ", format(generated, "%d %b %Y %H:%M"), "."))
+}
+
+constituency_brief_pdf <- function(file, content) {
+  inf <- content$in_force; pot <- content$potential; f <- content$forecast
+  brief_pdf(file, content$title, content$subtitle, content$kpis, footer = content$footer, blocks = list(
+    list(type = "para", text = content$summary),
+    list(type = "heading", text = "In force now"),
+    if (nrow(inf) > 0L) list(type = "table", head = c("Area", "Level", "Since"), rows = cbind(inf$area, inf$level, format(inf$since, "%d %b %H:%M", tz = "UTC")),
+                             xs = c(0, 4.0, 5.6), aligns = rep("left", 3))
+    else list(type = "note", text = "No flood alert or flood warning is in force in this constituency."),
+    list(type = "heading", text = "Potential: under the latest forecast"),
+    if (nrow(pot) > 0L) list(type = "table", head = c("Area", "Type", "Highest risk", "From day"), rows = cbind(pot$area, pot$type, pot$risk, pot$first_day),
+                             xs = c(0, 3.4, 4.9, 6.3), aligns = rep("left", 4))
+    else list(type = "note", text = sprintf("No flood alert or flood warning area lies under a risk polygon of %s or above.", content$pot_label)),
+    list(type = "note", text = sprintf("Areas in this constituency under a forecast risk polygon of %s or above%s, not already in force.", content$pot_label,
+                                       if (!is.na(content$statement_label)) paste0(" (", content$statement_label, ")") else "")),
+    if (!is.null(f)) list(type = "heading", text = "Forecast for the constituency"),
+    if (!is.null(f)) list(type = "kv", rows = data.frame(what = paste(f$day, f$date), who = f$risk, stringsAsFactors = FALSE)),
+    list(type = "heading", text = "Critical sites in a High or Medium band"),
+    if (!is.null(content$sites)) list(type = "table", head = c("Site", "Type", "Band"), rows = cbind(content$sites$name, content$sites$type, content$sites$band),
+                                      xs = c(0, 3.9, 5.5), aligns = rep("left", 3), chips = 3L),
+    if (!is.null(content$sites_note)) list(type = "note", text = content$sites_note),
+    list(type = "heading", text = "Warning history"),
+    list(type = "para", text = content$history, size = 9)))
 }
