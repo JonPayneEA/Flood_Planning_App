@@ -871,6 +871,60 @@ fetch_coverage_span <- function() {
 
 # fetch_area_episodes(): every alert or warning issued for one area (the same episodes as above, by area instead of by constituency), for the
 #   area detail page's warning issue history. end_time is NULL while an episode is open. The id reaches the SQL as safe characters only.
+# ---- Rapid Flood Guidance (FGS_Notebooks jobs 36 and 37) ---------------------------------------------------------------------
+# The update id reaches the SQL as safe characters only (ids are numbers, or none_<time> for a "no guidance" state).
+rfg_key_safe <- function(update_key) gsub("[^A-Za-z0-9_.:-]", "", as.character(update_key))
+
+# fetch_rfg_updates(): the newest updates (and "no guidance" states), newest first.
+fetch_rfg_updates <- function(limit = 50L) {
+  db_query(sprintf("
+    SELECT update_key, rfg_id, status, is_present, issued_at, last_updated, pdf_url, national_summary, n_polygons, n_valid
+    FROM %s
+    ORDER BY last_updated DESC
+    LIMIT %d
+  ", TBL_RFG_UPDATES, as.integer(limit)))
+}
+
+# fetch_rfg_totals(): per update, what job 37 counted under its valid polygons (restricted). The sum of the polygons, which seldom overlap.
+fetch_rfg_totals <- function() {
+  db_query(sprintf("
+    SELECT update_key, COUNT(*) AS polygons_counted, SUM(addresses) AS addresses, SUM(people) AS people, SUM(households) AS households,
+           SUM(people_rs_high_medium) AS people_rs_high_medium
+    FROM %s
+    GROUP BY update_key
+  ", TBL_RFG_EXPOSURE))
+}
+
+# fetch_rfg_polygons(): the valid polygons of one update as sf (longitude and latitude), with their text and counties. NULL when none.
+fetch_rfg_polygons <- function(update_key) {
+  dt <- db_query(sprintf("
+    SELECT update_key, polygon_number, geometry, updated_at, latest_update, counties
+    FROM %s
+    WHERE update_key = '%s' AND is_valid AND geometry IS NOT NULL
+    ORDER BY polygon_number
+  ", TBL_RFG_POLYGONS, rfg_key_safe(update_key)))
+  if (nrow(dt) == 0L) return(NULL)
+  geom <- geojsonsf::geojson_sfc(dt$geometry)
+  dt[, geometry := NULL]
+  sf::st_sf(dt, geometry = geom, crs = 4326)
+}
+
+fetch_rfg_exposure <- function(update_key) {
+  db_query(sprintf("SELECT * FROM %s WHERE update_key = '%s' ORDER BY polygon_number", TBL_RFG_EXPOSURE, rfg_key_safe(update_key)))
+}
+
+fetch_rfg_constituencies <- function(update_key) {
+  db_query(sprintf("SELECT * FROM %s WHERE update_key = '%s' ORDER BY people DESC", TBL_RFG_CONSTITUENCIES, rfg_key_safe(update_key)))
+}
+
+fetch_rfg_areas <- function(update_key) {
+  db_query(sprintf("SELECT * FROM %s WHERE update_key = '%s' ORDER BY people DESC", TBL_RFG_AREAS, rfg_key_safe(update_key)))
+}
+
+fetch_rfg_sites <- function(update_key) {
+  db_query(sprintf("SELECT * FROM %s WHERE update_key = '%s' ORDER BY rofrs_rank DESC, name", TBL_RFG_SITES, rfg_key_safe(update_key)))
+}
+
 # fetch_area_issue_counts(): for every area, how many alerts or warnings were issued in the last `days` days, and how many of them reached severe.
 fetch_area_issue_counts <- function(days = 365L) {
   db_query(sprintf("
@@ -1602,6 +1656,13 @@ fetch_area_constituency_links      <- with_cache(fetch_area_constituency_links, 
 fetch_area_sites                   <- with_cache(fetch_area_sites,                   "area_sites", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_area_geographies              <- with_cache(fetch_area_geographies,              "area_geographies", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_area_overlap_pairs            <- with_cache(fetch_area_overlap_pairs,            "area_pairs", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
+fetch_rfg_updates                   <- with_cache(fetch_rfg_updates,                   "rfg_updates", ttl = min(CACHE_TTL_SECONDS, 60))
+fetch_rfg_totals                    <- with_cache(fetch_rfg_totals,                    "rfg_totals", ttl = min(CACHE_TTL_SECONDS, 60))
+fetch_rfg_polygons                  <- with_cache(fetch_rfg_polygons,                  "rfg_polygons", ttl = min(CACHE_TTL_SECONDS, 300), group = "geometry")
+fetch_rfg_exposure                  <- with_cache(fetch_rfg_exposure,                  "rfg_exposure", ttl = min(CACHE_TTL_SECONDS, 300))
+fetch_rfg_constituencies            <- with_cache(fetch_rfg_constituencies,            "rfg_constituencies", ttl = min(CACHE_TTL_SECONDS, 300))
+fetch_rfg_areas                     <- with_cache(fetch_rfg_areas,                     "rfg_areas", ttl = min(CACHE_TTL_SECONDS, 300))
+fetch_rfg_sites                     <- with_cache(fetch_rfg_sites,                     "rfg_sites", ttl = min(CACHE_TTL_SECONDS, 300))
 fetch_area_issue_counts             <- with_cache(fetch_area_issue_counts,             "area_issue_counts", ttl = min(CACHE_TTL_SECONDS, 300))
 fetch_area_episodes                <- with_cache(fetch_area_episodes,                "area_episodes", ttl = min(CACHE_TTL_SECONDS, 300))
 fetch_area_gauges                  <- with_cache(fetch_area_gauges,                  "area_gauges", ttl = min(CACHE_TTL_SECONDS, 60))

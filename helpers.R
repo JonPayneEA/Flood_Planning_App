@@ -1088,6 +1088,7 @@ PIPELINE_TABLE_JOBS <- c(
   fgs_constituency_changes = 18L, constituency_flood_situation = 19L, mp_briefing_drafts = 20L,
   fgs_constituency_exposure = 21L, pipeline_health = 22L, flood_warnings_current = 11L, ea_fw_threshold_gauge_links = 28L, ea_warning_episodes = 25L, ea_warning_fgs_coverage = 26L, ea_rt_measure_register = 9L, ea_rt_readings_all = 23L, ea_rt_latest = 23L, ea_rt_readings_bronze = 10L, fgs_constituency_mp_contacts = 14L,
   flood_warning_constituency_contacts = 13L, fgs_constituency_intersections = 7L,
+  rfg_updates = 36L, rfg_polygons = 36L, rfg_polygon_exposure = 37L, rfg_polygon_constituencies = 37L, rfg_polygon_areas = 37L, rfg_polygon_sites = 37L,
   fgs_ea_area_intersections = 7L, ea_area_constituency_lookup = 6L, ea_area_exposure = 35L, ea_area_overlaps = 35L, ea_area_coverage = 35L, constituency_sites = 35L, ea_area_sites = 35L, ea_area_geographies = 35L, exposure_grid_100m = 34L, constituency_flood_exposure = 35L)
 
 missing_table_info <- function(msg) {
@@ -1484,6 +1485,51 @@ FLOOD_BANDS <- data.frame(
   text   = c("#FFFFFF", "#FFFFFF", "#0B0C0C", "#0B0C0C"),
   range  = c("over 3.3% a year", "1 to 3.3%", "0.1 to 1%", "under 0.1%"),
   stringsAsFactors = FALSE)
+
+# ---- Rapid Flood Guidance ----------------------------------------------------------------------------------------------------
+# rfg_current(): the newest update as a one-row list when guidance is in force (is_present), else NULL. `upd` is fetch_rfg_updates(), newest first.
+rfg_current <- function(upd) {
+  if (is.null(upd) || nrow(upd) == 0L) return(NULL)
+  u <- as.data.frame(upd)[1L, , drop = FALSE]
+  if (isTRUE(as.logical(u$is_present))) u else NULL
+}
+
+# rfg_default_key(): the update the Rapid Flood Guidance view opens on: the one in force, else the newest that ever had guidance, else NA.
+rfg_default_key <- function(upd) {
+  if (is.null(upd) || nrow(upd) == 0L) return(NA_character_)
+  u <- as.data.frame(upd)
+  cur <- rfg_current(u)
+  if (!is.null(cur)) return(as.character(cur$update_key))
+  had <- u[as.logical(u$is_present), , drop = FALSE]
+  if (nrow(had) == 0L) NA_character_ else as.character(had$update_key[1L])
+}
+
+# rfg_area_flag(): how many of an area's people lie under the polygons of an update. `areas` is fetch_rfg_areas() (area_id, people, polygon_key). One polygon
+#   can overlap another, so the sum is capped at the area's own people. NULL when no polygon reaches it.
+rfg_area_flag <- function(areas, area_id, area_people = NA_real_) {
+  if (is.null(areas) || nrow(areas) == 0L) return(NULL)
+  x <- as.data.frame(areas); x <- x[x$area_id == area_id & x$people > 0, , drop = FALSE]
+  if (nrow(x) == 0L) return(NULL)
+  p <- sum(x$people); if (!is.na(area_people)) p <- min(p, area_people)
+  list(people = p, polygons = length(unique(x$polygon_key)), share = if (is.na(area_people) || area_people <= 0) NA_real_ else p / area_people)
+}
+
+# rfg_constituency_flag(): the same for a constituency. `cons` is fetch_rfg_constituencies() (pcon, people, polygon_key).
+rfg_constituency_flag <- function(cons, code, people_in_constituency = NA_real_) {
+  if (is.null(cons) || nrow(cons) == 0L) return(NULL)
+  x <- as.data.frame(cons); x <- x[x$pcon == code & x$people > 0, , drop = FALSE]
+  if (nrow(x) == 0L) return(NULL)
+  p <- sum(x$people); if (!is.na(people_in_constituency)) p <- min(p, people_in_constituency)
+  list(people = p, polygons = length(unique(x$polygon_key)), share = if (is.na(people_in_constituency) || people_in_constituency <= 0) NA_real_ else p / people_in_constituency)
+}
+
+# rfg_flag_text(): one sentence for a flag from rfg_area_flag() or rfg_constituency_flag().
+rfg_flag_text <- function(flag, what = "area") {
+  if (is.null(flag)) return(NULL)
+  n <- formatC(round(flag$people), format = "d", big.mark = ",")
+  sprintf("Under Rapid Flood Guidance: %s people of this %s%s lie inside %d guidance polygon%s.", n, what,
+          if (is.na(flag$share)) "" else sprintf(" (%.0f%%)", 100 * flag$share), flag$polygons, if (flag$polygons == 1L) "" else "s")
+}
 
 # forecast_people_rows(): people in the areas under a forecast, by kind. `ex` is the exposure table (area_id, kind, people, people_split, people_rs_high_medium),
 #   `pot` the potential areas (ea_area_code). people_low sums each area's split people (overlapping areas share a person), people_high the whole areas;

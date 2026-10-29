@@ -1280,3 +1280,24 @@ test_that("forecast_people_rows gives a floor and a ceiling for the people in th
   expect_true(all(r$people_low <= r$people_high))
   expect_equal(nrow(forecast_people_rows(ex, data.frame(ea_area_code = "none"))), 0L)
 })
+
+test_that("rapid flood guidance: the current update, the default view, and the flags", {
+  u <- data.table(update_key = c("9", "none_a", "7"), is_present = c(FALSE, FALSE, TRUE))
+  expect_null(rfg_current(u))                               # the newest row is a no-guidance state
+  expect_equal(rfg_default_key(u), "7")                     # the view falls back to the newest update that had guidance
+  u2 <- data.table(update_key = c("10", "9"), is_present = c(TRUE, TRUE))
+  expect_equal(as.character(rfg_current(u2)$update_key), "10"); expect_equal(rfg_default_key(u2), "10")
+  expect_null(rfg_current(NULL)); expect_true(is.na(rfg_default_key(NULL))); expect_true(is.na(rfg_default_key(u[0])))
+  expect_true(is.na(rfg_default_key(data.table(update_key = "x", is_present = FALSE))))
+
+  areas <- data.table(area_id = c("A", "A", "B"), people = c(300, 500, 40), polygon_key = c("10|1", "10|2", "10|1"))
+  f <- rfg_area_flag(areas, "A", 600)
+  expect_equal(f$people, 600); expect_equal(f$polygons, 2L); expect_equal(f$share, 1)           # capped at the area's own people
+  expect_equal(rfg_area_flag(areas, "B")$people, 40); expect_true(is.na(rfg_area_flag(areas, "B")$share))
+  expect_null(rfg_area_flag(areas, "Z", 100)); expect_null(rfg_area_flag(NULL, "A", 100))
+  cons <- data.table(pcon = c("E1", "E2"), people = c(1200, 0), polygon_key = c("10|1", "10|1"))
+  expect_equal(rfg_constituency_flag(cons, "E1", 5000)$share, 0.24); expect_null(rfg_constituency_flag(cons, "E2", 5000))
+  expect_match(rfg_flag_text(f, "area"), "600 people of this area \\(100%\\) lie inside 2 guidance polygons")
+  expect_match(rfg_flag_text(rfg_constituency_flag(cons, "E1"), "constituency"), "1,200 people of this constituency lie inside 1 guidance polygon\\.")
+  expect_null(rfg_flag_text(NULL))
+})
