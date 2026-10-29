@@ -1139,6 +1139,8 @@ make_area_detail_tab <- function() tags$div(
       uiOutput("area_bands"),
       tags$h2("Critical sites"),
       uiOutput("area_sites"),
+      DT::dataTableOutput("area_sites_table"),
+      uiOutput("area_sites_download"),
       tags$h2("Constituencies"),
       uiOutput("area_cons"))),
   tags$h2("Linked gauges"),
