@@ -57,3 +57,12 @@ test_that("Copy link saves the view on the server and copies a short link, and n
   des <- paste(readLines(file.path(app_root, "design.R"), warn = FALSE), collapse = "\n")
   expect_true(grepl("copy_link_click", des, fixed = TRUE)); expect_false(grepl("writeText(window.location.href)", des, fixed = TRUE))   # no longer copies the address bar
 })
+
+
+test_that("the footer carries a build stamp and the app says what link it made, so a wrong shared link can be traced", {
+  des <- paste(readLines(file.path(app_root, "design.R"), warn = FALSE), collapse = "\n")
+  srv <- paste(readLines(file.path(app_root, "app_server.R"), warn = FALSE), collapse = "\n")
+  glob <- paste(readLines(file.path(app_root, "global.R"), warn = FALSE), collapse = "\n")
+  expect_true(grepl('uiOutput("build_stamp"', des, fixed = TRUE) && grepl("output$build_stamp", srv, fixed = TRUE) && grepl("APP_BUILD <-", glob, fixed = TRUE))
+  expect_true(grepl('showNotification(sprintf("Link made: %s", url)', srv, fixed = TRUE))
+})

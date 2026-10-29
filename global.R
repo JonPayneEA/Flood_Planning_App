@@ -249,6 +249,10 @@ CONTACT_MIN_PCT <- env_number("FGS_CONTACT_MIN_PCT", 0.01)
 # A flood warning or alert area counts as "under the forecast" for a constituency
 # when at least this share of the AREA lies inside the constituency. Mirrors the
 # pipeline's WARNING_CONTACT_MIN_PCT in config.py (0.01 = 1%).
+# The newest change merged into this app (the pull request number and date), shown in the footer with how shared links are saved, so what is running on
+# Connect can be told from a glance. Update it with each merge to main.
+APP_BUILD <- "PR 90, 29 Oct 2026"
+
 TARGET_AREA_MIN_PCT <- env_number("FGS_WARNING_CONTACT_MIN_PCT", 0.01)
 
 AUTO_REFRESH_SECONDS <- env_number("FGS_AUTO_REFRESH_SECONDS", 120)

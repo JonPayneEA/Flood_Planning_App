@@ -463,6 +463,7 @@ app_footer <- function() {
       tags$ul(tags$li(tags$a(href = "#", `data-view` = "Guide", "How the figures are made")),
               tags$li(tags$a(href = "#", `data-view` = "Planned", "What is planned"))),
       tags$p("This uses Environment Agency flood and river level data from the real-time data API (Beta)."),
+      tags$p(class = "licence build-stamp", uiOutput("build_stamp", inline = TRUE)),
       tags$p(class = "licence",
              "All content is available under the ",
              tags$a(href = "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/", "Open Government Licence v3.0"),
