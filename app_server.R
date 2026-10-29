@@ -32,6 +32,7 @@ source("data.R", local = TRUE)
 
 
 server <- function(input, output, session) {
+  shiny::shinyOptions(bookmarkStore = "server")
   
   # ---------------------------------------------------------------------------
   # Statement list: fetched on session start and on each Refresh click.
