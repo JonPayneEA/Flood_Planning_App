@@ -1439,7 +1439,7 @@ server <- function(input, output, session) {
     "refresh_data", "show_health", "goto_constituency", "exp_pick", "nav_to",
     "rv_reviewed", "rv_sent", "rv_rejected", "demo_reset",
     "area_row_click", "download_ea_areas", "download_situation",
-    "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas", "download_areas", "download_const_exp", "download_exp_bands", "download_area_cells", "download_tb", "download_area_issues", "download_area_brief", "download_area_sites", "download_exp_responders", "area_open", "areas_open_selected",
+    "copy_link_click", "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas", "download_areas", "download_const_exp", "download_exp_bands", "download_area_cells", "download_tb", "download_area_issues", "download_area_brief", "download_area_sites", "download_exp_responders", "area_open", "areas_open_selected",
 
     "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas", "download_areas", "download_const_exp", "download_exp_bands", "download_area_cells", "download_const_brief", "download_area_issues", "download_area_brief", "download_area_sites", "download_exp_responders", "area_open", "areas_open_selected",
     "situation_table_rows_selected", "situation_table_row_last_clicked",
@@ -1456,9 +1456,10 @@ server <- function(input, output, session) {
   onBookmark(function(state) state$values$area_pick <- isolate(input$area_pick))
   onRestored(function(state) restored_area(state$values$area_pick))
 
-  view_state <- debounce(reactive({ x <- reactiveValuesToList(input); x[setdiff(names(x), bookmark_noise(names(x)))] }), 600)
-  observeEvent(view_state(), session$doBookmark(), ignoreInit = TRUE)
-  onBookmarked(function(url) updateQueryString(url, mode = "replace"))
+  # Copy link saves the view on the server and sends the short link back for the browser to copy (see the copy_link handler in design.R). The address
+  # bar is left alone: a long address in it is what the gateway refused.
+  observeEvent(input$copy_link_click, session$doBookmark(), ignoreInit = TRUE)
+  onBookmarked(function(url) session$sendCustomMessage("copy_link", list(url = url)))
 
 
   # ---------------------------------------------------------------------------

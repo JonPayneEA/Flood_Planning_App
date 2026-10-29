@@ -342,6 +342,16 @@ button.stat-btn .stat-top { display: flex; align-items: center; gap: var(--sp-3)
 # observer behave as they did. It also remembers the last view each section was left on, and keeps the current link marked.
 app_nav_js <- function() {
   r"---(
+// Copy link: the server saves the view and answers with a short link; fgsCopy puts it on the clipboard and says so on the button.
+window.fgsCopy = function (text, done) {
+  var b = window.fgsCopyBtn, t = window.fgsCopyHtml;
+  function ok() { if (b) { b.textContent = done || 'Copied'; setTimeout(function () { b.innerHTML = t; }, 1800); } }
+  if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text).then(ok, function () { window.prompt('Copy this link', text); }); }
+  else { window.prompt('Copy this link', text); }
+};
+$(document).on('shiny:connected', function () {
+  Shiny.addCustomMessageHandler('copy_link', function (m) { clearTimeout(window.fgsCopyTimer); window.fgsCopy(m.url, 'Copied'); });
+});
 (function () {
   var last = {};
   function tabAnchor(v) {
@@ -410,10 +420,11 @@ app_masthead <- function() {
             type = "button", id = "copy_link", class = "btn btn-sm btn-outline-secondary",
             title = "Copy a link to this exact view",
             onclick = paste0(
-              "var b=this,t=b.innerHTML;",
-              "if(navigator.clipboard){navigator.clipboard.writeText(window.location.href).then(function(){",
-              "b.textContent='Copied';setTimeout(function(){b.innerHTML=t;},1500);});}",
-              "else{window.prompt('Copy this link',window.location.href);}"),
+              "var b=this;window.fgsCopyBtn=b;window.fgsCopyHtml=window.fgsCopyHtml||b.innerHTML;",
+              "clearTimeout(window.fgsCopyTimer);",
+              # If the server does not answer in four seconds (the state could not be saved), copy the plain app address so the button never does nothing.
+              "window.fgsCopyTimer=setTimeout(function(){window.fgsCopy(window.location.origin+window.location.pathname,'Copied app link');},4000);",
+              "Shiny.setInputValue('copy_link_click',Date.now(),{priority:'event'});"),
             icon("link"), " Copy link"),
           uiOutput("health_badge"))
       )

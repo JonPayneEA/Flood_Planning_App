@@ -44,3 +44,16 @@ test_that("the shell has a skip link target and a footer with the licence", {
   expect_match(as.character(app_footer()), "real-time data API", fixed = TRUE)
   expect_match(app_nav_js(), "main_tabs", fixed = TRUE)
 })
+
+
+test_that("Copy link saves the view on the server and copies a short link, and nothing writes the whole state into the address", {
+  app_r <- paste(readLines(file.path(app_root, "app.R"), warn = FALSE), collapse = "\n")
+  expect_true(grepl('enableBookmarking = "server"', app_r, fixed = TRUE)); expect_false(grepl('enableBookmarking = "url"', app_r, fixed = TRUE))
+  srv <- paste(readLines(file.path(app_root, "app_server.R"), warn = FALSE), collapse = "\n")
+  expect_false(grepl("updateQueryString", srv, fixed = TRUE))                                  # the address bar is left alone
+  expect_true(grepl("input$copy_link_click", srv, fixed = TRUE) && grepl('sendCustomMessage("copy_link"', srv, fixed = TRUE))
+  js <- app_nav_js()
+  expect_true(grepl("addCustomMessageHandler('copy_link'", js, fixed = TRUE) && grepl("window.fgsCopy = function", js, fixed = TRUE))
+  des <- paste(readLines(file.path(app_root, "design.R"), warn = FALSE), collapse = "\n")
+  expect_true(grepl("copy_link_click", des, fixed = TRUE)); expect_false(grepl("writeText(window.location.href)", des, fixed = TRUE))   # no longer copies the address bar
+})
