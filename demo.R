@@ -1101,7 +1101,7 @@ demo_rfg_updates <- function() {
     last_updated = c(now - 1800, now - 2 * 86400, now - 3 * 86400 + 7200, now - 10 * 86400),
     pdf_url = c("https://example.invalid/rfg9003.pdf", NA, "https://example.invalid/rfg9001.pdf", NA),
     national_summary = c("Intense showers are expected across parts of the Midlands this evening.", NA, "Showers have eased.", NA),
-    n_polygons = c(3L, 0L, 2L, 0L), n_valid = c(3L, 0L, 1L, 0L))
+    n_polygons = c(3L, 0L, 2L, 0L), n_valid = c(3L, 0L, 0L, 0L))
 }
 
 # Three invented polygons: a small disc round the centre of three demo warning areas.
@@ -1111,7 +1111,7 @@ demo_rfg_polygons <- function(update_key) {
   k <- if (update_key == "9003") 1:3 else 4L
   cen <- sf::st_centroid(a$geom_m[k])
   disc <- sf::st_buffer(cen, dist = 6000)
-  sf::st_sf(data.table(update_key = update_key, polygon_number = seq_along(k),
+  sf::st_sf(data.table(update_key = update_key, polygon_number = seq_along(k), is_valid = update_key == "9003",
                        updated_at = as.POSIXct(Sys.time() - 1800, tz = "UTC"),
                        latest_update = sprintf("Showers continue over this area. Surface water flooding is possible for the next %d hours.", 2L + seq_along(k)),
                        counties = c("Demo county", "Demo county, Other county", "Other county")[seq_along(k)]),
@@ -1123,7 +1123,7 @@ demo_rfg_exposure_all <- function(update_key) {
   if (is.null(p)) return(NULL)
   n <- nrow(p); set.seed(sum(utf8ToInt(update_key)))
   people <- as.numeric(round(runif(n, 800, 9000))); hm <- round(people * runif(n, .05, .3))
-  data.table(polygon_key = sprintf("%s|%d", update_key, p$polygon_number), update_key = update_key, polygon_number = p$polygon_number,
+  data.table(polygon_key = sprintf("%s|%d", update_key, p$polygon_number), update_key = update_key, polygon_number = p$polygon_number, is_valid = p$is_valid,
              latest_update = p$latest_update, counties = p$counties, addresses = round(people / 2.4), people = people, households = round(people / 2.4),
              over65 = round(people * .2), people_rs_high_medium = hm, people_sw_high = round(people * .03), people_sw_medium = round(people * .04),
              no_car_households = round(people / 2.4 * .2), people_bad_health = round(people * .05), people_limited_lot = round(people * .07))
@@ -1131,10 +1131,7 @@ demo_rfg_exposure_all <- function(update_key) {
 
 fetch_rfg_updates <- function(limit = 50L) copy(demo_rfg_updates())[seq_len(min(.N, as.integer(limit)))]
 
-fetch_rfg_totals <- function() {
-  x <- rbindlist(lapply(c("9003", "9001"), demo_rfg_exposure_all))
-  x[, .(polygons_counted = .N, addresses = sum(addresses), people = sum(people), households = sum(households), people_rs_high_medium = sum(people_rs_high_medium)), by = update_key]
-}
+fetch_rfg_totals <- function() rfg_totals(rbindlist(lapply(c("9003", "9001"), demo_rfg_exposure_all)))
 
 fetch_rfg_polygons <- function(update_key) demo_rfg_polygons(update_key)
 
@@ -1147,7 +1144,7 @@ fetch_rfg_areas <- function(update_key) {
   a <- demo_ea_areas()$table
   k <- if (update_key == "9003") 1:3 else 4L
   rbindlist(lapply(seq_len(nrow(e)), function(i) data.table(
-    polygon_key = e$polygon_key[i], update_key = update_key, kind = a$ea_area_type[k[i]], area_id = a$ea_area_code[k[i]], area_name = a$ea_area_name[k[i]],
+    polygon_key = e$polygon_key[i], update_key = update_key, is_valid = e$is_valid[i], kind = a$ea_area_type[k[i]], area_id = a$ea_area_code[k[i]], area_name = a$ea_area_name[k[i]],
     addresses = round(e$addresses[i] * .8), people = round(e$people[i] * .8), people_rs_high_medium = round(e$people_rs_high_medium[i] * .8))))
 }
 
@@ -1156,7 +1153,7 @@ fetch_rfg_constituencies <- function(update_key) {
   if (is.null(e)) return(data.table())
   g <- demo_geometry()$table
   rbindlist(lapply(seq_len(nrow(e)), function(i) data.table(
-    polygon_key = e$polygon_key[i], update_key = update_key, pcon = g$constituency_id[i], addresses = e$addresses[i], people = e$people[i], households = e$households[i],
+    polygon_key = e$polygon_key[i], update_key = update_key, is_valid = e$is_valid[i], pcon = g$constituency_id[i], addresses = e$addresses[i], people = e$people[i], households = e$households[i],
     people_rs_high_medium = e$people_rs_high_medium[i])))
 }
 
@@ -1165,7 +1162,7 @@ fetch_rfg_sites <- function(update_key) {
   if (is.null(e)) return(data.table())
   set.seed(5)
   rbindlist(lapply(seq_len(nrow(e)), function(i) data.table(
-    polygon_key = e$polygon_key[i], update_key = update_key, site_id = sprintf("demo:rfg:%d", i), name = sprintf("Demo school %d", i), site_group = "education",
+    polygon_key = e$polygon_key[i], update_key = update_key, is_valid = e$is_valid[i], site_id = sprintf("demo:rfg:%d", i), name = sprintf("Demo school %d", i), site_group = "education",
     site_type = "Primary", band = c("High", "Medium", "Low")[i %% 3L + 1L], rofrs_rank = 4L - i %% 3L)))
 }
 
