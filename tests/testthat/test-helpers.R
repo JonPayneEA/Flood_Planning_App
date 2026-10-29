@@ -1188,3 +1188,19 @@ test_that("the constituency brief content and PDF: figures, MP, the in force and
   constituency_brief_pdf(g, constituency_brief_content(cc, NULL, NULL, list(in_force = fl$in_force[0, ], potential = fl$potential[0, ]), NULL))      # nothing known: still draws
   expect_gt(file.size(g), 2000)
 })
+
+
+test_that("the threshold board flags areas in force and potential ones, and does not call an area in force potential too", {
+  now <- as.POSIXct("2026-10-28 12:00", tz = "UTC")
+  raw <- data.frame(measure_uri = c("m1", "m2", "m3"), target_area = c("A1", "A2", "A3"), type = "RES", value_in_measure_unit = c(3, 3, 3), last_value = c(3.1, 2.9, 2.8),
+                    last_time = as.POSIXct("2026-10-28 11:50", tz = "UTC"), value_3h_ago = c(3, 2.8, 2.8), gauge_station = "g", gauge_river = "r", stringsAsFactors = FALSE)
+  f <- data.frame(flood_area_id = c("A1", "A1"), severity_level = c(3L, 2L))
+  pot <- data.frame(ea_area_code = c("A1", "A2", "A2"), worst_rank = c(4L, 2L, 3L), first_day = c(1L, 3L, 2L))
+  r <- threshold_board_rows(raw, NULL, now, within_m = 1, inforce = f, potential = pot)
+  expect_equal(r$in_force[r$area_id == "A1"], "Flood warning")                         # the severest of the two
+  expect_equal(r$potential[r$area_id == "A1"], "")                                       # in force, so not also potential
+  expect_equal(r$potential[r$area_id == "A2"], "Medium risk, from day 2")
+  expect_equal(r$potential[r$area_id == "A3"], ""); expect_equal(r$in_force[r$area_id == "A3"], "")
+  plain <- threshold_board_rows(raw, NULL, now, within_m = 1)
+  expect_true(all(plain$in_force == "") && all(plain$potential == ""))
+})

@@ -1862,10 +1862,10 @@ issue_counts_by_month <- function(ep, now = Sys.time(), months = 36L) {
 # matters; where an area has none, its lowest threshold of any type is used. Headroom is the threshold minus the level in metres, so it needs no
 # datum. A rate of rise comes from the two readings, in metres an hour, and an estimated time to the threshold only when the level is rising.
 # `ex` is the exposure table (area_id, area_name, people, people_rs_high_medium) so rows can be ranked by who is below them.
-threshold_board_rows <- function(raw, ex = NULL, now = Sys.time(), within_m = 1, rising_only = FALSE, stale_hours = 3) {
+threshold_board_rows <- function(raw, ex = NULL, now = Sys.time(), within_m = 1, rising_only = FALSE, stale_hours = 3, inforce = NULL, potential = NULL) {
   empty <- data.frame(area_id = character(), area_name = character(), gauge = character(), river = character(), last_value = numeric(), last_time = as.POSIXct(character(), tz = "UTC"),
                       threshold = numeric(), label = character(), headroom = numeric(), rate = numeric(), eta_hours = numeric(), status = character(),
-                      people_at_risk = numeric(), people = numeric(), stringsAsFactors = FALSE)
+                      people_at_risk = numeric(), people = numeric(), in_force = character(), potential = character(), stringsAsFactors = FALSE)
   if (is.null(raw) || nrow(raw) == 0L) return(empty)
   x <- as.data.frame(raw, stringsAsFactors = FALSE)
   for (cn in c("target_area", "type", "label_prefix", "gauge_station", "gauge_river")) if (!(cn %in% names(x))) x[[cn]] <- NA_character_
@@ -1897,7 +1897,21 @@ threshold_board_rows <- function(raw, ex = NULL, now = Sys.time(), within_m = 1,
                     gauge = y$gauge_station, river = y$gauge_river, last_value = y$last_value, last_time = y$last_time, threshold = y$threshold,
                     label = ifelse(is.na(y$label_prefix), ifelse(is.na(y$type), "", y$type), y$label_prefix), headroom = y$headroom, rate = y$rate, eta_hours = y$eta_hours,
                     status = y$status, people_at_risk = if (is.null(e)) NA_real_ else e$people_rs_high_medium[m], people = if (is.null(e)) NA_real_ else e$people[m],
-                    stringsAsFactors = FALSE)
+                    in_force = "", potential = "", stringsAsFactors = FALSE)
+  # flags: what the Environment Agency has in force for the area now (the severest if more than one), and, where nothing is, what the latest forecast
+  # puts a risk polygon over (the highest risk and the first day)
+  if (!is.null(inforce) && nrow(inforce) > 0L) {
+    f <- as.data.frame(inforce); f <- f[f$severity_level %in% 1:3, , drop = FALSE]
+    sev <- tapply(f$severity_level, f$flood_area_id, min)
+    s <- sev[out$area_id]
+    out$in_force <- ifelse(is.na(s), "", unname(IN_FORCE_LABELS[as.character(s)]))
+  }
+  if (!is.null(potential) && nrow(potential) > 0L) {
+    p <- as.data.frame(potential)
+    worst <- tapply(p$worst_rank, p$ea_area_code, max); first <- tapply(p$first_day, p$ea_area_code, min)
+    w <- worst[out$area_id]; d <- first[out$area_id]
+    out$potential <- ifelse(is.na(w) | out$in_force != "", "", sprintf("%s risk, from day %d", RANK_LABELS[w + 1L], as.integer(d)))
+  }
   rank <- c(`At or above` = 1L, `Close and rising` = 2L, Close = 3L)[out$status]
   out[order(rank, ifelse(is.na(out$eta_hours), Inf, out$eta_hours), out$headroom, -ifelse(is.na(out$people_at_risk), 0, out$people_at_risk)), , drop = FALSE]
 }

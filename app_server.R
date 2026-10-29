@@ -2649,7 +2649,10 @@ server <- function(input, output, session) {
   tb_rows <- reactive({
     raw <- tb_raw(); req(!is.null(raw))
     ex <- tryCatch(fetch_area_exposure(), error = function(e) NULL)
-    threshold_board_rows(raw, ex, within_m = as.numeric(input$tb_within), rising_only = isTRUE(input$tb_rising))
+    sit <- tryCatch(as.data.table(situation_latest_clean()), error = function(e) NULL)
+    sid <- if (is.null(sit) || nrow(sit) == 0L) NA else suppressWarnings(as.integer(sit$fgs_statement_id[1L]))
+    pot <- if (is.na(sid)) NULL else tryCatch(fetch_potential_area_list(sid, 2L), error = function(e) NULL)
+    threshold_board_rows(raw, ex, within_m = as.numeric(input$tb_within), rising_only = isTRUE(input$tb_rising), inforce = inforce_rv(), potential = pot)
   })
 
   output$tb_note <- renderUI({
@@ -2668,15 +2671,15 @@ server <- function(input, output, session) {
              tile(sum(x$status == "At or above"), "at or above their threshold"),
              tile(sum(x$status == "Close and rising"), "close and rising"),
              tile(sum(x$status == "Close"), "close, not rising"),
-             tile(formatC(round(sum(x$people_at_risk[x$status != "Close"], na.rm = TRUE), -1L), format = "d", big.mark = ","), "people at risk in those areas"),
-             tile(format(max(x$last_time, as.POSIXct("1970-01-01", tz = "UTC")), "%H:%M", tz = "UTC"), "newest reading (UTC)"))
+             tile(sum(nzchar(x$in_force)), "with an alert or warning in force now"),
+             tile(sum(nzchar(x$potential)), "under the latest forecast, not yet in force"))
   })
 
   tb_display <- function(x) {
     data.table(
       Area = vapply(seq_len(nrow(x)), function(i) area_open_link(x$area_id[i], x$area_name[i]), character(1)),
       Gauge = ifelse(is.na(x$gauge), "", x$gauge), River = ifelse(is.na(x$river), "", x$river),
-      Status = x$status, `Level (m)` = round(x$last_value, 2), `Threshold (m)` = round(x$threshold, 2), `Headroom (m)` = round(x$headroom, 2),
+      Status = x$status, `In force now` = x$in_force, `Potential (forecast)` = x$potential, `Level (m)` = round(x$last_value, 2), `Threshold (m)` = round(x$threshold, 2), `Headroom (m)` = round(x$headroom, 2),
       Trend = trend_label(x$rate), `Time to threshold` = ifelse(is.na(x$eta_hours), "", duration_label(x$eta_hours * 60)),
       `People at risk` = round(x$people_at_risk), Read = format(x$last_time, "%d %b %H:%M", tz = "UTC"))
   }
@@ -2686,6 +2689,8 @@ server <- function(input, output, session) {
     if (is.null(x) || nrow(x) == 0L) return(DT::datatable(data.frame(Note = "No linked gauge is within that distance of its threshold."), rownames = FALSE, selection = "none", options = list(dom = "t")))
     DT::datatable(tb_display(x), rownames = FALSE, selection = "none", escape = FALSE,
                   options = list(pageLength = 15, dom = "ftip", scrollX = TRUE, order = list(), columnDefs = list(list(orderable = FALSE, targets = 0L)))) |>
+      DT::formatStyle("In force now", fontWeight = "600", color = APP_SEVERE_HEX) |>
+      DT::formatStyle("Potential (forecast)", color = APP_WARNING_HEX) |>
       DT::formatStyle("Status", fontWeight = DT::styleEqual(c("At or above", "Close and rising"), c("700", "600")),
                       color = DT::styleEqual(c("At or above", "Close and rising", "Close"), c(APP_SEVERE_HEX, APP_WARNING_HEX, APP_PALETTE$ink))) |>
       DT::formatRound("People at risk", digits = 0, mark = ",")

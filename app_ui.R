@@ -907,7 +907,8 @@ make_threshold_board_tab <- function() tags$div(
     "Each flood warning area has Observed thresholds linked to gauges (notebook 28). The Response threshold is the one that matters, so for each area and gauge the lowest Response ",
     "threshold is used, or the lowest of any kind where there is no Response threshold. Headroom is the threshold minus the newest level, in metres, so it needs no datum. ",
     "The trend compares the newest level with the average two to four hours earlier. The time to the threshold is shown only for a rising level and is a straight-line estimate, ",
-    "not a forecast. A reading older than three hours is left out. The people at risk are the people in the area in a High or Medium rivers and sea band."))
+    "not a forecast. A reading older than three hours is left out. The people at risk are the people in the area in a High or Medium rivers and sea band. ",
+    "In force now is what the Environment Agency feed has in force for the area. Potential means the area lies under a risk polygon of Low or above in the latest Flood Guidance Statement and nothing is in force there yet."))
 )
 
 make_rain_tab <- function() tags$div(

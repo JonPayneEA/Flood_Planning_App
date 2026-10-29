@@ -475,7 +475,8 @@ guide_products <- function(s) {
         "Headroom is the threshold minus the newest level, in metres. Because it is a difference on one gauge, it needs no datum. Choose how close counts with Show gauges within.",
         "The trend compares the newest level with the average two to four hours earlier. A level rising by more than 0.01 metres an hour is rising, and for those the page gives a straight-line time to the threshold.",
         "Rows are ordered: at or above the threshold first, then close and rising by the soonest time to threshold, then close. Ties go to the area with more people at risk.",
-        "The people at risk are the people in the warning area who are in a High or Medium band for rivers and the sea. Select an area name to open its detail page."
+        "The people at risk are the people in the warning area who are in a High or Medium band for rivers and the sea. Select an area name to open its detail page.",
+        "Two flags sit beside each row. In force now is the severest alert or warning the Environment Agency feed has in force for that area. Potential is set where nothing is in force but the area lies under a risk polygon of Low or above in the latest Flood Guidance Statement, with the highest risk and the first forecast day. Potential means a warning could be issued, not that one will be."
       ),
       read = c(
         "At or above means the newest level is at or over the lowest threshold used. It does not mean a warning has been issued.",
