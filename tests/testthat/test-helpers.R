@@ -1252,7 +1252,15 @@ test_that("every fetch_ function the app calls is defined in data.R, so a merge 
 test_that("an area link keeps its choice: the area picker is filled once, and the link passes the choices with the selection", {
   srv <- paste(readLines(file.path(app_root, "app_server.R"), warn = FALSE), collapse = "\n")
   expect_true(grepl("if (!isolate(area_picker_ready()))", srv, fixed = TRUE))                       # the tab-change observer cannot reset the selection
-  expect_equal(lengths(regmatches(srv, gregexpr('updateSelectizeInput(session, "area_pick"', srv, fixed = TRUE))), 3L)
+  expect_equal(lengths(regmatches(srv, gregexpr('updateSelectizeInput(session, "area_pick"', srv, fixed = TRUE))), 4L)
   picks <- regmatches(srv, gregexpr("updateSelectizeInput\\(session, \"area_pick\"[^\n]*", srv))[[1L]]
   expect_true(all(grepl("server = TRUE", picks, fixed = TRUE)) && all(grepl("area_choices_of", picks, fixed = TRUE)))        # a server-side picker ignores a selection sent without its choices
+})
+
+
+test_that("a copied Target Area link restores the chosen area: it is saved with the view, and applied once the picker and the saved value are both there", {
+  srv <- paste(readLines(file.path(app_root, "app_server.R"), warn = FALSE), collapse = "\n")
+  expect_true(grepl("state$values$area_pick <- isolate(input$area_pick)", srv, fixed = TRUE))            # saved when the link is made
+  expect_true(grepl("onRestored(function(state) restored_area(state$values$area_pick))", srv, fixed = TRUE))
+  expect_true(grepl("observeEvent(list(restored_area(), area_picker_ready())", srv, fixed = TRUE))       # applied whichever of the two arrives last
 })
