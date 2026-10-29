@@ -1532,7 +1532,7 @@ area_exposure_popup <- function(codes, exposure, constituencies = NULL) {
     row("In High or Medium bands (rivers and sea)", sprintf("<b>%s</b> people, <b>%s</b> households", n(exposure$people_rs_high_medium[i]), n(exposure$households_rs_high_medium[i]))),
     row("Critical sites", sprintf("<b>%s</b> (%s in High or Medium)", n(exposure$sites[i]), n(exposure$sites_rs_high_medium[i]))),
     ifelse(is.na(cons) | !nzchar(cons), "", row("Constituencies", htmltools::htmlEscape(cons))),
-    "</table>", "<div>", ifelse(is.na(i), "", area_open_link(codes, "Open the area detail")), "</div>")
+    "</table>", "<div>", ifelse(is.na(i), "", area_open_link(codes, "Open the Target Area page")), "</div>")
   out[is.na(i)] <- ""
   out
 }
@@ -1552,7 +1552,7 @@ grid_band_colour <- function(haz) {
 }
 
 
-# The geographies responders work to, in the order the area detail page lists them, with the heading each gets. Ward is in the export only:
+# The geographies responders work to, in the order the Target Area page lists them, with the heading each gets. Ward is in the export only:
 # an area can touch dozens, which would swamp the page.
 RESPONDER_GEOGRAPHIES <- c(police_force_area = "Police force", fire_and_rescue_authority = "Fire and rescue authority",
                            combined_authority = "Combined authority", local_authority_district = "District or unitary authority",
@@ -1797,7 +1797,7 @@ inforce_exposure_summary <- function(f, ex, pairs = NULL) {
 }
 
 
-# The "Who responds" tables on the area detail page: one per geography in RESPONDER_GEOGRAPHIES, biggest first, up to `top` rows each. `g` has
+# The "Who responds" tables on the Target Area page: one per geography in RESPONDER_GEOGRAPHIES, biggest first, up to `top` rows each. `g` has
 # geography, code, name, people, share_of_area_people and people_rs_high_medium. A geography the area has no rows for is left out; NULL when none.
 # The tables are passed as unnamed children: a named child would be written as an HTML attribute and the section would draw empty.
 responder_tables_ui <- function(g, top = 12L) {

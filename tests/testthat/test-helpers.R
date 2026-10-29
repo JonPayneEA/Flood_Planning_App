@@ -1223,3 +1223,10 @@ test_that("plot styling puts height on the widget and does not use the deprecate
   expect_no_warning(styled <- app_plot_style(fig, height = 240, margin = list(t = 10)))
   expect_equal(styled$height, 240)
 })
+
+test_that("every fetch_ function the app calls is defined in data.R, so a merge cannot silently drop one and leave only the demo working", {
+  code <- function(f) { l <- readLines(file.path(app_root, f), warn = FALSE); l <- sub("#.*$", "", l); paste(l, collapse = "\n") }
+  used <- unique(unlist(regmatches(code("app_server.R"), gregexpr("\\bfetch_[a-z_0-9]+\\b", code("app_server.R")))))
+  defined <- unique(sub("\\s*<-.*$", "", grep("^fetch_[a-z_0-9]+\\s*<-\\s*function", readLines(file.path(app_root, "data.R"), warn = FALSE), value = TRUE)))
+  expect_equal(setdiff(used, defined), character())
+})
