@@ -1440,6 +1440,8 @@ server <- function(input, output, session) {
     "rv_reviewed", "rv_sent", "rv_rejected", "demo_reset",
     "area_row_click", "download_ea_areas", "download_situation",
     "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas", "download_areas", "download_const_exp", "download_exp_bands", "download_area_cells", "download_tb", "download_area_issues", "download_area_brief", "download_area_sites", "download_exp_responders", "area_open", "areas_open_selected",
+
+    "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas", "download_areas", "download_const_exp", "download_exp_bands", "download_area_cells", "download_const_brief", "download_area_issues", "download_area_brief", "download_area_sites", "download_exp_responders", "area_open", "areas_open_selected",
     "situation_table_rows_selected", "situation_table_row_last_clicked",
     "situation_table_cell_clicked", "situation_table_rows_current",
     "situation_table_rows_all", "situation_table_state", "situation_table_search",
@@ -2829,14 +2831,41 @@ server <- function(input, output, session) {
   const_exp_started <- reactive(identical(input$main_tabs, "Constituency exposure"))
   const_exp_all <- reactive({ req(const_exp_started()); safe_fetch(fetch_constituency_exposure) })
 
-  const_exp_data <- reactive({
+  # The situation table (MP, in force counts, the forecast) and the potential areas, joined onto the exposure rows so the table can flag them.
+  const_pot_counts <- reactive({
+    sit <- tryCatch(situation_latest_clean(), error = function(e) NULL)
+    sid <- if (is.null(sit) || nrow(sit) == 0L) NA else suppressWarnings(as.integer(sit$fgs_statement_id[1L]))
+    if (is.na(sid)) return(NULL)
+    tryCatch(as.data.table(fetch_potential_areas(sid, as.integer(input$const_pot_rank %||% 2L))), error = function(e) NULL)
+  })
+
+  const_exp_full <- reactive({
     x <- const_exp_all(); req(x, input$const_exp_cover)
     x <- as.data.table(x)
-    gap <- if (input$const_exp_cover == "warning") x$people_high_medium_not_in_warning_area else x$people_high_medium_not_in_alert_area
+    sit <- tryCatch(as.data.table(situation_latest_clean()), error = function(e) NULL)
+    if (!is.null(sit) && nrow(sit) > 0L) {
+      x <- merge(x, sit[, .(constituency_code = constituency_id, severe_n = severe_warnings, warning_n = warnings, alert_n = alerts)], by = "constituency_code", all.x = TRUE, sort = FALSE)
+    } else x[, `:=`(severe_n = NA_integer_, warning_n = NA_integer_, alert_n = NA_integer_)]
+    pc <- const_pot_counts()
+    if (!is.null(pc) && nrow(pc) > 0L) {
+      x <- merge(x, pc[, .(constituency_code = constituency_id, pot_warning = warning_areas, pot_alert = alert_areas)], by = "constituency_code", all.x = TRUE, sort = FALSE)
+    } else x[, `:=`(pot_warning = NA_integer_, pot_alert = NA_integer_)]
+    for (cn in c("severe_n", "warning_n", "alert_n", "pot_warning", "pot_alert")) set(x, which(is.na(x[[cn]])), cn, 0L)
+    x[, gap := if (input$const_exp_cover == "warning") people_high_medium_not_in_warning_area else people_high_medium_not_in_alert_area]
+    x[, flagged := (severe_n + warning_n + alert_n + pot_warning + pot_alert) > 0L]
+    if (isTRUE(input$const_flagged)) x <- x[flagged == TRUE]
+    x[order(-(severe_n + warning_n + alert_n > 0L), -gap)]
+  })
+
+  const_exp_data <- reactive({
+    x <- const_exp_full()
+    inforce_txt <- function(s, w, a) { p <- c(if (s > 0L) sprintf("%d severe", s), if (w > 0L) sprintf("%d warning%s", w, if (w == 1L) "" else "s"), if (a > 0L) sprintf("%d alert%s", a, if (a == 1L) "" else "s")); paste(p, collapse = ", ") }
+    pot_txt <- function(w, a) { p <- c(if (w > 0L) sprintf("%d warning area%s", w, if (w == 1L) "" else "s"), if (a > 0L) sprintf("%d alert area%s", a, if (a == 1L) "" else "s")); paste(p, collapse = ", ") }
     x[, .(Constituency = fifelse(is.na(constituency_name), constituency_code, constituency_name), Code = constituency_code,
+          `In force now` = mapply(inforce_txt, severe_n, warning_n, alert_n), `Potential (latest forecast)` = mapply(pot_txt, pot_warning, pot_alert),
           People = round(people), `At risk (High or Medium)` = round(people_rs_high_medium),
           `Share at risk` = sprintf("%.1f%%", 100 * people_rs_high_medium / pmax(people, 1)),
-          `Not in a warning or alert area` = round(gap), `Share of at risk not covered` = sprintf("%.0f%%", 100 * gap / pmax(people_rs_high_medium, 1)))][order(-`Not in a warning or alert area`)]
+          `Not in a warning or alert area` = round(gap), `Share of at risk not covered` = sprintf("%.0f%%", 100 * gap / pmax(people_rs_high_medium, 1)))]
   })
 
   output$const_exp_note <- renderUI({
@@ -2852,11 +2881,61 @@ server <- function(input, output, session) {
     x <- const_exp_data()
     nm <- "Not in a warning or alert area"
     setnames(x, nm, if (input$const_exp_cover == "warning") "At risk, in no warning area" else "At risk, in no alert area")
-    DT::datatable(x, rownames = FALSE, selection = "none",
-                  options = list(pageLength = 15, scrollX = TRUE, dom = "ftip", order = list(list(4L, "desc")),
+    gapcol <- if (input$const_exp_cover == "warning") "At risk, in no warning area" else "At risk, in no alert area"
+    DT::datatable(x, rownames = FALSE, selection = "single",
+                  options = list(pageLength = 15, scrollX = TRUE, dom = "ftip", order = list(),
                                  language = list(info = "Showing _START_ to _END_ of _TOTAL_ constituencies"))) |>
-      DT::formatRound(c("People", "At risk (High or Medium)", names(x)[5L]), digits = 0, mark = ",")
+      DT::formatRound(c("People", "At risk (High or Medium)", gapcol), digits = 0, mark = ",") |>
+      DT::formatStyle("In force now", fontWeight = "600", color = APP_SEVERE_HEX) |>
+      DT::formatStyle("Potential (latest forecast)", color = APP_WARNING_HEX)
   })
+
+  # One constituency's detail: what is in force, what is potential, the figures. Its brief is the same content as a PDF.
+  const_selected <- reactive({
+    row <- input$const_exp_table_rows_selected
+    if (is.null(row)) return(NULL)
+    x <- const_exp_full()
+    if (row > nrow(x)) NULL else x[row]
+  })
+
+  const_flags <- reactive({
+    c <- const_selected(); req(c)
+    sit <- tryCatch(as.data.table(situation_latest_clean()), error = function(e) NULL)
+    sid <- if (is.null(sit) || nrow(sit) == 0L) NA else suppressWarnings(as.integer(sit$fgs_statement_id[1L]))
+    pot <- if (is.na(sid)) NULL else tryCatch(fetch_potential_area_list(sid, as.integer(input$const_pot_rank %||% 2L)), error = function(e) NULL)
+    links <- tryCatch(fetch_area_constituency_links(), error = function(e) NULL)
+    f <- inforce_rv()
+    list(flags = constituency_flags(f, pot, links, c$constituency_code), sit = if (is.null(sit)) NULL else as.data.frame(sit[constituency_id == c$constituency_code]),
+         statement = if (is.null(sit) || nrow(sit) == 0L) NA_character_ else sprintf("statement %s issued %s", sit$fgs_statement_id[1L], substr(sit$fgs_issued_at[1L], 1L, 16)))
+  })
+
+  output$const_detail <- renderUI({
+    c <- const_selected()
+    if (is.null(c)) return(tags$p(class = "text-muted", "Select a constituency in the table for its detail."))
+    fl <- const_flags(); n <- function(v) formatC(round(as.numeric(v)), format = "d", big.mark = ",")
+    inf <- fl$flags$in_force; pot <- fl$flags$potential
+    tags$div(
+      tags$h3(if (is.na(c$constituency_name)) c$constituency_code else c$constituency_name),
+      if (!is.null(fl$sit) && nrow(fl$sit) == 1L && !is.na(fl$sit$mp_name)) tags$p(class = "app-caption", sprintf("MP: %s%s.", fl$sit$mp_name, if (!is.na(fl$sit$mp_party)) paste0(" (", fl$sit$mp_party, ")") else "")),
+      tags$ul(
+        tags$li(sprintf("%s people; %s (%.0f%%) are in a High or Medium band for rivers and the sea, and %s of those are in no flood warning area.", n(c$people), n(c$people_rs_high_medium),
+                        100 * c$people_rs_high_medium / max(c$people, 1), n(c$people_high_medium_not_in_warning_area))),
+        tags$li(if (nrow(inf) == 0L) "Nothing is in force now." else tags$span(tags$strong("In force now: "), paste(sprintf("%s (%s)", inf$area, inf$level), collapse = "; "), ".")),
+        tags$li(if (nrow(pot) == 0L) sprintf("No other area lies under a forecast risk polygon of %s or above.", RANK_LABELS[as.integer(input$const_pot_rank %||% 2L) + 1L])
+                else tags$span(tags$strong("Potential, under the latest forecast: "), paste(sprintf("%s (%s, from day %d)", pot$area, tolower(pot$risk), pot$first_day), collapse = "; "), ".")),
+        tags$li(if (is.na(c$sites)) "Critical sites are not available yet (pipeline notebook 35)." else sprintf("%s critical sites: %s health, %s education, %s emergency, %s utilities; %s in a High or Medium band.",
+                                                                                                         n(c$sites), n(c$sites_health), n(c$sites_education), n(c$sites_emergency), n(c$sites_utilities), n(c$sites_rs_high_medium)))))
+  })
+
+  output$download_const_brief <- downloadHandler(
+    filename = function() sprintf("constituency_brief_%s_%s.pdf", gsub("[^A-Za-z0-9]", "", const_selected()$constituency_code %||% "none"), format(Sys.Date(), "%Y%m%d")),
+    content = function(file) {
+      c <- as.data.frame(const_selected()); fl <- const_flags()
+      sites <- tryCatch(fetch_constituency_sites(c$constituency_code), error = function(e) NULL)
+      ep <- tryCatch(fetch_warning_episodes(c$constituency_code), error = function(e) NULL)
+      hist <- if (is.null(ep)) NULL else area_issue_summary(ep)
+      constituency_brief_pdf(file, constituency_brief_content(c, fl$sit, sites, fl$flags, hist, fl$statement, RANK_LABELS[as.integer(input$const_pot_rank %||% 2L) + 1L]))
+    }, contentType = "application/pdf")
   output$download_const_exp <- downloadHandler(
     filename = function() sprintf("constituency_exposure_%s.csv", format(Sys.Date(), "%Y%m%d")),
     content  = function(file) data.table::fwrite(const_exp_data(), file, bom = TRUE))

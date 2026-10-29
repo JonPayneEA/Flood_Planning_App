@@ -1006,59 +1006,40 @@ fetch_area_coverage <- function() {
 }
 
 fetch_constituency_exposure <- function() {
-  db_query(sprintf("
-    SELECT e.constituency_code, c.name AS constituency_name,
-           e.people, e.people_rs_high_medium, e.people_fz3,
-           e.people_rs_high_medium_in_warning_area, e.people_rs_high_medium_in_alert_area,
-           e.people_high_medium_not_in_warning_area, e.people_high_medium_not_in_alert_area
+  # SELECT e.* so a table built before the critical site columns were added still reads; ensure_const_columns() fills the gaps.
+  ensure_const_columns(db_query(sprintf("
+    SELECT e.*, c.name AS constituency_name
     FROM %s e
     LEFT JOIN %s c ON c.constituency_id = e.constituency_code
-  ", TBL_CONST_EXPOSURE, TBL_CONSTITUENCIES))
+  ", TBL_CONST_EXPOSURE, TBL_CONSTITUENCIES)))
 }
 
-
-# fetch_risk_grid(): the 100 m cells inside a longitude and latitude box with a score at or above min_score, highest first, at most
-#   `limit` of them. Read from exposure_grid_100m by easting and northing. Only for a map in view: the table holds all of England.
-
-# step is the cell size to read at, in metres. At more than 100 the cells are grouped into larger squares: people and critical sites add up,
-# the worst band and the highest score win, and the most deprived decile is kept. fetch_risk_grid_count() says how many 100 m cells a box holds,
-# so the caller can choose a step that keeps the map light.
-fetch_risk_grid <- function(west, south, east, north, min_score = 10, limit = GRID_CELL_LIMIT, step = 100) {
-  b <- bbox_to_bng(west, south, east, north)
-  step <- as.integer(step)
-  if (step <= 100L) {
-    return(db_query(sprintf("
-      SELECT easting, northing, people, imd_decile, haz_rs, critical_sites, pop_pct, risk_score
-      FROM %s
-      WHERE easting BETWEEN %.0f AND %.0f
-        AND northing BETWEEN %.0f AND %.0f
-        AND risk_score >= %.2f
-      ORDER BY risk_score DESC
-      LIMIT %d
-    ", TBL_EXPOSURE_GRID, b$xmin, b$xmax, b$ymin, b$ymax, as.numeric(min_score), as.integer(limit))))
-  }
+# fetch_constituency_sites(): the critical sites inside one England constituency, worst rivers and sea band first (job 35's constituency_sites).
+fetch_constituency_sites <- function(constituency_code) {
+  id <- gsub("[^A-Za-z0-9]", "", as.character(constituency_code))
   db_query(sprintf("
-    SELECT CAST(FLOOR(easting / %d) * %d AS BIGINT) AS easting, CAST(FLOOR(northing / %d) * %d AS BIGINT) AS northing,
-           SUM(people) AS people, MIN(NULLIF(imd_decile, 0)) AS imd_decile, MAX(haz_rs) AS haz_rs,
-           SUM(critical_sites) AS critical_sites, MAX(pop_pct) AS pop_pct, MAX(risk_score) AS risk_score
+    SELECT site_id, name, site_group, site_type, band, rofrs_rank
     FROM %s
-    WHERE easting BETWEEN %.0f AND %.0f
-      AND northing BETWEEN %.0f AND %.0f
-    GROUP BY 1, 2
-    HAVING MAX(risk_score) >= %.2f
-    ORDER BY risk_score DESC
-    LIMIT %d
-  ", step, step, step, step, TBL_EXPOSURE_GRID, b$xmin, b$xmax, b$ymin, b$ymax, as.numeric(min_score), as.integer(limit)))
+    WHERE constituency_code = '%s'
+    ORDER BY rofrs_rank DESC, name
+  ", TBL_CONST_SITES, id))
 }
 
-fetch_risk_grid_count <- function(west, south, east, north) {
-  b <- bbox_to_bng(west, south, east, north)
-  as.numeric(db_query(sprintf("
-    SELECT COUNT(*) AS n FROM %s
-    WHERE easting BETWEEN %.0f AND %.0f AND northing BETWEEN %.0f AND %.0f
-  ", TBL_EXPOSURE_GRID, b$xmin, b$xmax, b$ymin, b$ymax))$n[1L])
+# fetch_potential_area_list(): the flood warning and flood alert areas under a statement's risk polygons at or above min_rank, one row each, with the
+#   highest risk rank any polygon puts over them and the first forecast day that happens. These are POTENTIAL warnings and alerts, not ones in
+#   force. The per-constituency counts of the same areas are fetch_potential_areas() above.
+fetch_potential_area_list <- function(statement_id, min_rank = 2L) {
+  db_query(sprintf("
+    SELECT ea_area_code, MAX(ea_area_name) AS ea_area_name, LOWER(MAX(ea_area_type)) AS ea_area_type,
+           MAX(CASE risk_level WHEN 'Very Low' THEN 1 WHEN 'Low' THEN 2 WHEN 'Medium' THEN 3 WHEN 'High' THEN 4 ELSE 0 END) AS worst_rank,
+           MIN(day_index) AS first_day
+    FROM %s
+    WHERE statement_id = %d
+      AND geometry_source = '%s'
+      AND CASE risk_level WHEN 'Very Low' THEN 1 WHEN 'Low' THEN 2 WHEN 'Medium' THEN 3 WHEN 'High' THEN 4 ELSE 0 END >= %d
+    GROUP BY ea_area_code
+  ", TBL_EA_INTERSECT, as.integer(statement_id), GEOMETRY_SOURCE, as.integer(min_rank)))
 }
-
 
 # -----------------------------------------------------------------------------
 # Hydrometrics (Environment Agency real-time data)
@@ -1553,6 +1534,8 @@ fetch_area_episodes                <- with_cache(fetch_area_episodes,           
 fetch_threshold_board              <- with_cache(fetch_threshold_board,              "threshold_board", ttl = min(CACHE_TTL_SECONDS, 60))
 fetch_area_overlaps                <- with_cache(fetch_area_overlaps,                "area_overlaps", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_area_coverage                <- with_cache(fetch_area_coverage,                "area_coverage", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
+fetch_constituency_sites           <- with_cache(fetch_constituency_sites,           "const_sites", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
+fetch_potential_area_list          <- with_cache(fetch_potential_area_list,          "potential_list", ttl = min(CACHE_TTL_SECONDS, 120))
 fetch_constituency_exposure        <- with_cache(fetch_constituency_exposure,        "const_exposure", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_rt_register                  <- with_cache(fetch_rt_register,                  "rt_register", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_rt_boundary                  <- with_cache(fetch_rt_boundary,                  "rt_boundary", ttl = min(CACHE_TTL_SECONDS, 300))

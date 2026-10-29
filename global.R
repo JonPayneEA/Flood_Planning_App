@@ -169,6 +169,7 @@ TBL_AREA_OVERLAPS <- paste(CAT, RESTRICTED_SCH, "ea_area_overlaps",         sep 
 TBL_EXPOSURE_GRID <- paste(CAT, RESTRICTED_SCH, "exposure_grid_100m",       sep = ".")  # 34 (restricted: one row per 100 m cell with people, bands, critical sites and the risk score)
 TBL_AREA_SITES    <- paste(CAT, RESTRICTED_SCH, "ea_area_sites",            sep = ".")  # 35 (restricted: each critical site inside each area, with its rivers and sea band)
 TBL_AREA_GEOGRAPHIES <- paste(CAT, RESTRICTED_SCH, "ea_area_geographies",       sep = ".")  # 35 (restricted: each area split by district, county, ward, constituency, police force and region)
+TBL_CONST_SITES   <- paste(CAT, RESTRICTED_SCH, "constituency_sites",        sep = ".")  # 35 (restricted: each critical site inside each England constituency, with its band)
 TBL_AREA_COVERAGE <- paste(CAT, RESTRICTED_SCH, "ea_area_coverage",         sep = ".")  # 35 (restricted: people covered by any warning area, any alert area, and in all)
 TBL_CONST_EXPOSURE <- paste(CAT, RESTRICTED_SCH, "constituency_flood_exposure", sep = ".")  # 35 (restricted: people by constituency, and how many a warning or alert area covers)
 TBL_WARNING_EPISODES <- paste(CAT, SCH, "ea_warning_episodes",      sep = ".")  # 25 (each alert or warning from issue to withdrawal)
