@@ -29,7 +29,10 @@ source("guide.R",      local = TRUE)
 source("app_ui.R",     local = TRUE)
 source("app_server.R", local = TRUE)
 
-# Bookmarking in "url" mode keeps the tab, statement, day and filters in the
-# address bar, so a view can be shared by copying the link. ui is a function of
-# the request (see app_ui.R), which bookmarking requires.
-shinyApp(ui = ui, server = server, enableBookmarking = "url")
+# Bookmarking in "server" mode saves the tab, statement, day and filters when
+# someone presses Copy link, and the link carries only a short id
+# (?_state_id_=...). The URL mode put every value in the address, and the Azure
+# Application Gateway in front of Connect refuses such addresses with a 403
+# (the quotes and the length). ui is a function of the request (see app_ui.R),
+# which bookmarking requires.
+shinyApp(ui = ui, server = server, enableBookmarking = "server")
