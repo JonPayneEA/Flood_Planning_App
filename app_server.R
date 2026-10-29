@@ -1461,7 +1461,11 @@ server <- function(input, output, session) {
   observeEvent(input$copy_link_click, session$doBookmark(), ignoreInit = TRUE)
   onBookmarked(function(url) {
     session$sendCustomMessage("copy_link", list(url = url))
-    showNotification(sprintf("Link made: %s", url), type = "message", duration = 12, id = "copy_link_made")      # what the app produced, so a wrong link can be traced
+    # What the app produced, in a box that wraps, so a wrong link can be read and traced (a notification truncates a long address).
+    showModal(modalDialog(title = "The link the app made", easyClose = TRUE, footer = modalButton("Close"),
+      tags$p("This is the link the app made, and it has been copied."),
+      tags$textarea(readonly = NA, rows = 5, style = "width:100%;font-family:monospace;font-size:13px;", onclick = "this.select();", url),
+      tags$p(class = "small text-muted", sprintf("%d characters. Saved on the %s. Short links contain _state_id_ and nothing after it but a code.", nchar(url), getShinyOption("bookmarkStore", default = "disable")))))
   })
   output$build_stamp <- renderUI(sprintf("Build %s. Shared links are saved on the %s.", APP_BUILD, getShinyOption("bookmarkStore", default = "disable")))
 

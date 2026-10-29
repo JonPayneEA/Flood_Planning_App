@@ -64,5 +64,5 @@ test_that("the footer carries a build stamp and the app says what link it made, 
   srv <- paste(readLines(file.path(app_root, "app_server.R"), warn = FALSE), collapse = "\n")
   glob <- paste(readLines(file.path(app_root, "global.R"), warn = FALSE), collapse = "\n")
   expect_true(grepl('uiOutput("build_stamp"', des, fixed = TRUE) && grepl("output$build_stamp", srv, fixed = TRUE) && grepl("APP_BUILD <-", glob, fixed = TRUE))
-  expect_true(grepl('showNotification(sprintf("Link made: %s", url)', srv, fixed = TRUE))
+  expect_true(grepl('showModal(modalDialog(title = "The link the app made"', srv, fixed = TRUE))
 })
