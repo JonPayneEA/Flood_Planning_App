@@ -2581,13 +2581,15 @@ server <- function(input, output, session) {
                               a$sites, a$sites_health, a$sites_education, a$sites_emergency, a$sites_utilities, a$sites_rs_high_medium))
     s <- area_sites_data()
     if (is.null(s)) return(tags$div(summary, tags$p(class = "app-caption", "The list of named sites is not available yet (pipeline notebook 35 writes it).")))
-    s <- as.data.table(s)[rofrs_rank >= 3L]
-    if (nrow(s) == 0L) return(tags$div(summary, tags$p(class = "app-caption", "None of them is in a High or Medium band.")))
-    rows <- lapply(seq_len(min(nrow(s), 15L)), function(i)
-      tags$tr(tags$td(s$name[i]), tags$td(s$site_type[i]), tags$td(HTML(band_chip(s$band[i])))))
+    s <- as.data.table(s)
+    if (nrow(s) == 0L) return(tags$div(summary, tags$p(class = "app-caption", "No critical sites are inside this area.")))
+    shown <- min(nrow(s), 50L)
+    chip <- function(b) if (!is.na(b) && b %in% FLOOD_BANDS$band) HTML(band_chip(b)) else tags$span(class = "text-muted", "Outside the bands")
+    rows <- lapply(seq_len(shown), function(i)
+      tags$tr(tags$td(site_display_name(s$name[i], s$site_type[i])), tags$td(s$site_type[i]), tags$td(chip(s$band[i]))))
     tags$div(summary,
              tags$table(tags$thead(tags$tr(tags$th("Site"), tags$th("Type"), tags$th("Band"))), tags$tbody(rows)),
-             if (nrow(s) > 15L) tags$p(class = "app-caption", sprintf("The first 15 of %d sites in a High or Medium band. Download the sites for the rest.", nrow(s))),
+             if (nrow(s) > shown) tags$p(class = "app-caption", sprintf("The first %d of %d sites, worst band first. Download the sites for the rest.", shown, nrow(s))),
              downloadButton("download_area_sites", "Download this area's critical sites", class = "btn-sm btn-outline-secondary"))
   })
 
@@ -2600,7 +2602,7 @@ server <- function(input, output, session) {
     filename = function() sprintf("area_%s_critical_sites_%s.csv", gsub("[^A-Za-z0-9_.-]", "", input$area_pick %||% "none"), format(Sys.Date(), "%Y%m%d")),
     content = function(file) {
       s <- area_sites_data()
-      data.table::fwrite(if (is.null(s)) data.table() else as.data.table(s)[, .(Site = name, Type = site_type, Group = site_group, Band = band)], file, bom = TRUE)
+      data.table::fwrite(if (is.null(s)) data.table() else as.data.table(s)[, .(Site = site_display_name(name, site_type), Type = site_type, Group = site_group, Band = band)], file, bom = TRUE)
     })
 
   area_cons_names <- reactive({

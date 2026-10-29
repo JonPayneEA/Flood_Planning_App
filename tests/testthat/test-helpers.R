@@ -1264,3 +1264,8 @@ test_that("a copied Target Area link restores the chosen area: it is saved with 
   expect_true(grepl("onRestored(function(state) restored_area(state$values$area_pick))", srv, fixed = TRUE))
   expect_true(grepl("observeEvent(list(restored_area(), area_picker_ready())", srv, fixed = TRUE))       # applied whichever of the two arrives last
 })
+
+test_that("site_display_name names blank sites by their type", {
+  expect_equal(site_display_name(c("Alford STW", "", NA), c("sewage works", "fire station", NA)),
+               c("Alford STW", "Unnamed fire station", "Unnamed site"))
+})
