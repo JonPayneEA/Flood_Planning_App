@@ -1485,6 +1485,13 @@ FLOOD_BANDS <- data.frame(
   range  = c("over 3.3% a year", "1 to 3.3%", "0.1 to 1%", "under 0.1%"),
   stringsAsFactors = FALSE)
 
+# site_display_name(): the site's name, or "Unnamed <type>" where the source gives none (some fire and police stations have no name).
+site_display_name <- function(name, type) {
+  blank <- is.na(name) | !nzchar(trimws(name))
+  t <- ifelse(is.na(type) | !nzchar(trimws(type)), "site", as.character(type))
+  ifelse(blank, paste("Unnamed", t), as.character(name))
+}
+
 band_chip <- function(band) {
   i <- match(band, FLOOD_BANDS$band)
   sprintf("<span class=\"band-chip\" style=\"background:%s;color:%s\">%s</span>", FLOOD_BANDS$fill[i], FLOOD_BANDS$text[i], band)
@@ -1605,7 +1612,7 @@ area_brief_content <- function(a, sites = NULL, geos = NULL, cons = NA_character
     if (nrow(s) == 0L) sites_note <- "None of the critical sites is in a High or Medium band."
     else {
       k <- seq_len(min(nrow(s), 18L))
-      site_rows <- data.frame(name = s$name[k], type = s$site_type[k], band = s$band[k], stringsAsFactors = FALSE)
+      site_rows <- data.frame(name = site_display_name(s$name[k], s$site_type[k]), type = s$site_type[k], band = s$band[k], stringsAsFactors = FALSE)
       if (nrow(s) > 18L) sites_note <- sprintf("The first 18 of %d. The area page has them all.", nrow(s))
     }
   }
@@ -1977,7 +1984,7 @@ constituency_brief_content <- function(c, sit = NULL, sites = NULL, flags = NULL
     if (nrow(s) == 0L) sites_note <- "None of the critical sites is in a High or Medium band."
     else {
       k <- seq_len(min(nrow(s), 14L))
-      site_rows <- data.frame(name = s$name[k], type = s$site_type[k], band = s$band[k], stringsAsFactors = FALSE)
+      site_rows <- data.frame(name = site_display_name(s$name[k], s$site_type[k]), type = s$site_type[k], band = s$band[k], stringsAsFactors = FALSE)
       if (nrow(s) > 14L) sites_note <- sprintf("The first 14 of %d.", nrow(s))
     }
   }

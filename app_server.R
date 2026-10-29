@@ -2586,7 +2586,7 @@ server <- function(input, output, session) {
     shown <- min(nrow(s), 50L)
     chip <- function(b) if (!is.na(b) && b %in% FLOOD_BANDS$band) HTML(band_chip(b)) else tags$span(class = "text-muted", "Outside the bands")
     rows <- lapply(seq_len(shown), function(i)
-      tags$tr(tags$td(s$name[i]), tags$td(s$site_type[i]), tags$td(chip(s$band[i]))))
+      tags$tr(tags$td(site_display_name(s$name[i], s$site_type[i])), tags$td(s$site_type[i]), tags$td(chip(s$band[i]))))
     tags$div(summary,
              tags$table(tags$thead(tags$tr(tags$th("Site"), tags$th("Type"), tags$th("Band"))), tags$tbody(rows)),
              if (nrow(s) > shown) tags$p(class = "app-caption", sprintf("The first %d of %d sites, worst band first. Download the sites for the rest.", shown, nrow(s))),
@@ -2602,7 +2602,7 @@ server <- function(input, output, session) {
     filename = function() sprintf("area_%s_critical_sites_%s.csv", gsub("[^A-Za-z0-9_.-]", "", input$area_pick %||% "none"), format(Sys.Date(), "%Y%m%d")),
     content = function(file) {
       s <- area_sites_data()
-      data.table::fwrite(if (is.null(s)) data.table() else as.data.table(s)[, .(Site = name, Type = site_type, Group = site_group, Band = band)], file, bom = TRUE)
+      data.table::fwrite(if (is.null(s)) data.table() else as.data.table(s)[, .(Site = site_display_name(name, site_type), Type = site_type, Group = site_group, Band = band)], file, bom = TRUE)
     })
 
   area_cons_names <- reactive({
