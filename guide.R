@@ -498,24 +498,28 @@ guide_products <- function(s) {
     ),
 
     list(
-      id = "gauge-value", title = "Gauge value and expected annual damage", where = "Gauge value",
-      answers = "What is the indicative expected annual damage in each warning area, and which gauges stand behind the most of it?",
+      id = "gauge-value", title = "Gauge value: what each gauge stands behind", where = "Gauge value",
+      answers = "Which gauges stand behind the most expected flood damage, and how much of that would be lost if the gauge were not there to drive its warnings?",
       tables = c("economics_assumptions", "ea_area_exposure", "ea_fw_threshold_gauge_links"),
       steps = c(
-        "For each area the app takes the households in each rivers and sea band (from notebook 35), multiplies each by the band's annual probability and by the damage per household per flood event, and adds the four bands. That is the expected annual damage.",
-        "Three versions are worked out together: low uses the bottom of each band's probability range with the low damage, central the middle with the central damage, high the top with the high damage. The probabilities and damage figures are in the assumptions table (notebook 38), and the damage figures are set by hand.",
-        "A gauge's thresholds belong to flood warning areas (notebook 28). A gauge's value is the value of those areas. Gross is all of it; split shares an area between the gauges that drive it, so split figures add up. Gauges are ranked by split."
+        "Every Observed flood warning threshold that notebook 28 linked to a gauge belongs to a flood warning area. A gauge here is a measure at a station (a level or a flow), as linked to those thresholds. The areas whose thresholds it drives are the areas it stands behind.",
+        "Each area has an indicative expected annual damage, with a low, central and high figure (see the economics card). A gauge's value is the value of the areas it drives.",
+        "Gross is the full value of every area the gauge drives. Split shares each area's value equally between the gauges that drive it, so that split figures add up to the total across all gauges. A worked example: area A is worth 100 and is driven by gauges 1 and 2; area B is worth 40 and is driven by gauge 1 alone. Gauge 1 has a gross of 140 and a split of 90 (half of A plus all of B). Gauge 2 has a gross of 100 and a split of 50.",
+        "The view ranks gauges by split value, largest first, with gross beside it. Only gauge for counts the areas that this gauge alone drives, which is where losing it would leave an area with no linked gauge. Select a gauge to see its areas, the value of each, how many gauges drive it and this gauge's share.",
+        "On Gauges near thresholds, the Value behind it column shows the same split value for each gauge, so a gauge close to its threshold shows what is at stake. The column heading says when the pounds rest on provisional figures or on figures typed into the app.",
+        "Until the damage figures are set, gauges are ranked by the households expected to flood in a year in the areas they drive, which needs only the probabilities."
       ),
       read = c(
-        "Every figure is indicative. It uses no flood depth, property type or property value, only the band a household sits in.",
-        "Until the damage figures are set in the assumptions table, the app uses provisional planning values (15,000, 30,000 and 60,000 pounds per household per flood event). They are round numbers chosen for the right order of magnitude, not taken from the Multi-Coloured Handbook, and every figure that uses them says so. Setting the three rows in the table replaces them.",
-        "Gross figures count an area once for each gauge that drives it, so do not add them across gauges."
+        "Every figure is indicative. It uses no flood depth, property type or property value, only the band a household sits in, and a low, central and high range.",
+        "Rank by split. Gross counts an area once for each gauge that drives it, so gross figures should not be added across gauges.",
+        "Value behind a gauge says what depends on it. It does not show that the gauge prevents that damage, and it does not value the quality of the gauge's data.",
+        "A gauge with a large gross and a small split shares most of its areas with other gauges. A gauge with a large only gauge for figure is a single point of failure for those areas."
       ),
       limits = c(
-        "The High band has no upper limit and the Very Low band no lower limit, so the probabilities use a cap and a floor. They are shown on screen.",
-        "Value behind a gauge says what depends on it. It does not show the gauge prevents that damage.",
-        "Critical sites and non-residential property are not valued.",
-        "Damage figures are in one year's prices. The assumptions table has a price uplift for each scenario (default 1, no change) that the app multiplies them by, and the basis line says which year's prices result. One factor is a simplification, because repair costs and contents rise at different rates. It does not apply to the provisional figures or to figures typed into the app."
+        "Only areas with thresholds that notebook 28 linked to a gauge are attributed. An area with no linked gauge, or whose thresholds are not matched by FFFS id and unit, has no gauge behind it here, so the total across gauges is less than the national total.",
+        "A station with a level and a flow measure counts as two gauges if both are linked, so check that before concluding a station is a single point of failure.",
+        "Gauge value does not use the Environment Agency's own network valuation methods. The published work, such as the 1999 report on the benefits of hydrometric networks, scales a gauge's benefit by data accuracy, representativeness and record length, and none of that is used here.",
+        "Critical sites and non-residential property are not valued, and the damage figures and the price uplift are explained on the economics card."
       )
     ),
 
