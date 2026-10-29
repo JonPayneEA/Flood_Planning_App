@@ -1419,3 +1419,20 @@ test_that("rapid flood guidance whose polygons have all expired is not in force,
   expect_equal(tt[update_key == "9"]$people, 400); expect_equal(tt[update_key == "9"]$people_valid, 100); expect_equal(tt[update_key == "7"]$people_valid, 0)
   expect_true(is.na(rfg_totals(ex[, !"is_valid"])$people_valid[1])); expect_equal(nrow(rfg_totals(NULL)), 0L)
 })
+
+test_that("a price uplift multiplies the saved damage figures and the basis says so; provisional and typed figures are taken as they stand", {
+  a <- econ_assump()
+  up <- rbind(a, data.frame(item = "price_uplift", scenario = c("low", "central", "high"), value = c(1.1, 1.25, 1.4), source = NA, price_year = "2026"))
+  p <- econ_params(up)
+  expect_equal(unname(p$uplift), c(1.1, 1.25, 1.4)); expect_equal(p$uplift_year, "2026")
+  expect_equal(p$damage[["central"]], 30000 * 1.25); expect_equal(p$damage_base[["central"]], 30000)
+  expect_match(econ_basis_text(p), "include a price uplift of 1.25 \\(central\\), to 2026 prices")
+  ex <- data.table(area_id = "A", households_rs_high = 100, households_rs_medium = 0, households_rs_low = 0, households_rs_very_low = 0)
+  expect_equal(econ_area(ex, p)$ead_central, 100 * 0.05 * 30000 * 1.25)
+  expect_equal(unname(econ_params(a)$uplift), c(1, 1, 1)); expect_no_match(econ_basis_text(econ_params(a)), "price uplift")      # no row: no change
+  bad <- rbind(a, data.frame(item = "price_uplift", scenario = "central", value = -2, source = NA, price_year = NA))
+  expect_equal(unname(econ_params(bad)$uplift), c(1, 1, 1))                                                                      # a non-positive uplift is ignored
+  pr <- econ_with_provisional(econ_params(up[up$item != "damage_per_household", ]))
+  expect_equal(pr$damage[["central"]], 30000); expect_equal(unname(pr$uplift), c(1, 1, 1))
+  o <- econ_apply_override(econ_params(up), c(low = 1, central = 2, high = 3)); expect_equal(o$damage[["central"]], 2)
+})

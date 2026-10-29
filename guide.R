@@ -511,7 +511,8 @@ guide_products <- function(s) {
       limits = c(
         "The High band has no upper limit and the Very Low band no lower limit, so the probabilities use a cap and a floor. They are shown on screen.",
         "Value behind a gauge says what depends on it. It does not show the gauge prevents that damage.",
-        "Critical sites and non-residential property are not valued."
+        "Critical sites and non-residential property are not valued.",
+        "Damage figures are in one year's prices. The assumptions table has a price uplift for each scenario (default 1, no change) that the app multiplies them by, and the basis line says which year's prices result. One factor is a simplification, because repair costs and contents rise at different rates. It does not apply to the provisional figures or to figures typed into the app."
       )
     ),
 

@@ -1529,12 +1529,13 @@ FLOOD_BANDS <- data.frame(
 ECON_BANDS <- c("high", "medium", "low", "very_low")
 ECON_SCENARIOS <- c("low", "central", "high")
 
-# econ_params(): the assumptions table (item, scenario, value, source, price_year) as a list: prob (4 bands x 3 scenarios), damage (3), whether each is
-#   complete, and the source and price year of the damage figure. Anything missing stays NA, so nothing is guessed.
+# econ_params(): the assumptions table (item, scenario, value, source, price_year) as a list: prob (4 bands x 3 scenarios), damage (3, after the price uplift),
+#   damage_base (before it), uplift, whether each is complete, and the source and price year of the damage figure. Anything missing stays NA, so nothing is guessed.
 econ_params <- function(assump) {
   prob <- matrix(NA_real_, 4L, 3L, dimnames = list(ECON_BANDS, ECON_SCENARIOS))
   damage <- stats::setNames(rep(NA_real_, 3L), ECON_SCENARIOS)
   source <- NA_character_; price_year <- NA_character_
+  uplift <- stats::setNames(rep(1, 3L), ECON_SCENARIOS); uplift_year <- NA_character_
   if (!is.null(assump) && nrow(assump) > 0L) {
     a <- as.data.frame(assump)
     a$value <- suppressWarnings(as.numeric(a$value))
@@ -1548,8 +1549,18 @@ econ_params <- function(assump) {
     }
     d <- a[a$item == "damage_per_household" & a$scenario == "central", , drop = FALSE]
     if (nrow(d) > 0L) { source <- as.character(d$source[1L]); price_year <- as.character(d$price_year[1L]) }
+    # a price uplift per scenario (default 1, no change), to bring the damage figures to today's prices; its price_year says which year's prices result
+    for (s in ECON_SCENARIOS) {
+      v <- a$value[a$item == "price_uplift" & a$scenario == s]
+      if (length(v) >= 1L && !is.na(v[1L]) && v[1L] > 0) uplift[[s]] <- v[1L]
+    }
+    uy <- a[a$item == "price_uplift" & a$scenario == "central", , drop = FALSE]
+    if (nrow(uy) > 0L && !is.na(uy$price_year[1L]) && nzchar(as.character(uy$price_year[1L]))) uplift_year <- as.character(uy$price_year[1L])
   }
-  list(prob = prob, damage = damage, has_prob = !anyNA(prob), has_damage = !anyNA(damage), source = source, price_year = price_year)
+  damage_base <- damage
+  damage <- damage * uplift
+  list(prob = prob, damage = damage, damage_base = damage_base, uplift = uplift, uplift_year = uplift_year, has_prob = !anyNA(prob), has_damage = !anyNA(damage),
+       source = source, price_year = price_year)
 }
 
 # PROVISIONAL damage per household per flood event, in pounds. Used only while the assumptions table has no damage figures, so the pounds and the range can be
@@ -1559,7 +1570,8 @@ ECON_PROVISIONAL_DAMAGE <- c(low = 15000, central = 30000, high = 60000)
 
 econ_with_provisional <- function(params) {
   if (!isTRUE(params$has_prob) || isTRUE(params$has_damage)) return(params)
-  params$damage <- ECON_PROVISIONAL_DAMAGE
+  params$damage <- ECON_PROVISIONAL_DAMAGE; params$damage_base <- ECON_PROVISIONAL_DAMAGE      # taken as they stand: no price uplift
+  params$uplift <- stats::setNames(rep(1, 3L), ECON_SCENARIOS); params$uplift_year <- NA_character_
   params$has_damage <- TRUE
   params$provisional <- TRUE
   params$source <- "provisional planning values"; params$price_year <- NA_character_
@@ -1579,7 +1591,8 @@ econ_try_validate <- function(low, central, high) {
 # econ_apply_override(): the assumptions with the user's own damage figures in place of the saved ones. Nothing is saved; the flag lets every figure say so.
 econ_apply_override <- function(params, damage) {
   if (is.null(damage) || !isTRUE(params$has_prob)) return(params)
-  params$damage <- damage[c("low", "central", "high")]
+  params$damage <- damage[c("low", "central", "high")]; params$damage_base <- params$damage       # taken as typed: no price uplift
+  params$uplift <- stats::setNames(rep(1, 3L), ECON_SCENARIOS); params$uplift_year <- NA_character_
   params$has_damage <- TRUE
   params$source <- NA_character_; params$price_year <- NA_character_
   params$override <- TRUE
@@ -1630,6 +1643,8 @@ econ_basis_text <- function(params) {
          ", Low ", sprintf("%.2f%%", 100 * p["low", "central"]), ", Very Low ", sprintf("%.3f%%", 100 * p["very_low", "central"]), " in the central case) x damage per household per flood event",
          if (isTRUE(params$has_damage)) sprintf(" (%s central; %s%s)", fmt_gbp(params$damage[["central"]]), if (isTRUE(params$override)) "typed in for this session" else if (isTRUE(params$provisional)) "provisional planning values, not from the Multi-Coloured Handbook" else if (is.na(params$source) || !nzchar(params$source)) "source not recorded" else params$source,
                                                 if (is.na(params$price_year) || !nzchar(params$price_year)) "" else paste0(", ", params$price_year)) else " (not set yet)",
+         if (isTRUE(params$has_damage) && !isTRUE(params$override) && !isTRUE(params$provisional) && !isTRUE(all.equal(unname(params$uplift), c(1, 1, 1))))
+           sprintf(" The damage figures include a price uplift of %.2f (central)%s.", params$uplift[["central"]], if (is.na(params$uplift_year)) "" else paste0(", to ", params$uplift_year, " prices")) else "",
          ". The low and high figures use the bottom and top of each band's range with the low and high damage together. No flood depth, property type or value is used.")
 }
 
