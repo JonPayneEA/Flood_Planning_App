@@ -1128,7 +1128,7 @@ server <- function(input, output, session) {
   # ---------------------------------------------------------------------------
 
   observeEvent(input$nav_to, {
-    req(input$nav_to %in% c("Overview", "FGS Interrogator", "Constituency situation", "Exposure history", "Guide"))
+    req(input$nav_to %in% c("Overview", "FGS Interrogator", "Rapid Flood Guidance", "Constituency situation", "Exposure history", "Guide"))
     updateTabsetPanel(session, "main_tabs", selected = input$nav_to)
   })
 
@@ -2381,6 +2381,156 @@ server <- function(input, output, session) {
           cat = cat, start_raw = start_time, end_raw = end_time, stale = as.logical(stale_open))]
   })
 
+  # ---- Rapid Flood Guidance (FGS_Notebooks jobs 36 and 37) -----------------------------------------------------------------------
+  # The updates are read for every session (the Overview banner needs them) every two minutes; the fetch is cached for a minute.
+  # Held in a reactive value and replaced only when it changed, so the history table is not redrawn (and its selection lost) every two minutes.
+  rfg_updates_rv <- reactiveVal(NULL)
+  observe({
+    invalidateLater(120000, session)
+    new <- tryCatch(as.data.table(fetch_rfg_updates(50L)), error = function(e) NULL)
+    if (!identical(new, isolate(rfg_updates_rv()))) rfg_updates_rv(new)
+  })
+  rfg_updates_all <- reactive(rfg_updates_rv())
+  rfg_open <- reactive(identical(input$main_tabs, "Rapid Flood Guidance"))
+
+  # The update the view shows: the one picked in the history table, else the one in force, else the newest that had guidance.
+  rfg_view_key <- reactive({
+    u <- rfg_updates_all()
+    sel <- input$rfg_history_rows_selected
+    if (!is.null(u) && length(sel) == 1L && sel <= nrow(u)) as.character(u$update_key[sel]) else rfg_default_key(u)
+  })
+  rfg_view_row <- reactive({
+    u <- rfg_updates_all(); k <- rfg_view_key()
+    if (is.null(u) || is.na(k)) NULL else u[update_key == k]
+  })
+  rfg_polys <- reactive({ req(rfg_open()); k <- rfg_view_key(); req(!is.na(k)); tryCatch(fetch_rfg_polygons(k), error = function(e) NULL) })
+  rfg_expo <- reactive({ req(rfg_open()); k <- rfg_view_key(); req(!is.na(k)); tryCatch(as.data.table(fetch_rfg_exposure(k)), error = function(e) NULL) })
+  rfg_areas_d <- reactive({ req(rfg_open()); k <- rfg_view_key(); req(!is.na(k)); tryCatch(as.data.table(fetch_rfg_areas(k)), error = function(e) NULL) })
+  rfg_cons_d <- reactive({ req(rfg_open()); k <- rfg_view_key(); req(!is.na(k)); tryCatch(as.data.table(fetch_rfg_constituencies(k)), error = function(e) NULL) })
+  rfg_sites_d <- reactive({ req(rfg_open()); k <- rfg_view_key(); req(!is.na(k)); tryCatch(as.data.table(fetch_rfg_sites(k)), error = function(e) NULL) })
+  rfg_totals_d <- reactive({ req(rfg_open() || !is.null(rfg_current(rfg_updates_all()))); tryCatch(as.data.table(fetch_rfg_totals()), error = function(e) NULL) })
+
+  output$rfg_note <- renderUI({
+    if (rfg_open() && is.null(rfg_updates_all()))
+      return(tags$p(class = "text-muted", "Rapid flood guidance could not be loaded yet. It needs the ingest job (pipeline notebook 36)."))
+    if (rfg_open() && nrow(rfg_updates_all()) == 0L) return(tags$p(class = "text-muted", "No rapid flood guidance has been stored yet."))
+    NULL
+  })
+
+  output$rfg_status <- renderUI({
+    u <- rfg_updates_all(); req(!is.null(u), nrow(u) > 0L)
+    cur <- rfg_current(u); v <- rfg_view_row()
+    n <- function(x) formatC(round(as.numeric(x)), format = "d", big.mark = ",")
+    head <- if (!is.null(cur)) tags$div(class = "alert alert-warning", tags$strong("Rapid flood guidance is in force."))
+            else tags$div(class = "alert alert-secondary", tags$strong("No rapid flood guidance at this time."),
+                          sprintf(" Last checked update: %s.", fmt_statement_time(u$last_updated[1L], "%d %b %Y %H:%M")))
+    if (is.null(v) || nrow(v) == 0L) return(head)
+    tot <- rfg_totals_d(); t <- if (is.null(tot)) NULL else tot[update_key == v$update_key]
+    tile <- function(big, small) tags$div(tags$b(big), tags$span(small))
+    shown <- if (!identical(as.character(v$update_key), as.character(cur$update_key %||% ""))) sprintf("Showing update %s (%s).", v$update_key, if (isTRUE(v$is_present)) "an earlier update" else "no guidance") else NULL
+    tags$div(head,
+             if (!isTRUE(v$is_present)) tags$p(class = "app-caption", "This update has no polygons.") else tags$div(
+               tags$p(class = "app-lead", sprintf("Issued %s. Last updated %s.", fmt_statement_time(v$issued_at, "%d %b %Y %H:%M"), fmt_statement_time(v$last_updated, "%d %b %Y %H:%M"))),
+               if (!is.na(v$national_summary) && nzchar(v$national_summary)) tags$p(v$national_summary),
+               if (!is.na(v$pdf_url) && nzchar(v$pdf_url)) tags$p(tags$a(href = v$pdf_url, target = "_blank", rel = "noopener", "Open the PDF")),
+               tags$div(class = "kpi-row",
+                        tile(n(v$n_valid), "valid polygons"),
+                        tile(if (is.null(t) || nrow(t) == 0L) "n/a" else n(t$people), "people under them"),
+                        tile(if (is.null(t) || nrow(t) == 0L) "n/a" else n(t$households), "households"),
+                        tile(if (is.null(t) || nrow(t) == 0L) "n/a" else n(t$people_rs_high_medium), "of them in a High or Medium rivers and sea band"))),
+             if (!is.null(shown)) tags$p(class = "app-caption", shown))
+  })
+
+  output$rfg_map <- leaflet::renderLeaflet({
+    m <- leaflet::addProviderTiles(leaflet::leaflet(), leaflet::providers$Esri.WorldGrayCanvas)
+    p <- rfg_polys()
+    if (is.null(p) || nrow(p) == 0L) return(leaflet::setView(m, lng = -2.0, lat = 53.2, zoom = 6))
+    m <- leaflet::addPolygons(m, data = p, color = "#B35900", weight = 2, fillColor = "#F0A64A", fillOpacity = 0.45,
+                              label = sprintf("Polygon %d", p$polygon_number),
+                              popup = sprintf("<b>Polygon %d</b><br>%s<br><i>%s</i>", p$polygon_number, htmltools::htmlEscape(ifelse(is.na(p$latest_update), "", p$latest_update)),
+                                              htmltools::htmlEscape(ifelse(is.na(p$counties), "", p$counties))))
+    bb <- sf::st_bbox(p)
+    leaflet::fitBounds(m, bb[["xmin"]], bb[["ymin"]], bb[["xmax"]], bb[["ymax"]])
+  })
+
+  output$rfg_polygon_table <- DT::renderDataTable({
+    e <- rfg_expo(); p <- rfg_polys()
+    if (is.null(p) || nrow(p) == 0L) return(DT::datatable(data.frame(Note = "No valid polygons."), rownames = FALSE, selection = "none", options = list(dom = "t")))
+    d <- data.table(Polygon = p$polygon_number, Counties = p$counties, `Latest update` = p$latest_update)
+    if (!is.null(e) && nrow(e) > 0L) {
+      m <- match(p$polygon_number, e$polygon_number)
+      d[, `:=`(People = round(e$people[m]), Households = round(e$households[m]), `High or Medium band` = round(e$people_rs_high_medium[m]))]
+      setcolorder(d, c("Polygon", "Counties", "People", "Households", "High or Medium band", "Latest update"))
+    }
+    DT::datatable(d, rownames = FALSE, selection = "none", options = list(pageLength = 10, dom = "tip", order = list(), scrollX = TRUE))
+  })
+
+  output$rfg_areas_table <- DT::renderDataTable({
+    a <- rfg_areas_d()
+    if (is.null(a) || nrow(a) == 0L) return(DT::datatable(data.frame(Note = "No warning or alert area has people under the polygons, or the counts are not built yet (pipeline notebook 37)."), rownames = FALSE, selection = "none", options = list(dom = "t")))
+    g <- a[, .(people = sum(people), hm = sum(people_rs_high_medium), polygons = uniqueN(polygon_key), kind = kind[1L], area_name = area_name[1L]), by = area_id][order(-people)]
+    DT::datatable(data.table(Area = vapply(seq_len(nrow(g)), function(i) area_open_link(g$area_id[i], g$area_name[i]), character(1)),
+                             Kind = ifelse(g$kind == "flood_warning", "Warning", "Alert"), `People under the polygons` = round(g$people),
+                             `High or Medium band` = round(g$hm), Polygons = g$polygons),
+                  rownames = FALSE, selection = "none", escape = FALSE, options = list(pageLength = 10, dom = "tip", order = list(), scrollX = TRUE)) |>
+      DT::formatRound(c("People under the polygons", "High or Medium band"), digits = 0, mark = ",")
+  })
+
+  output$rfg_cons_table <- DT::renderDataTable({
+    cn <- rfg_cons_d()
+    if (is.null(cn) || nrow(cn) == 0L) return(DT::datatable(data.frame(Note = "No constituency has people under the polygons, or the counts are not built yet (pipeline notebook 37)."), rownames = FALSE, selection = "none", options = list(dom = "t")))
+    nm <- tryCatch(as.data.table(fetch_constituency_exposure())[, .(pcon = constituency_code, name = constituency_name)], error = function(e) NULL)
+    g <- cn[, .(people = sum(people), households = sum(households), hm = sum(people_rs_high_medium), polygons = uniqueN(polygon_key)), by = pcon][order(-people)]
+    g[, Constituency := if (is.null(nm)) pcon else ifelse(is.na(nm$name[match(pcon, nm$pcon)]), pcon, nm$name[match(pcon, nm$pcon)])]
+    DT::datatable(g[, .(Constituency, `People under the polygons` = round(people), Households = round(households), `High or Medium band` = round(hm), Polygons = polygons)],
+                  rownames = FALSE, selection = "none", options = list(pageLength = 10, dom = "tip", order = list(), scrollX = TRUE)) |>
+      DT::formatRound(c("People under the polygons", "Households", "High or Medium band"), digits = 0, mark = ",")
+  })
+
+  output$rfg_sites_table <- DT::renderDataTable({
+    s <- rfg_sites_d()
+    if (is.null(s) || nrow(s) == 0L) return(DT::datatable(data.frame(Note = "No critical site lies inside the polygons, or the counts are not built yet (pipeline notebook 37)."), rownames = FALSE, selection = "none", options = list(dom = "t")))
+    chip <- function(b) if (!is.na(b) && b %in% FLOOD_BANDS$band) band_chip(b) else "<span class=\"text-muted\">Outside the bands</span>"
+    DT::datatable(data.table(Site = site_display_name(s$name, s$site_type), Type = s$site_type, Polygon = sub("^.*\\|", "", s$polygon_key), Band = vapply(s$band, chip, character(1))),
+                  rownames = FALSE, selection = "none", escape = FALSE, options = list(pageLength = 10, dom = "tip", order = list(), scrollX = TRUE, columnDefs = list(list(orderable = FALSE, targets = 3L))))
+  })
+
+  output$rfg_history <- DT::renderDataTable({
+    u <- rfg_updates_all(); req(!is.null(u), nrow(u) > 0L)
+    tot <- rfg_totals_d()
+    ppl <- if (is.null(tot)) rep(NA_real_, nrow(u)) else tot$people[match(u$update_key, tot$update_key)]
+    DT::datatable(data.table(`Last updated` = fmt_statement_time(u$last_updated, "%d %b %Y %H:%M"), Status = u$status, Update = ifelse(is.na(u$rfg_id), "", as.character(u$rfg_id)),
+                             `Valid polygons` = ifelse(u$is_present, u$n_valid, NA_integer_), `People under them` = round(ppl)),
+                  rownames = FALSE, selection = list(mode = "single", selected = match(rfg_default_key(u), u$update_key), target = "row"),
+                  options = list(pageLength = 10, dom = "tip", order = list(), scrollX = TRUE)) |>
+      DT::formatRound("People under them", digits = 0, mark = ",")
+  })
+
+  # The banner on the Overview, only while guidance is in force.
+  output$ov_rfg <- renderUI({
+    cur <- rfg_current(rfg_updates_all()); req(!is.null(cur))
+    tot <- rfg_totals_d(); t <- if (is.null(tot)) NULL else tot[update_key == cur$update_key]
+    n <- function(x) formatC(round(as.numeric(x)), format = "d", big.mark = ",")
+    tags$div(class = "alert alert-warning ov-rfg", tags$strong("Rapid flood guidance is in force. "),
+             sprintf("%s valid polygon%s%s. ", n(cur$n_valid), if (cur$n_valid == 1L) "" else "s",
+                     if (is.null(t) || nrow(t) == 0L) "" else sprintf(", with about %s people under them", n(t$people))),
+             nav_link("Open rapid flood guidance", "Rapid Flood Guidance"))
+  })
+
+  # The guidance polygons on the forecast map, while they are in force and the layer is ticked.
+  observe(with_layer_guard("Rapid flood guidance", function(x) invisible(NULL), notify = layer_notify, expr = {
+    proxy <- leaflet::clearGroup(leaflet::leafletProxy("live_map"), "rfg")
+    if (!isTRUE(input$layer_rfg)) return()
+    cur <- rfg_current(rfg_updates_all())
+    if (is.null(cur)) { showNotification("No rapid flood guidance is in force.", type = "message", id = "rfg_none"); return() }
+    p <- tryCatch(fetch_rfg_polygons(cur$update_key), error = function(e) NULL)
+    if (is.null(p) || nrow(p) == 0L) return()
+    leaflet::addPolygons(proxy, data = p, group = "rfg", color = "#B35900", weight = 2, dashArray = "6 4", fillColor = "#F0A64A", fillOpacity = 0.35,
+                         label = sprintf("Rapid flood guidance, polygon %d", p$polygon_number),
+                         popup = sprintf("<b>Rapid flood guidance, polygon %d</b><br>%s<br><i>%s</i>", p$polygon_number, htmltools::htmlEscape(ifelse(is.na(p$latest_update), "", p$latest_update)),
+                                         htmltools::htmlEscape(ifelse(is.na(p$counties), "", p$counties))))
+  }))
+
   # ---- Warning areas (FGS_Notebooks job 35) --------------------------------------------------------------
   areas_started <- reactive(input$main_tabs %in% c("Warning areas", "Target Area"))
 
@@ -2578,6 +2728,15 @@ server <- function(input, output, session) {
     tags$div(tags$h1(class = "app-title", a$area_name),
              tags$p(class = "app-lead", sprintf("%s %s.%s", a$type_text, a$area_id,
                                                 if (!is.null(cells) && nrow(cells)) sprintf(" Held in %s cells of 100 m.", area_n(nrow(cells))) else "")))
+  })
+
+  output$area_rfg <- renderUI({
+    a <- tryCatch(area_sel(), error = function(e) NULL); req(a)
+    cur <- rfg_current(rfg_updates_all()); req(!is.null(cur))
+    areas <- tryCatch(as.data.table(fetch_rfg_areas(cur$update_key)), error = function(e) NULL)
+    txt <- rfg_flag_text(rfg_area_flag(areas, a$area_id, a$people), "area")
+    req(!is.null(txt))
+    tags$div(class = "alert alert-warning", txt, " ", nav_link("Open rapid flood guidance", "Rapid Flood Guidance"))
   })
 
   output$area_kpis <- renderUI({
@@ -3068,6 +3227,14 @@ server <- function(input, output, session) {
          statement = if (is.null(sit) || nrow(sit) == 0L) NA_character_ else sprintf("statement %s issued %s", sit$fgs_statement_id[1L], substr(sit$fgs_issued_at[1L], 1L, 16)))
   })
 
+  # One sentence when rapid flood guidance is in force over the selected constituency, else NULL.
+  const_rfg_text <- reactive({
+    c <- const_selected(); req(c)
+    cur <- rfg_current(rfg_updates_all()); if (is.null(cur)) return(NULL)
+    cons <- tryCatch(as.data.table(fetch_rfg_constituencies(cur$update_key)), error = function(e) NULL)
+    rfg_flag_text(rfg_constituency_flag(cons, c$constituency_code, c$people), "constituency")
+  })
+
   output$const_detail <- renderUI({
     c <- const_selected()
     if (is.null(c)) return(tags$p(class = "text-muted", "Select a constituency in the table for its detail."))
@@ -3080,6 +3247,7 @@ server <- function(input, output, session) {
         tags$li(sprintf("%s people; %s (%.0f%%) are in a High or Medium band for rivers and the sea, and %s of those are in no flood warning area.", n(c$people), n(c$people_rs_high_medium),
                         100 * c$people_rs_high_medium / max(c$people, 1), n(c$people_high_medium_not_in_warning_area))),
         tags$li(if (nrow(inf) == 0L) "Nothing is in force now." else tags$span(tags$strong("In force now: "), paste(sprintf("%s (%s)", inf$area, inf$level), collapse = "; "), ".")),
+        if (!is.null(const_rfg_text())) tags$li(tags$strong(const_rfg_text())),
         tags$li(if (nrow(pot) == 0L) sprintf("No other area lies under a forecast risk polygon of %s or above.", RANK_LABELS[as.integer(input$const_pot_rank %||% 2L) + 1L])
                 else tags$span(tags$strong("Potential, under the latest forecast: "), paste(sprintf("%s (%s, from day %d)", pot$area, tolower(pot$risk), pot$first_day), collapse = "; "), ".")),
         tags$li(if (is.na(c$sites)) "Critical sites are not available yet (pipeline notebook 35)." else sprintf("%s critical sites: %s health, %s education, %s emergency, %s utilities; %s in a High or Medium band.",

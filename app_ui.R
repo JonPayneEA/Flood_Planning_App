@@ -615,6 +615,7 @@ make_sidebar <- function() tags$div(
       tags$p(class = "small", HTML(guide_link_html("risk-grid", "How the risk score is calculated"))),
       uiOutput("grid_note"))
   ),
+  checkboxInput("layer_rfg", "Rapid flood guidance polygons (when in force)", value = FALSE),
   checkboxInput("layer_const_risk",
                 "Constituency forecast risk (latest statement, worst of 5 days)",
                 value = FALSE),
@@ -1050,6 +1051,7 @@ make_exposure_tab <- function() tags$div(
 make_overview_tab <- function() tags$div(
   class = "ov-page",
   tags$h1(class = "app-title", "Overview"),
+  uiOutput("ov_rfg"),
   uiOutput("ov_headline"),
   tags$section(class = "ov-section",
                tags$h2("Warnings and alerts in force"),
@@ -1069,6 +1071,36 @@ make_overview_tab <- function() tags$div(
                  uiOutput("ov_changes"))
   ),
   uiOutput("ov_foot")
+)
+
+
+# -----------------------------------------------------------------------------
+# Rapid Flood Guidance tab (FGS_Notebooks jobs 36 and 37).
+#
+# The Flood Forecasting Centre's rapid flooding guidance: its status, the valid polygons on a map, what lies under each (people, households, critical
+# sites), the warning and alert areas and constituencies it reaches, and the history of recent updates. Counted from address points.
+# -----------------------------------------------------------------------------
+
+make_rfg_tab <- function() tags$div(
+  class = "areas-page rfg-page",
+  tags$h1(class = "app-title", "Rapid Flood Guidance"),
+  tags$p(class = "app-lead", "Rapid flooding guidance from the Flood Forecasting Centre: where short, intense rainfall may cause flooding, and who and what lies under it."),
+  uiOutput("rfg_note"),
+  uiOutput("rfg_status"),
+  tags$div(
+    class = "area-cols",
+    tags$div(leaflet::leafletOutput("rfg_map", height = "420px")),
+    tags$div(tags$h2("Polygons"), DT::dataTableOutput("rfg_polygon_table"))),
+  tags$h2("Warning and alert areas it reaches"),
+  DT::dataTableOutput("rfg_areas_table"),
+  tags$h2("Constituencies it reaches"),
+  DT::dataTableOutput("rfg_cons_table"),
+  tags$h2("Critical sites inside it"),
+  DT::dataTableOutput("rfg_sites_table"),
+  tags$h2("Recent updates"),
+  tags$p(class = "app-caption", "Select an update to see it above. The in force guidance opens by default."),
+  DT::dataTableOutput("rfg_history"),
+  tags$p(class = "app-caption", "Counted from address points inside each valid polygon (pipeline notebook 37). A person inside two areas of one kind is in both rows, so the area rows should not be added together.")
 )
 
 
@@ -1125,6 +1157,7 @@ make_area_detail_tab <- function() tags$div(
            downloadButton("download_area_brief", "Download a one-page brief (PDF)", class = "btn-sm btn-primary"),
            downloadButton("download_area_cells", "Download this area's 100 m cells", class = "btn-sm btn-outline-secondary")),
   uiOutput("area_head"),
+  uiOutput("area_rfg"),
   uiOutput("area_kpis"),
   tags$div(
     class = "area-cols",
@@ -1306,6 +1339,7 @@ ui <- function(request) {
     ),
 
     tabPanel("Constituency situation", make_situation_tab()),
+    tabPanel("Rapid Flood Guidance",   make_rfg_tab()),
     tabPanel("Warning areas",          make_areas_tab()),
     tabPanel("Target Area",            make_area_detail_tab()),
     tabPanel("Constituency exposure",  make_const_exposure_tab()),
