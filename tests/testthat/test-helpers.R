@@ -1241,3 +1241,10 @@ test_that("an area's gauge rows keep every threshold, give headroom and status, 
   l <- gauge_open_link("http://x/measures/abc-1'\"<script>", "A<b>")
   expect_match(l, "Shiny.setInputValue('goto_gauge'", fixed = TRUE); expect_false(grepl("<script", l, fixed = TRUE)); expect_false(grepl("A<b>", l, fixed = TRUE))
 })
+
+test_that("every fetch_ function the app calls is defined in data.R, so a merge cannot silently drop one and leave only the demo working", {
+  code <- function(f) { l <- readLines(file.path(app_root, f), warn = FALSE); l <- sub("#.*$", "", l); paste(l, collapse = "\n") }
+  used <- unique(unlist(regmatches(code("app_server.R"), gregexpr("\\bfetch_[a-z_0-9]+\\b", code("app_server.R")))))
+  defined <- unique(sub("\\s*<-.*$", "", grep("^fetch_[a-z_0-9]+\\s*<-\\s*function", readLines(file.path(app_root, "data.R"), warn = FALSE), value = TRUE)))
+  expect_equal(setdiff(used, defined), character())
+})

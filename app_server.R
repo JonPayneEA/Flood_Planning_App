@@ -2373,7 +2373,7 @@ server <- function(input, output, session) {
   })
 
   # ---- Warning areas (FGS_Notebooks job 35) --------------------------------------------------------------
-  areas_started <- reactive(input$main_tabs %in% c("Warning areas", "Area detail"))
+  areas_started <- reactive(input$main_tabs %in% c("Warning areas", "Target Area"))
 
   areas_all <- reactive({
     req(areas_started())
@@ -2461,7 +2461,7 @@ server <- function(input, output, session) {
         if (!is.na(a$risk_score)) tags$li(sprintf("Risk score %.1f of 100 (the people-weighted average of the 100 m cells inside the area; the highest cell scores %.0f).", a$risk_score, a$risk_score_max)),
         tags$li(sprintf("%s critical sites: %s health, %s education, %s emergency, %s utilities; %s in a High or Medium band.",
                         a$sites, a$sites_health, a$sites_education, a$sites_emergency, a$sites_utilities, a$sites_rs_high_medium))),
-      tags$p(actionLink("areas_open_selected", "Open the full area detail with the maps and critical sites")))
+      tags$p(actionLink("areas_open_selected", "Open the full Target Area page with the maps and critical sites")))
   }
 
   output$areas_description <- renderUI({
@@ -2483,7 +2483,7 @@ server <- function(input, output, session) {
 
   observeEvent(input$areas_open_selected, {
     a <- areas_selected(); req(a)
-    updateTabsetPanel(session, "main_tabs", selected = "Area detail")
+    updateTabsetPanel(session, "main_tabs", selected = "Target Area")
     updateSelectizeInput(session, "area_pick", selected = a$area_id)
   })
 
@@ -2493,7 +2493,7 @@ server <- function(input, output, session) {
     x <- tryCatch(areas_all(), error = function(e) NULL)
     if (is.null(x)) x <- safe_fetch(fetch_area_exposure)
     req(x, id %in% x$area_id)
-    updateTabsetPanel(session, "main_tabs", selected = "Area detail")
+    updateTabsetPanel(session, "main_tabs", selected = "Target Area")
     ord <- as.data.table(x)[order(area_name)]
     updateSelectizeInput(session, "area_pick", selected = id, server = TRUE,
                          choices = stats::setNames(ord$area_id, sprintf("%s (%s)", ord$area_name, ifelse(ord$kind == "flood_warning", "warning", "alert"))))
