@@ -1552,6 +1552,26 @@ econ_params <- function(assump) {
   list(prob = prob, damage = damage, has_prob = !anyNA(prob), has_damage = !anyNA(damage), source = source, price_year = price_year)
 }
 
+# econ_try_validate(): the three damage figures typed into the "try your own figures" box. Each must be a number, not negative, and they must run low,
+#   central, high in order. Returns list(ok, msg, damage) with damage a named vector.
+econ_try_validate <- function(low, central, high) {
+  v <- suppressWarnings(as.numeric(c(low = low, central = central, high = high)))
+  if (anyNA(v)) return(list(ok = FALSE, msg = "Enter a number for each of low, central and high.", damage = NULL))
+  if (any(v < 0)) return(list(ok = FALSE, msg = "A damage figure cannot be negative.", damage = NULL))
+  if (!(v[[1L]] <= v[[2L]] && v[[2L]] <= v[[3L]])) return(list(ok = FALSE, msg = "The figures must run from low to central to high.", damage = NULL))
+  list(ok = TRUE, msg = "", damage = stats::setNames(v, c("low", "central", "high")))
+}
+
+# econ_apply_override(): the assumptions with the user's own damage figures in place of the saved ones. Nothing is saved; the flag lets every figure say so.
+econ_apply_override <- function(params, damage) {
+  if (is.null(damage) || !isTRUE(params$has_prob)) return(params)
+  params$damage <- damage[c("low", "central", "high")]
+  params$has_damage <- TRUE
+  params$source <- NA_character_; params$price_year <- NA_character_
+  params$override <- TRUE
+  params
+}
+
 # econ_area(): per area, the expected number of households flooded in a year (ehh_*) and the expected annual damage in pounds (ead_*), low, central and high.
 #   `ex` is the exposure table (area_id and households_rs_high, _medium, _low, _very_low). ead_* is NA until the damage figures are set; ehh_* needs only
 #   the probabilities, so a ranking is possible before then.
@@ -1591,9 +1611,9 @@ econ_range_text <- function(low, central, high, ehh_central = NA_real_) {
 econ_basis_text <- function(params) {
   if (!isTRUE(params$has_prob)) return("The assumptions are not available yet (pipeline notebook 38).")
   p <- params$prob
-  paste0("Indicative. Households in each rivers and sea band x the band's annual chance (High ", sprintf("%.1f%%", 100 * p["high", "central"]), ", Medium ", sprintf("%.1f%%", 100 * p["medium", "central"]),
+  paste0(if (isTRUE(params$override)) "YOUR OWN DAMAGE FIGURES, NOT SAVED OR AGREED. " else "", "Indicative. Households in each rivers and sea band x the band's annual chance (High ", sprintf("%.1f%%", 100 * p["high", "central"]), ", Medium ", sprintf("%.1f%%", 100 * p["medium", "central"]),
          ", Low ", sprintf("%.2f%%", 100 * p["low", "central"]), ", Very Low ", sprintf("%.3f%%", 100 * p["very_low", "central"]), " in the central case) x damage per household per flood event",
-         if (isTRUE(params$has_damage)) sprintf(" (%s central; %s%s)", fmt_gbp(params$damage[["central"]]), if (is.na(params$source) || !nzchar(params$source)) "source not recorded" else params$source,
+         if (isTRUE(params$has_damage)) sprintf(" (%s central; %s%s)", fmt_gbp(params$damage[["central"]]), if (isTRUE(params$override)) "typed in for this session" else if (is.na(params$source) || !nzchar(params$source)) "source not recorded" else params$source,
                                                 if (is.na(params$price_year) || !nzchar(params$price_year)) "" else paste0(", ", params$price_year)) else " (not set yet)",
          ". The low and high figures use the bottom and top of each band's range with the low and high damage together. No flood depth, property type or value is used.")
 }
