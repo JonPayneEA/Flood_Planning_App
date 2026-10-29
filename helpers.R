@@ -1485,6 +1485,18 @@ FLOOD_BANDS <- data.frame(
   range  = c("over 3.3% a year", "1 to 3.3%", "0.1 to 1%", "under 0.1%"),
   stringsAsFactors = FALSE)
 
+# forecast_people_rows(): people in the areas under a forecast, by kind. `ex` is the exposure table (area_id, kind, people, people_split, people_rs_high_medium),
+#   `pot` the potential areas (ea_area_code). people_low sums each area's split people (overlapping areas share a person), people_high the whole areas;
+#   hm_high is the gross count in a High or Medium band. One row per kind present, warnings first.
+forecast_people_rows <- function(ex, pot) {
+  ex <- data.table::as.data.table(ex); pot <- data.table::as.data.table(pot)
+  x <- ex[area_id %in% pot$ea_area_code]
+  if (nrow(x) == 0L) return(data.table::data.table(Kind = character(), areas = integer(), people_low = numeric(), people_high = numeric(), hm_high = numeric()))
+  out <- x[, list(areas = .N, people_low = sum(people_split, na.rm = TRUE), people_high = sum(people, na.rm = TRUE), hm_high = sum(people_rs_high_medium, na.rm = TRUE)), by = kind]
+  out[, Kind := ifelse(kind == "flood_warning", "Flood warning areas", "Flood alert areas")]
+  out[order(kind == "flood_alert"), list(Kind, areas, people_low, people_high, hm_high)]
+}
+
 # site_display_name(): the site's name, or "Unnamed <type>" where the source gives none (some fire and police stations have no name).
 site_display_name <- function(name, type) {
   blank <- is.na(name) | !nzchar(trimws(name))

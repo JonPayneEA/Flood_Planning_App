@@ -2418,6 +2418,29 @@ server <- function(input, output, session) {
     if (input$areas_sort == "area_name") x[order(area_name)] else x[order(-get(input$areas_sort), area_name, na.last = TRUE)]
   })
 
+  # People under the forecast: an approximate, secondary figure. The potential areas are those that sit under a risk polygon (Low or above); the
+  # exposure table counts everyone inside each whole area, not only the part the polygon covers, so the true figure is lower. Overlapping areas of one
+  # kind share people, so the sum of each area's split people is the floor and the sum of the whole areas the ceiling.
+  output$areas_forecast <- renderUI({
+    req(areas_started())
+    sit <- tryCatch(as.data.table(situation_latest_clean()), error = function(e) NULL)
+    sid <- if (is.null(sit) || nrow(sit) == 0L) NA else suppressWarnings(as.integer(sit$fgs_statement_id[1L]))
+    pot <- if (is.na(sid)) NULL else tryCatch(as.data.table(fetch_potential_area_list(sid, 2L)), error = function(e) NULL)
+    ex <- areas_all()
+    if (is.null(pot) || is.null(ex)) return(NULL)
+    rows <- forecast_people_rows(ex, pot)
+    if (nrow(rows) == 0L) return(tags$p(class = "app-caption", "No flood warning or alert area sits under the current forecast's risk polygons."))
+    tags$div(class = "forecast-panel",
+             tags$h2("Under the current forecast (approximate)"),
+             tags$table(
+               tags$thead(tags$tr(tags$th("Kind"), tags$th(class = "n", "Areas"), tags$th(class = "n", "People in those areas"), tags$th(class = "n", "of them in a High or Medium band"))),
+               tags$tbody(lapply(seq_len(nrow(rows)), function(i) tags$tr(
+                 tags$td(rows$Kind[i]), tags$td(class = "n", rows$areas[i]),
+                 tags$td(class = "n", sprintf("%s to %s", format(round(rows$people_low[i]), big.mark = ","), format(round(rows$people_high[i]), big.mark = ","))),
+                 tags$td(class = "n", format(round(rows$hm_high[i]), big.mark = ","))))) ),
+             tags$p(class = "app-caption", "Not a forecast of who will be flooded. These are the people who live inside each whole area that sits under a risk polygon, so the real figure is lower. The low figure shares people who are in overlapping areas; the high figure counts them in each. Flood warning areas and flood alert areas are counted apart and should not be added together."))
+  })
+
   output$areas_note <- renderUI({
     loaded <- if (areas_started()) areas_all() else NULL            # read first: a missing table is recorded once a fetch fails
     if ("ea_area_exposure" %in% names(data_gaps())) return(tags$p(class = "text-muted", gap_text("ea_area_exposure", "Warning areas")))
@@ -2430,7 +2453,15 @@ server <- function(input, output, session) {
       tags$span(tags$i(style = paste0("background:", FLOOD_BANDS$fill[i])), sprintf("%s (%s)", FLOOD_BANDS$band[i], FLOOD_BANDS$range[i]))))
   })
 
+  # What was issued in the last 12 months, per area (NULL when the warning episodes table cannot be read).
+  areas_issue_counts <- reactive({
+    req(areas_started())
+    tryCatch(as.data.table(fetch_area_issue_counts()), error = function(e) NULL)
+  })
+
   areas_display <- function(x) {
+    ic <- areas_issue_counts()
+    issued <- if (is.null(ic)) rep(NA_integer_, nrow(x)) else { n <- ic$issued_12m[match(x$area_id, ic$area_id)]; as.integer(ifelse(is.na(n), 0L, n)) }
     data.table(
       Area = vapply(seq_len(nrow(x)), function(i) area_open_link(x$area_id[i], x$area_name[i]), character(1)),
       Kind = ifelse(x$kind == "flood_warning", "Warning", "Alert"),
@@ -2439,7 +2470,8 @@ server <- function(input, output, session) {
       `People by flood band` = band_bar_html(x),
       `Households at High or Medium` = round(x$households_rs_high_medium),
       `Critical sites` = x$sites,
-      `Risk score` = score_bar_html(x$risk_score))
+      `Risk score` = score_bar_html(x$risk_score),
+      `Issued, last 12 months` = issued)
   }
 
   output$areas_table <- DT::renderDataTable({
@@ -2573,6 +2605,35 @@ server <- function(input, output, session) {
       tags$tbody(rows)),
       tags$p(class = "app-caption", sprintf("%s people live outside every band. Unique to this area, not shared with another area of its kind: %s people; split evenly across overlaps: %s.",
                                             area_n(none), area_n(a$people_unique), area_n(a$people_split))))
+  })
+
+  output$area_vuln <- renderUI({
+    a <- tryCatch(area_sel(), error = function(e) NULL); req(a)
+    if (is.null(a$no_car_households) || is.na(a$no_car_households))
+      return(tags$p(class = "text-muted", "Not available yet. It needs the Census vulnerability counts (pipeline notebooks 29, 33 and 35)."))
+    hh <- max(a$households, 1); pp <- max(a$people, 1)
+    row <- function(label, n, base, hm) tags$tr(tags$td(label), tags$td(class = "n", area_n(n)), tags$td(class = "n", sprintf("%.1f%%", 100 * n / base)), tags$td(class = "n", area_n(hm)))
+    tags$div(
+      tags$table(
+        tags$thead(tags$tr(tags$th("Measure"), tags$th(class = "n", "In this area"), tags$th(class = "n", "Share"), tags$th(class = "n", "In a High or Medium band"))),
+        tags$tbody(row("Households with no car or van", a$no_car_households, hh, a$no_car_households_rs_high_medium),
+                   row("People in bad or very bad health", a$people_bad_health, pp, a$people_bad_health_rs_high_medium),
+                   row("People whose day-to-day activities are limited a lot", a$people_limited_lot, pp, a$people_limited_lot_rs_high_medium))),
+      tags$p(class = "app-caption", "Census 2021, shared out to the addresses of each output area, so they are estimates. Households share their base of households; people share their base of people. The last column counts those inside a High or Medium rivers and sea band."))
+  })
+
+  output$area_sw <- renderUI({
+    a <- tryCatch(area_sel(), error = function(e) NULL); req(a)
+    if (is.null(a$people_sw_high))
+      return(tags$p(class = "text-muted", "Not available yet. It needs the surface water layer (pipeline notebooks 30, 33 and 35)."))
+    rows <- lapply(seq_len(nrow(FLOOD_BANDS)), function(i) {
+      p <- a[[paste0("people_sw_", sub("^rs_", "", FLOOD_BANDS$col[i]))]]
+      tags$tr(tags$td(HTML(band_chip(FLOOD_BANDS$band[i]))), tags$td(class = "n", sprintf("%.0f%%", 100 * p / max(a$people, 1))), tags$td(class = "n", area_n(p)))
+    })
+    tags$div(
+      tags$table(tags$thead(tags$tr(tags$th("Band"), tags$th(class = "n", "Share of people"), tags$th(class = "n", "People"))), tags$tbody(rows)),
+      tags$p(class = "app-caption", sprintf("%s people are in a High or Medium surface water band. Surface water is a separate hazard from the rivers and sea bands above, from a different Environment Agency dataset, and flood warning areas are not issued for it. It is shown as context and is never added to the figures above.",
+                                            area_n(a$people_sw_high + a$people_sw_medium))))
   })
 
   output$area_sites <- renderUI({

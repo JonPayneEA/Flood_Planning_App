@@ -1269,3 +1269,14 @@ test_that("site_display_name names blank sites by their type", {
   expect_equal(site_display_name(c("Alford STW", "", NA), c("sewage works", "fire station", NA)),
                c("Alford STW", "Unnamed fire station", "Unnamed site"))
 })
+
+test_that("forecast_people_rows gives a floor and a ceiling for the people in the areas under a forecast", {
+  ex <- data.table(area_id = c("W1", "W2", "W3", "A1"), kind = c("flood_warning", "flood_warning", "flood_warning", "flood_alert"),
+                   people = c(100, 200, 900, 400), people_split = c(80, 150, 900, 300), people_rs_high_medium = c(10, 20, 90, 40))
+  pot <- data.frame(ea_area_code = c("W1", "W2", "A1", "NOT_IN_TABLE"))
+  r <- forecast_people_rows(ex, pot)
+  expect_equal(r$Kind, c("Flood warning areas", "Flood alert areas"))
+  expect_equal(r$areas, c(2L, 1L)); expect_equal(r$people_low, c(230, 300)); expect_equal(r$people_high, c(300, 400)); expect_equal(r$hm_high, c(30, 40))
+  expect_true(all(r$people_low <= r$people_high))
+  expect_equal(nrow(forecast_people_rows(ex, data.frame(ea_area_code = "none"))), 0L)
+})

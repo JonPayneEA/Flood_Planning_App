@@ -750,6 +750,12 @@ demo_area_exposure <- function() demo_memo("area_exposure", demo_with_seed(3517,
     share_people_imd_1_2 = NA_real_,
     people_unique = people - shared, people_split = people - as.integer(round(shared / 2)),
     people_shared = shared, share_people_shared = round(shared / pmax(people, 1L), 4),
+    people_sw_very_low = as.integer(round(people * runif(n, .02, .1))), people_sw_low = as.integer(round(people * runif(n, .01, .08))),
+    people_sw_medium = as.integer(round(people * runif(n, .01, .05))), people_sw_high = as.integer(round(people * runif(n, 0, .03))),
+    no_car_households = as.integer(round(people / 2.4 * runif(n, .1, .35))), people_bad_health = as.integer(round(people * runif(n, .03, .08))),
+    people_limited_lot = as.integer(round(people * runif(n, .05, .1))),
+    no_car_households_rs_high_medium = as.integer(round(hm / 2.4 * runif(n, .1, .35))), people_bad_health_rs_high_medium = as.integer(round(hm * runif(n, .03, .08))),
+    people_limited_lot_rs_high_medium = as.integer(round(hm * runif(n, .05, .1))),
     sites = sites, sites_health = rbinom(n, sites, .25), sites_education = rbinom(n, sites, .4),
     sites_emergency = rbinom(n, sites, .1), sites_utilities = rbinom(n, sites, .1), sites_rs_high_medium = rbinom(n, sites, .3)
   )[, share_people_imd_1_2 := round(people_imd_1_2 / pmax(people, 1L), 4)][]
@@ -1081,6 +1087,15 @@ fetch_warning_episodes <- function(constituency_id) {
   e[, peak_level := fifelse(had_severe, "severe_flood_warning", ea_area_type)]
   e[end_time > Sys.time(), `:=`(end_time = as.POSIXct(NA, tz = "UTC"), duration_minutes = NA_real_)]
   e[, .(episode_id, ea_area_code, ea_area_name, ea_area_type, start_time, end_time, duration_minutes, peak_level, had_severe, stale_open)]
+}
+
+# Invented counts of what was issued in the last 12 months, for the Target Areas table.
+fetch_area_issue_counts <- function(days = 365L) {
+  a <- demo_ea_areas()$table
+  set.seed(7)
+  n <- nrow(a)
+  data.table(area_id = a$ea_area_code, issued_12m = as.integer(ifelse(a$ea_area_type == "flood_warning", rpois(n, 1.5), rpois(n, 4))),
+             severe_12m = as.integer(rbinom(n, 1L, .05)))
 }
 
 # Invented history for one demo area: a handful of episodes over the last two years, the busy ones in winter.

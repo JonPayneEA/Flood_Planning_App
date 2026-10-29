@@ -438,7 +438,9 @@ guide_products <- function(s) {
         "Share at risk is the share of the area's people in a High or Medium band, not the chance of flooding."
       ),
       limits = c(
-        "Rivers and the sea only. Surface water is not counted: the Environment Agency does not warn for it.",
+        "Rivers and the sea only. Surface water is not counted in the bands: the Environment Agency does not warn for it. The Target Area page shows it apart, as context.",
+        "The table under the current forecast is approximate. It counts everyone inside each whole area that sits under a risk polygon, so the true number of people reached is lower.",
+        "Vulnerability counts (no car or van, bad health, activities limited a lot) come from Census 2021 and are shared out to addresses, so they are estimates for an area.",
         "Until AddressBase Premium is available the points come from the National Statistics UPRN Lookup, so counts are of addresses, not of buildings or businesses, and England only.",
         "The figures are restricted. Small counts are shown as they are held; treat them with care before sharing."
       )

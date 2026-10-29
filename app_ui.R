@@ -1082,9 +1082,10 @@ make_overview_tab <- function() tags$div(
 
 make_areas_tab <- function() tags$div(
   class = "areas-page",
-  tags$h1(class = "app-title", "Warning areas"),
+  tags$h1(class = "app-title", "Target Areas"),
   tags$p(class = "app-lead", "Who and what sits inside each flood warning and flood alert area, and how much of it lies in each flood risk band."),
   uiOutput("areas_note"),
+  uiOutput("areas_forecast"),
   tags$div(
     class = "filter-row",
     selectInput("areas_kind", "Kind", choices = c("Flood warning and alert" = "both", "Flood warning" = "flood_warning", "Flood alert" = "flood_alert"), width = "220px"),
@@ -1137,6 +1138,10 @@ make_area_detail_tab <- function() tags$div(
       tags$h2("By flood band"),
       tags$p(class = "app-caption", "Rivers and the sea. Surface water is not counted."),
       uiOutput("area_bands"),
+      tags$h2("Who is vulnerable"),
+      uiOutput("area_vuln"),
+      tags$h2("Surface water (context)"),
+      uiOutput("area_sw"),
       tags$h2("Critical sites"),
       uiOutput("area_sites"),
       DT::dataTableOutput("area_sites_table"),
