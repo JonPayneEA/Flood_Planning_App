@@ -1301,3 +1301,18 @@ test_that("rapid flood guidance: the current update, the default view, and the f
   expect_match(rfg_flag_text(rfg_constituency_flag(cons, "E1"), "constituency"), "1,200 people of this constituency lie inside 1 guidance polygon\\.")
   expect_null(rfg_flag_text(NULL))
 })
+
+test_that("area_history_summary counts the issues and the time in force by area, inside the period", {
+  h <- data.table(ea_area_code = c("A", "A", "A", "B"), ea_area_name = c("Area A", "Area A", "Area A", NA), ea_area_type = c("flood_warning", "flood_warning", "flood_warning", "flood_alert"),
+                  issued_date = as.Date(c("2025-01-01", "2025-06-01", "2023-01-01", "2025-02-01")), n_issued = c(2L, 1L, 4L, 1L), n_severe = c(1L, 0L, 0L, 0L),
+                  minutes_timed = c(300, 60, 999, 0), n_timed = c(2L, 1L, 4L, 0L), longest_minutes = c(200, 60, 500, NA), n_open = c(0L, 0L, 0L, 1L))
+  s <- area_history_summary(h, "2024-01-01", "2025-12-31")
+  expect_equal(s$ea_area_code, c("A", "B"))                                  # most issued first
+  a <- s[ea_area_code == "A"]
+  expect_equal(a$issued, 3L); expect_equal(a$severe, 1L); expect_equal(a$total_minutes, 360); expect_equal(a$mean_minutes, 120)
+  expect_equal(a$longest_minutes, 200); expect_equal(a$last_issued, as.Date("2025-06-01"))        # the 2023 issues are outside the period
+  b <- s[ea_area_code == "B"]
+  expect_equal(b$ea_area_name, "B"); expect_equal(b$open, 1L); expect_true(is.na(b$mean_minutes)); expect_true(is.na(b$longest_minutes))   # an open issue has no time
+  expect_equal(nrow(area_history_summary(h, "2030-01-01", "2030-12-31")), 0L); expect_equal(nrow(area_history_summary(NULL)), 0L)
+  expect_equal(fmt_span(c(NA, 45, 200, 3000)), c("", "45 min", "3 h 20 min", "2 d 2 h"))
+})

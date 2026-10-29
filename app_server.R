@@ -1442,7 +1442,7 @@ server <- function(input, output, session) {
     "area_row_click", "download_ea_areas", "download_situation",
     "copy_link_click", "goto_gauge", "area_open", "areas_open_selected", "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas",
     "download_areas", "download_const_exp", "download_const_brief", "download_exp_bands", "download_exp_responders", "download_area_cells", "download_area_issues",
-    "download_area_brief", "download_area_sites", "download_tb",
+    "download_area_brief", "download_area_sites", "download_tb", "download_ah", "download_ah_detail",
     "situation_table_rows_selected", "situation_table_row_last_clicked",
     "situation_table_cell_clicked", "situation_table_rows_current",
     "situation_table_rows_all", "situation_table_state", "situation_table_search",
@@ -2072,8 +2072,112 @@ server <- function(input, output, session) {
     }
   )
 
+  # ---- Warning history by Target Area (job 25) ------------------------------------------------------------------------------------
+  # Each warning or alert area: how many times it was issued, and for how long. Read when the tab is first opened; the period, kind and search are
+  # applied in R, so they cost no further query.
+  ah_open <- reactive(identical(input$main_tabs, "Warning history"))
+  ah_rv <- reactiveVal(NULL)
+  ah_loaded <- reactiveVal(FALSE)
+  observe({
+    req(ah_open())
+    if (!isolate(ah_loaded())) { ah_loaded(TRUE); ah_rv(safe_fetch(fetch_area_history)) }
+  })
+  observeEvent(input$refresh_data, { if (ah_loaded()) ah_rv(safe_fetch(fetch_area_history)) }, ignoreInit = TRUE)
+  observeEvent(ah_rv(), {
+    h <- ah_rv(); if (is.null(h) || nrow(h) == 0L) return()
+    days <- as.Date(h$issued_date)
+    updateSliderInput(session, "ah_range", min = min(days), max = max(days), value = c(min(days), max(days)))
+  }, ignoreNULL = TRUE)
+
+  ah_summary <- reactive({
+    h <- ah_rv(); req(h)
+    r <- input$ah_range
+    x <- if (is.null(r)) area_history_summary(h) else area_history_summary(h, r[1L], r[2L])
+    if (!identical(input$ah_kind %||% "both", "both")) x <- x[kind == input$ah_kind]
+    q <- tolower(trimws(input$ah_search %||% ""))
+    if (nzchar(q)) x <- x[grepl(q, tolower(ea_area_name), fixed = TRUE) | grepl(q, tolower(ea_area_code), fixed = TRUE)]
+    x
+  })
+
+  output$ah_note <- renderUI({
+    if (!ah_open()) return(NULL)
+    if (has_gap("ea_warning_episodes")) return(tags$p(class = "text-muted", gap_text("ea_warning_episodes", "Warning history")))
+    if (is.null(ah_rv())) return(tags$p(class = "text-muted", "Warning history could not be loaded."))
+    tags$small(class = "text-muted d-block mb-2",
+      "An issue is one alert or warning, from the time it was switched on to the time it ended. A warning that rises to severe and falls back is one issue. ",
+      "Time in force adds up the issues that have ended; an issue still in force, or open for over 30 days with no end message, is counted as issued but not timed. ",
+      "Areas with no issue in the period are not listed.")
+  })
+
+  output$ah_kpis <- renderUI({
+    x <- tryCatch(ah_summary(), error = function(e) NULL); req(!is.null(x))
+    n <- function(v) formatC(round(as.numeric(v)), format = "d", big.mark = ",")
+    tile <- function(big, small) tags$div(tags$b(big), tags$span(small))
+    timed_n <- sum(x$issued - x$open); mean_m <- if (timed_n > 0L) sum(x$total_minutes) / timed_n else NA_real_
+    tags$div(class = "kpi-row",
+             tile(n(nrow(x)), "areas issued in the period"),
+             tile(n(sum(x$issued)), "issues in total"),
+             tile(sprintf("%s h", n(sum(x$total_minutes) / 60)), "time in force, all areas added"),
+             tile(if (is.na(mean_m)) "n/a" else fmt_span(mean_m), "average length of an issue"))
+  })
+
+  output$ah_table <- DT::renderDataTable({
+    x <- ah_summary()
+    if (nrow(x) == 0L) return(DT::datatable(data.frame(Note = "No area was issued in this period."), rownames = FALSE, selection = "none", options = list(dom = "t")))
+    d <- data.table(Area = vapply(seq_len(nrow(x)), function(i) area_open_link(x$ea_area_code[i], x$ea_area_name[i]), character(1)),
+                    Kind = ifelse(x$kind == "flood_warning", "Warning", "Alert"), Issued = x$issued, `Reached severe` = x$severe,
+                    `Time in force (hours)` = round(x$total_minutes / 60, 1), `Average (hours)` = round(x$mean_minutes / 60, 1),
+                    `Longest (hours)` = round(x$longest_minutes / 60, 1), `Still open` = x$open, `Last issued` = format(x$last_issued, "%d %b %Y"))
+    DT::datatable(d, rownames = FALSE, selection = "single", escape = FALSE,
+                  options = list(pageLength = 15, scrollX = TRUE, dom = "tip", order = list(), columnDefs = list(list(orderable = FALSE, targets = 0L)),
+                                 language = list(info = "Showing _START_ to _END_ of _TOTAL_ areas"))) |>
+      DT::formatRound(c("Time in force (hours)", "Average (hours)", "Longest (hours)"), digits = 1, mark = ",")
+  })
+
+  ah_selected <- reactive({
+    row <- input$ah_table_rows_selected
+    if (is.null(row)) return(NULL)
+    x <- ah_summary()
+    if (row > nrow(x)) NULL else x[row]
+  })
+
+  ah_episodes <- reactive({
+    a <- ah_selected(); req(a)
+    ep <- tryCatch(as.data.table(fetch_area_episodes(a$ea_area_code)), error = function(e) NULL)
+    if (is.null(ep) || nrow(ep) == 0L) return(data.table())
+    ep[, ea_area_name := a$ea_area_name]
+    r <- input$ah_range
+    warning_episode_rows(ep, if (is.null(r)) as.Date("1900-01-01") else r[1L], if (is.null(r)) Sys.Date() + 1L else r[2L])
+  })
+
+  output$ah_detail_title <- renderUI({
+    a <- ah_selected()
+    if (is.null(a)) return(tags$p(class = "text-muted", "Select an area in the table to see each time it was issued."))
+    tags$p(tags$strong(a$ea_area_name), sprintf(" (%s): issued %d time%s in the period.", a$ea_area_code, a$issued, if (a$issued == 1L) "" else "s"), " ",
+           tags$a(href = "#", onclick = sprintf("Shiny.setInputValue('area_open','%s',{priority:'event'});return false;", gsub("[^A-Za-z0-9_.-]", "", a$ea_area_code)), "Open its Target Area page"))
+  })
+
+  output$ah_detail <- DT::renderDataTable({
+    req(ah_selected())
+    x <- ah_episodes()
+    if (nrow(x) == 0L) return(DT::datatable(data.frame(Note = "Nothing to list."), rownames = FALSE, selection = "none", options = list(dom = "t")))
+    DT::datatable(x[, !c("Area", "Code")], rownames = FALSE, selection = "none", options = list(pageLength = 10, dom = "tip", order = list(), scrollX = TRUE))
+  })
+
+  output$download_ah <- downloadHandler(
+    filename = function() sprintf("warning_history_by_area_%s.csv", format(Sys.Date(), "%Y%m%d")),
+    content = function(file) {
+      x <- tryCatch(ah_summary(), error = function(e) data.table())
+      data.table::fwrite(if (nrow(x) == 0L) data.table() else x[, .(Code = ea_area_code, Area = ea_area_name, Kind = kind, Issued = issued, `Reached severe` = severe,
+                                                                 `Time in force (hours)` = round(total_minutes / 60, 2), `Average (hours)` = round(mean_minutes / 60, 2),
+                                                                 `Longest (hours)` = round(longest_minutes / 60, 2), `Still open` = open, `Last issued` = last_issued)], file, bom = TRUE)
+    })
+  output$download_ah_detail <- downloadHandler(
+    filename = function() sprintf("area_%s_issues_%s.csv", gsub("[^A-Za-z0-9_.-]", "", ah_selected()$ea_area_code %||% "none"), format(Sys.Date(), "%Y%m%d")),
+    content = function(file) data.table::fwrite(tryCatch(ah_episodes(), error = function(e) data.table()), file, bom = TRUE))
+
   # ---------------------------------------------------------------------------
-  # Warning history tab (job 25).
+  # Constituency history tab (job 25).
   #
   # Filtering is in R: the history arrives once per load as counts by day of
   # issue, so the slider and the Nations filter cost no further queries.
@@ -2120,9 +2224,9 @@ server <- function(input, output, session) {
 
   output$wh_note <- renderUI({
     if (has_gap("ea_warning_episodes")) {
-      return(tags$p(class = "text-muted", gap_text("ea_warning_episodes", "Warning history")))
+      return(tags$p(class = "text-muted", gap_text("ea_warning_episodes", "Constituency history")))
     }
-    if (is.null(history_rv())) return(tags$p(class = "text-muted", "Warning history could not be loaded."))
+    if (is.null(history_rv())) return(tags$p(class = "text-muted", "Constituency history could not be loaded."))
     tags$small(class = "text-muted d-block mb-2",
       "An issue is one alert or warning, from the time it was switched on to the time it ended. A warning that rises ",
       "to severe and falls back is one issue. Warnings includes severe ones, so the total is alerts plus warnings. ",

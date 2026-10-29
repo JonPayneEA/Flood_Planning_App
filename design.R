@@ -80,6 +80,7 @@ APP_SECTIONS <- list(
   list(id = "history", label = "History",
        intro = "How often and how long warnings were in force, and how well the forecast matched them.",
        views = list(list(value = "Warning history",   label = "Warning history"),
+                    list(value = "Constituency history", label = "Constituency history"),
                     list(value = "Exposure history",  label = "Exposure history"),
                     list(value = "Warnings vs FGS",   label = "Warnings and the forecast"))),
   list(id = "exports", label = "Exports",

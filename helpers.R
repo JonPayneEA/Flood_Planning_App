@@ -400,6 +400,42 @@ warning_history_window <- function(h, from, to) {
   h[as.Date(issued_date) >= as.Date(from) & as.Date(issued_date) <= as.Date(to)]
 }
 
+# fmt_span(): a length of time given in minutes, in the largest sensible units: "45 min", "3 h 20 min", "2 d 4 h". NA gives an empty string.
+fmt_span <- function(minutes) {
+  m <- as.numeric(minutes)
+  vapply(m, function(x) {
+    if (is.na(x)) return("")
+    x <- round(x)
+    if (x < 60) return(sprintf("%d min", x))
+    if (x < 2880) return(sprintf("%d h %d min", x %/% 60, x %% 60))
+    sprintf("%d d %d h", x %/% 1440, (x %% 1440) %/% 60)
+  }, character(1))
+}
+
+# area_history_summary(): from fetch_area_history() (counts by area and day of issue), per area in the period: how many times it was issued, how many
+#   reached severe, the total time in force, the mean and longest time of those that ended, and when it was last issued. Areas with no issue in
+#   the period are absent. Episodes with no end message count in `issued` and `open` but not in the times. Newest-heavy areas first.
+area_history_summary <- function(h, from = NULL, to = NULL) {
+  empty <- data.table::data.table(ea_area_code = character(), ea_area_name = character(), kind = character(), issued = integer(), severe = integer(),
+                                  total_minutes = numeric(), mean_minutes = numeric(), longest_minutes = numeric(), open = integer(), last_issued = as.Date(character()))
+  if (is.null(h) || nrow(h) == 0L) return(empty)
+  x <- data.table::as.data.table(h)
+  d <- as.Date(x$issued_date)
+  if (!is.null(from)) x <- x[d >= as.Date(from)]
+  d <- as.Date(x$issued_date)
+  if (!is.null(to)) x <- x[d <= as.Date(to)]
+  if (nrow(x) == 0L) return(empty)
+  out <- x[, list(ea_area_name = { n <- ea_area_name[!is.na(ea_area_name)]; if (length(n)) n[1L] else NA_character_ }, kind = ea_area_type[1L],
+                  issued = sum(as.integer(n_issued)), severe = sum(as.integer(n_severe)),
+                  total_minutes = sum(as.numeric(minutes_timed), na.rm = TRUE), n_timed = sum(as.integer(n_timed)),
+                  longest_minutes = if (all(is.na(longest_minutes))) NA_real_ else max(as.numeric(longest_minutes), na.rm = TRUE),
+                  open = sum(as.integer(n_open)), last_issued = max(as.Date(issued_date))), by = ea_area_code]
+  out[, mean_minutes := ifelse(n_timed > 0L, total_minutes / n_timed, NA_real_)][, n_timed := NULL]
+  out[is.na(ea_area_name), ea_area_name := ea_area_code]
+  data.table::setcolorder(out, names(empty))
+  out[order(-issued, -total_minutes, ea_area_name)]
+}
+
 warning_constituency_counts <- function(h) {
   empty <- data.table(constituency_id = character(), alerts = integer(), warnings = integer(),
                       severe = integer(), total = integer())
