@@ -1459,7 +1459,11 @@ server <- function(input, output, session) {
   # Copy link saves the view on the server and sends the short link back for the browser to copy (see the copy_link handler in design.R). The address
   # bar is left alone: a long address in it is what the gateway refused.
   observeEvent(input$copy_link_click, session$doBookmark(), ignoreInit = TRUE)
-  onBookmarked(function(url) session$sendCustomMessage("copy_link", list(url = url)))
+  onBookmarked(function(url) {
+    session$sendCustomMessage("copy_link", list(url = url))
+    showNotification(sprintf("Link made: %s", url), type = "message", duration = 12, id = "copy_link_made")      # what the app produced, so a wrong link can be traced
+  })
+  output$build_stamp <- renderUI(sprintf("Build %s. Shared links are saved on the %s.", APP_BUILD, getShinyOption("bookmarkStore", default = "disable")))
 
 
   # ---------------------------------------------------------------------------
