@@ -2581,16 +2581,21 @@ server <- function(input, output, session) {
                               a$sites, a$sites_health, a$sites_education, a$sites_emergency, a$sites_utilities, a$sites_rs_high_medium))
     s <- area_sites_data()
     if (is.null(s)) return(tags$div(summary, tags$p(class = "app-caption", "The list of named sites is not available yet (pipeline notebook 35 writes it).")))
-    s <- as.data.table(s)
-    if (nrow(s) == 0L) return(tags$div(summary, tags$p(class = "app-caption", "No critical sites are inside this area.")))
-    shown <- min(nrow(s), 50L)
-    chip <- function(b) if (!is.na(b) && b %in% FLOOD_BANDS$band) HTML(band_chip(b)) else tags$span(class = "text-muted", "Outside the bands")
-    rows <- lapply(seq_len(shown), function(i)
-      tags$tr(tags$td(site_display_name(s$name[i], s$site_type[i])), tags$td(s$site_type[i]), tags$td(chip(s$band[i]))))
-    tags$div(summary,
-             tags$table(tags$thead(tags$tr(tags$th("Site"), tags$th("Type"), tags$th("Band"))), tags$tbody(rows)),
-             if (nrow(s) > shown) tags$p(class = "app-caption", sprintf("The first %d of %d sites, worst band first. Download the sites for the rest.", shown, nrow(s))),
-             downloadButton("download_area_sites", "Download this area's critical sites", class = "btn-sm btn-outline-secondary"))
+    if (nrow(as.data.table(s)) == 0L) return(tags$div(summary, tags$p(class = "app-caption", "No critical sites are inside this area.")))
+    summary
+  })
+
+  output$area_sites_table <- DT::renderDataTable({
+    s <- area_sites_data(); req(!is.null(s)); s <- as.data.table(s); req(nrow(s) > 0L)
+    chip <- function(b) if (!is.na(b) && b %in% FLOOD_BANDS$band) band_chip(b) else "<span class=\"text-muted\">Outside the bands</span>"
+    d <- data.table(Site = site_display_name(s$name, s$site_type), Type = s$site_type, Band = vapply(s$band, chip, character(1)))
+    DT::datatable(d, rownames = FALSE, selection = "none", escape = FALSE,
+                  options = list(pageLength = 10, dom = "tip", order = list(), scrollX = TRUE, columnDefs = list(list(orderable = FALSE, targets = 2L))))
+  })
+
+  output$area_sites_download <- renderUI({
+    s <- area_sites_data(); req(!is.null(s), nrow(s) > 0L)
+    downloadButton("download_area_sites", "Download this area's critical sites", class = "btn-sm btn-outline-secondary")
   })
 
   # The sites inside the chosen area, or NULL when the pipeline table is missing (no banner: the page says so).
