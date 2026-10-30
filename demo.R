@@ -1133,6 +1133,8 @@ fetch_rfg_updates <- function(limit = 50L) copy(demo_rfg_updates())[seq_len(min(
 
 fetch_rfg_totals <- function() rfg_totals(rbindlist(lapply(c("9003", "9001"), demo_rfg_exposure_all)))
 
+fetch_rfg_check <- function() data.table(checked_at = as.POSIXct(Sys.time() - 420, tz = "UTC"), result = "no_change", latest_update_key = "9003", latest_last_updated = as.character(Sys.time() - 1800), latest_status = "Rapid Flooding Guidance Present")
+
 fetch_rfg_polygons <- function(update_key) demo_rfg_polygons(update_key)
 
 fetch_rfg_exposure <- function(update_key) demo_rfg_exposure_all(update_key)

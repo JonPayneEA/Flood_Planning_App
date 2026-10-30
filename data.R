@@ -929,6 +929,10 @@ fetch_rfg_updates <- function(limit = 50L) {
 
 # fetch_rfg_totals(): per update, what job 37 counted under its polygons (restricted): the sum of the polygons, which seldom overlap, and the same for the
 #   polygons still in force. SELECT * so a table built before the is_valid flag was added still reads.
+# fetch_rfg_check(): the one-row heartbeat job 36 writes every run (when it checked, how it ended, the latest update). Quiet feeds change rarely, so this is the
+#   evidence that the poll is alive.
+fetch_rfg_check <- function() db_query(sprintf("SELECT checked_at, result, latest_update_key, latest_last_updated, latest_status FROM %s LIMIT 1", TBL_RFG_CHECKS))
+
 fetch_rfg_totals <- function() {
   rfg_totals(db_query(sprintf("SELECT * FROM %s", TBL_RFG_EXPOSURE)))
 }
@@ -1698,6 +1702,7 @@ fetch_area_overlap_pairs            <- with_cache(fetch_area_overlap_pairs,     
 fetch_econ_assumptions               <- with_cache(fetch_econ_assumptions,               "econ_assumptions", ttl = min(CACHE_TTL_SECONDS, 120))
 fetch_gauge_area_links              <- with_cache(fetch_gauge_area_links,              "gauge_area_links", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
 fetch_rfg_updates                   <- with_cache(fetch_rfg_updates,                   "rfg_updates", ttl = min(CACHE_TTL_SECONDS, 60))
+fetch_rfg_check                     <- with_cache(fetch_rfg_check,                     "rfg_check", ttl = min(CACHE_TTL_SECONDS, 60))
 fetch_rfg_totals                    <- with_cache(fetch_rfg_totals,                    "rfg_totals", ttl = min(CACHE_TTL_SECONDS, 60))
 fetch_rfg_polygons                  <- with_cache(fetch_rfg_polygons,                  "rfg_polygons", ttl = min(CACHE_TTL_SECONDS, 300), group = "geometry")
 fetch_rfg_exposure                  <- with_cache(fetch_rfg_exposure,                  "rfg_exposure", ttl = min(CACHE_TTL_SECONDS, 300))

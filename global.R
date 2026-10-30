@@ -169,6 +169,7 @@ TBL_AREA_OVERLAPS <- paste(CAT, RESTRICTED_SCH, "ea_area_overlaps",         sep 
 TBL_EXPOSURE_GRID <- paste(CAT, RESTRICTED_SCH, "exposure_grid_100m",       sep = ".")  # 34 (restricted: one row per 100 m cell with people, bands, critical sites and the risk score)
 TBL_ECON_ASSUMPTIONS <- paste(CAT, SCH, "economics_assumptions",   sep = ".")  # 38 (the probability per band and the damage per household, low, central and high; edited by hand)
 TBL_RFG_UPDATES   <- paste(CAT, SCH, "rfg_updates",                 sep = ".")  # 36 (Rapid Flood Guidance updates, and the "no guidance" states)
+TBL_RFG_CHECKS    <- paste(CAT, SCH, "rfg_checks",                  sep = ".")  # 36 (one row, overwritten every run: when the feed was last checked)
 TBL_RFG_POLYGONS  <- paste(CAT, SCH, "rfg_polygons",                sep = ".")  # 36 (the polygons of each update, GeoJSON)
 TBL_RFG_EXPOSURE  <- paste(CAT, RESTRICTED_SCH, "rfg_polygon_exposure",       sep = ".")  # 37 (restricted: people, households and bands under each polygon)
 TBL_RFG_CONSTITUENCIES <- paste(CAT, RESTRICTED_SCH, "rfg_polygon_constituencies", sep = ".")  # 37 (restricted: each polygon split by constituency)
@@ -258,7 +259,7 @@ CONTACT_MIN_PCT <- env_number("FGS_CONTACT_MIN_PCT", 0.01)
 # pipeline's WARNING_CONTACT_MIN_PCT in config.py (0.01 = 1%).
 # The newest change merged into this app (the pull request number and date), shown in the footer with how shared links are saved, so what is running on
 # Connect can be told from a glance. Update it with each merge to main.
-APP_BUILD <- "PR 104, 30 Oct 2026"
+APP_BUILD <- "PR 105, 30 Oct 2026"
 
 TARGET_AREA_MIN_PCT <- env_number("FGS_WARNING_CONTACT_MIN_PCT", 0.01)
 
