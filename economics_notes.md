@@ -86,6 +86,37 @@ What this does not settle: whether the band probabilities are right. The High ba
 - One release of the GDP deflator series that holds 2014 and the target year together. Recalculate the factor from it.
 - Whether the model should include the other cost categories, which would be a change of method, not of figure.
 
+## The assumptions table in detail
+
+The table is `economics_assumptions` (notebook 38). It holds three kinds of row, each in low, central and high versions.
+
+- **Probability of each band, a year.** Low uses the bottom of the band's range and high the top. The notebook seeds High 3.3%, 4% and 10%; Medium 1%, 1.8% and 3.3%; Low 0.1%, 0.32% and 1%; Very Low 0.01%, 0.032% and 0.1%. The central values of Medium, Low and Very Low are the geometric mean of the band's two edges. Check the values in the table, because notebook 38 never overwrites a value someone has set.
+- **Damage to one household in one flood event, in pounds.** Until the three rows are set, the app uses provisional planning values of 15,000, 30,000 and 60,000 pounds. They are round numbers chosen for the right order of magnitude. They are not from the Multi-Coloured Handbook or any Environment Agency table.
+- **Price uplift.** The default is 1. The damage figures are in one year's prices, and repair costs have risen faster than general inflation. The uplift multiplies the table's damage figures, and the table's price year for it says which year's prices result. One factor is a simplification, because repairs and contents rise at different rates.
+
+What is documented and what is judgement:
+
+- **Documented:** the band edges, which are the Environment Agency's definition of the NaFRA2 chance-of-flooding bands: High over 3.3% a year, Medium 1 to 3.3%, Low 0.1 to 1%, Very Low under 0.1%.
+- **Judgement:** the High band has no upper limit, so it is capped at 10% a year. The Very Low band has no lower limit, so it is floored at 0.01%. The High band's central value is 4%, because most High households sit nearer the 3.3% edge than the cap. The other central values are geometric means.
+
+To change a value, update its row in Databricks (the header of notebook 38 has an example statement) and set the source and the price year of a damage figure beside it. The app picks the change up within a couple of minutes, with no deployment and no job rerun. To try figures without changing anything, use Try your own damage figures on the Target Area page, the Target Areas table or the Gauge value view. They apply to your session only, and the uplift does not apply to them.
+
+## Gauge value in detail
+
+Every Observed flood warning threshold that notebook 28 linked to a gauge belongs to a flood warning area. A gauge here is a measure at a station (a level or a flow), as linked to those thresholds. A gauge's value is the value of the areas its thresholds drive.
+
+- **Gross** is the full value of every area the gauge drives. **Split** shares each area's value equally between the gauges that drive it, so split figures add up to the total across all gauges.
+- **A worked example.** Area A is worth 100 and is driven by gauges 1 and 2. Area B is worth 40 and is driven by gauge 1 alone. Gauge 1 has a gross of 140 and a split of 90, half of A plus all of B. Gauge 2 has a gross of 100 and a split of 50.
+- **Only gauge for** counts the areas that this gauge alone drives, which is where losing it would leave an area with no linked gauge.
+- Until the damage figures are set, gauges are ranked by the households expected to flood in a year in the areas they drive, which needs only the probabilities.
+
+Cautions:
+
+- A station with a level and a flow measure counts as two gauges if both are linked. Check that before concluding a station is a single point of failure.
+- Only areas whose thresholds notebook 28 linked to a gauge are attributed. An area with no linked gauge, or whose thresholds are not matched by FFFS id and unit, has no gauge behind it here.
+- Gauge value does not use the Environment Agency's own network valuation methods. Published work, such as the 1999 report on the benefits of hydrometric networks, scales a gauge's benefit by data accuracy, representativeness and record length, and none of that is used here.
+- Critical sites and non-residential property are not valued.
+
 ## Prompts for the files assistant
 
 First prompt, to find the damage figures:

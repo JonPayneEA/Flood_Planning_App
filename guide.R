@@ -465,26 +465,15 @@ guide_products <- function(s) {
     ),
 
     list(
-      id = "warning-areas", title = "Warning areas", where = "Warning areas",
+      id = "warning-areas", title = "Warning areas: how people are counted", where = "Warning areas",
       answers = "How many people and households live inside each flood warning area and flood alert area, and how many of them are in a High or Medium band for flooding from rivers and the sea?",
       tables = c("ea_area_exposure", "ea_area_overlaps", "ea_area_coverage", "constituency_flood_exposure", "ea_area_sites", "ea_area_geographies"),
       steps = c(
         "Notebook 33 places every address in England as a point and gives it its share of the Census 2021 output area's people and households. Notebook 35 then finds which warning and alert area boundaries contain each point.",
         "Each point carries the rivers and sea band (NaFRA2) and Flood Zone at its position, so an area's people can be split by band. At risk means High or Medium.",
         "Areas of one kind overlap. Gross counts everyone inside the area. Unique counts only people in no other area of that kind. Split shares each person equally between the areas they are in, so split figures add up to the true total.",
-        "Download a one-page brief on the Target Area page for a printable page of the figures, the band split, the critical sites in a High or Medium band, who responds and the constituencies. It is a PDF, ready to print or send, and is marked restricted.",
-
         "The risk score in the table is the people-weighted average of the 100 m cell scores inside the area, so an area where many people live in flooded, deprived or critical cells scores high and an area of mostly dry land scores low. The detail page also gives the highest single cell. It is blank until job 35 has been run with the grid built.",
-        "Linked gauges on the Target Area page lists every Observed flood warning threshold that notebook 28 linked to a gauge for the area, with the gauge's newest level, how far below or above each threshold it is, the trend and a status. Select a gauge name to open River levels and flows at that gauge's station with the thresholds drawn. A reading older than three hours is shown as no recent reading.",
-
-        "Warning issue history on the Target Area page lists every alert or warning issued for the area, from the warning episodes table (notebook 25): how many in the last 12 months and in all, how many reached a severe warning, the median time in force, a month by month chart and each episode with when it was issued, when it ended and its highest level. An episode open for over 30 days is marked, because it most likely never received its end message.",
-        "Select an area for its figures, the 100 m grid inside it, its people by band, the named critical sites in a High or Medium band, and the areas that share people with it.",
-        "On the Forecast map, tick Risk grid and zoom in to street level: each 100 m cell is coloured by its risk score, the rivers and sea band weighted by people, deprivation and critical sites. Only the cells in view with a score at or above the slider are read, the highest first, up to a cap.",
-        "Who responds lists the police forces, fire and rescue authorities, combined authorities, districts, counties, constituencies and regions the area lies in. Every address point carries each of these codes from the National Statistics UPRN Lookup, so the area's people are split among them. Each table adds up to the area's people. Fire and rescue authorities and combined authorities are not in that lookup, so they are reached another way: the fire authority from the boundary file, through the output area each address is in, and the combined authority from the district it is in. Combined authorities cover only part of England, so that table can add up to less than the area's people. Wards are in the export only.",
-        "The coverage panel counts every person once and shows how many of those in a High or Medium band sit in no warning area, and in no alert area. The constituency view gives the same split for each constituency.",
-        "This section and its table are called Target Areas. The Issued, last 12 months column counts the alerts and warnings issued for each area in the last year, from the warning episodes (notebook 25). The Under the current forecast panel adds up the people in the areas that sit under a risk polygon: one range for warning areas and one for alert areas. It counts everyone in each whole area, so the real number reached is lower, and it is a floor and a ceiling because areas of one kind overlap.",
-        "Who is vulnerable on the Target Area page counts three things from Census 2021 (tables 45, 37 and 38): households with no car or van, people in bad or very bad health, and people whose day-to-day activities are limited a lot. They are shared out to the addresses of each output area, then added up for the area, in total and inside a High or Medium band. They are estimates for an area, not counts of named people.",
-        "Surface water (context) on the Target Area page counts people by the Environment Agency's surface water band, from notebook 30 and the same address points. It is a different hazard from the rivers and sea bands, from a different dataset, and warning areas are not issued for it, so it is shown apart and is never added to the rivers and sea figures. The surface water map has no Very Low band, so that row is zero."
+        "The coverage panel counts every person once and shows how many of those in a High or Medium band sit in no warning area, and in no alert area. The constituency view gives the same split for each constituency."
       ),
       read = c(
         "Warning areas and alert areas are counted against their own kind. Do not add a warning area figure to an alert area figure.",
@@ -492,13 +481,35 @@ guide_products <- function(s) {
       ),
       limits = c(
         "Rivers and the sea only. Surface water is not counted in the bands: the Environment Agency does not warn for it. The Target Area page shows it apart, as context.",
-        "The table under the current forecast is approximate. It counts everyone inside each whole area that sits under a risk polygon, so the true number of people reached is lower.",
-        "Vulnerability counts (no car or van, bad health, activities limited a lot) come from Census 2021 and are shared out to addresses, so they are estimates for an area.",
         "Until AddressBase Premium is available the points come from the National Statistics UPRN Lookup, so counts are of addresses, not of buildings or businesses, and England only.",
         "The figures are restricted. Small counts are shown as they are held; treat them with care before sharing."
       )
     ),
 
+    list(
+      id = "target-area-panels", title = "Target Area page: what each panel shows", where = "Target Area",
+      answers = "What does each panel on the Target Area page and the Target Areas table show, and where does its figure come from?",
+      tables = c("ea_area_exposure", "ea_area_sites", "ea_area_geographies"),
+      steps = c(
+        "Download a one-page brief on the Target Area page for a printable page of the figures, the band split, the critical sites in a High or Medium band, who responds and the constituencies. It is a PDF, ready to print or send, and is marked restricted.",
+        "Select an area for its figures, the 100 m grid inside it, its people by band, the named critical sites in a High or Medium band, and the areas that share people with it.",
+        "Linked gauges on the Target Area page lists every Observed flood warning threshold that notebook 28 linked to a gauge for the area, with the gauge's newest level, how far below or above each threshold it is, the trend and a status. Select a gauge name to open River levels and flows at that gauge's station with the thresholds drawn. A reading older than three hours is shown as no recent reading.",
+        "Warning issue history on the Target Area page lists every alert or warning issued for the area, from the warning episodes table (notebook 25): how many in the last 12 months and in all, how many reached a severe warning, the median time in force, a month by month chart and each episode with when it was issued, when it ended and its highest level. An episode open for over 30 days is marked, because it most likely never received its end message.",
+        "On the Forecast map, tick Risk grid and zoom in to street level: each 100 m cell is coloured by its risk score, the rivers and sea band weighted by people, deprivation and critical sites. Only the cells in view with a score at or above the slider are read, the highest first, up to a cap.",
+        "Who responds lists the police forces, fire and rescue authorities, combined authorities, districts, counties, constituencies and regions the area lies in. Every address point carries each of these codes from the National Statistics UPRN Lookup, so the area's people are split among them. Each table adds up to the area's people. Fire and rescue authorities and combined authorities are not in that lookup, so they are reached another way: the fire authority from the boundary file, through the output area each address is in, and the combined authority from the district it is in. Combined authorities cover only part of England, so that table can add up to less than the area's people. Wards are in the export only.",
+        "This section and its table are called Target Areas. The Issued, last 12 months column counts the alerts and warnings issued for each area in the last year, from the warning episodes (notebook 25). The Under the current forecast panel adds up the people in the areas that sit under a risk polygon: one range for warning areas and one for alert areas. It counts everyone in each whole area, so the real number reached is lower, and it is a floor and a ceiling because areas of one kind overlap.",
+        "Who is vulnerable on the Target Area page counts three things from Census 2021 (tables 45, 37 and 38): households with no car or van, people in bad or very bad health, and people whose day-to-day activities are limited a lot. They are shared out to the addresses of each output area, then added up for the area, in total and inside a High or Medium band. They are estimates for an area, not counts of named people.",
+        "Surface water (context) on the Target Area page counts people by the Environment Agency's surface water band, from notebook 30 and the same address points. It is a different hazard from the rivers and sea bands, from a different dataset, and warning areas are not issued for it, so it is shown apart and is never added to the rivers and sea figures. The surface water map has no Very Low band, so that row is zero."
+      ),
+      read = c(
+        "Each panel says what it counts. A figure from one panel is not added to a figure from another, and surface water is never added to the rivers and sea bands.",
+        "The panels that count people use the same four views as the card on how people are counted: gross, unique, split and shared."
+      ),
+      limits = c(
+        "The table under the current forecast is approximate. It counts everyone inside each whole area that sits under a risk polygon, so the true number of people reached is lower.",
+        "Vulnerability counts (no car or van, bad health, activities limited a lot) come from Census 2021 and are shared out to addresses, so they are estimates for an area."
+      )
+    ),
     list(
       id = "rapid-flood-guidance", title = "Rapid Flood Guidance", where = "Rapid Flood Guidance",
       answers = "Is rapid flooding guidance in force, where are its polygons, and how many people, households and critical sites lie under them?",
@@ -526,56 +537,41 @@ guide_products <- function(s) {
       answers = "Which gauges stand behind the most expected flood damage, and how much of that would be lost if the gauge were not there to drive its warnings?",
       tables = c("economics_assumptions", "ea_area_exposure", "ea_fw_threshold_gauge_links"),
       steps = c(
-        "Every Observed flood warning threshold that notebook 28 linked to a gauge belongs to a flood warning area. A gauge here is a measure at a station (a level or a flow), as linked to those thresholds. The areas whose thresholds it drives are the areas it stands behind.",
-        "Each area has an indicative expected annual damage, with a low, central and high figure (see the economics card). A gauge's value is the value of the areas it drives.",
-        "Gross is the full value of every area the gauge drives. Split shares each area's value equally between the gauges that drive it, so that split figures add up to the total across all gauges. A worked example: area A is worth 100 and is driven by gauges 1 and 2; area B is worth 40 and is driven by gauge 1 alone. Gauge 1 has a gross of 140 and a split of 90 (half of A plus all of B). Gauge 2 has a gross of 100 and a split of 50.",
-        "The view ranks gauges by split value, largest first, with gross beside it. Only gauge for counts the areas that this gauge alone drives, which is where losing it would leave an area with no linked gauge. Select a gauge to see its areas, the value of each, how many gauges drive it and this gauge's share.",
-        "On Gauges near thresholds, the Value behind it column shows the same split value for each gauge, so a gauge close to its threshold shows what is at stake. The column heading says when the pounds rest on provisional figures or on figures typed into the app.",
-        "Until the damage figures are set, gauges are ranked by the households expected to flood in a year in the areas they drive, which needs only the probabilities."
+        "Every Observed flood warning threshold that notebook 28 linked to a gauge belongs to a flood warning area. The areas a gauge's thresholds drive are the areas it stands behind, and each area has an indicative expected annual damage (see the economics card).",
+        "Gross is the full value of every area the gauge drives. Split shares each area's value equally between the gauges that drive it, so split figures add up to the total. The view ranks gauges by split, largest first. Select a gauge to see its areas.",
+        "On Gauges near thresholds, the Value behind it column shows the same split value, so a gauge close to its threshold shows what is at stake."
       ),
       read = c(
-        "Every figure is indicative. It uses no flood depth, property type or property value, only the band a household sits in, and a low, central and high range.",
         "Rank by split. Gross counts an area once for each gauge that drives it, so gross figures should not be added across gauges.",
-        "Value behind a gauge says what depends on it. It does not show that the gauge prevents that damage, and it does not value the quality of the gauge's data.",
-        "A gauge with a large gross and a small split shares most of its areas with other gauges. A gauge with a large only gauge for figure is a single point of failure for those areas.",
-        "The EA area filter keeps the gauges with at least one linked area in that EA area. Each gauge keeps its whole value, across every area it drives, so a gauge shows the same value on every filter and can include areas in other EA areas."
+        "A gauge with a large gross and a small split shares most of its areas with other gauges. A large only gauge for figure marks a single point of failure for those areas.",
+        "The EA area filter keeps the gauges with at least one linked area in that EA area. Each gauge keeps its whole value, so it shows the same value on every filter and can include areas in other EA areas."
       ),
       limits = c(
-        "Only areas with thresholds that notebook 28 linked to a gauge are attributed. An area with no linked gauge, or whose thresholds are not matched by FFFS id and unit, has no gauge behind it here, so the total across gauges is less than the national total.",
-        "A station with a level and a flow measure counts as two gauges if both are linked, so check that before concluding a station is a single point of failure.",
-        "Gauge value does not use the Environment Agency's own network valuation methods. The published work, such as the 1999 report on the benefits of hydrometric networks, scales a gauge's benefit by data accuracy, representativeness and record length, and none of that is used here.",
-        "Critical sites and non-residential property are not valued, and the damage figures and the price uplift are explained on the economics card."
+        "Value behind a gauge says what depends on it. It does not show that the gauge prevents that damage, and it does not value the quality of its data.",
+        "Only areas with thresholds that notebook 28 linked to a gauge are attributed, so the total across gauges is less than the national total. The worked example and the other cautions are on the Economics research page under Help."
       )
     ),
-
     list(
       id = "economics-assumptions", title = "Economics: assumptions and how to change them", where = "Gauge value",
       answers = "Which numbers sit behind the expected annual damage, which of them are documented and which are judgements, and how does someone change them?",
       tables = c("economics_assumptions"),
       paragraphs = c(
-        "The expected annual damage is indicative. It is households in each rivers and sea band, times the band's annual probability, times the damage to one household in one flood event, added up over the four bands. Every number in that sum is in one small table, economics_assumptions (notebook 38), and the basis line under each figure shows the central values in use. Three versions are worked out together, low, central and high, and they vary together, so the range is wide on purpose."
+        "The expected annual damage is indicative. It is households in each rivers and sea band, times the band's annual probability, times the damage to one household in one flood event, times a price uplift, added up over the four bands. Low, central and high versions are worked out together, so the range is wide on purpose. The full working, with sources, is on the Economics research page under Help."
       ),
       steps = c(
-        "Probability of each band, a year. Low uses the bottom of the band's range and high the top. The notebook seeds: High 3.3%, 4% and 10%; Medium 1%, 1.8% and 3.3%; Low 0.1%, 0.32% and 1%; Very Low 0.01%, 0.032% and 0.1%. The central values of Medium, Low and Very Low are the geometric mean of the band's two edges. Check the basis line for what is actually in the table, because notebook 38 never overwrites a value someone has set.",
-        "Damage to one household in one flood event, in pounds, low, central and high. Until these are set in the table the app uses provisional planning values: 15,000, 30,000 and 60,000 pounds.",
-        "Price uplift, low, central and high, default 1. The damage figures are in one year's prices, and repair costs have risen faster than general inflation. The uplift multiplies the table's damage figures, and the table's price year for it says which year's prices result. One factor is a simplification, because repairs and contents rise at different rates.",
-        "To change a value, update its row in the table in Databricks (the header of notebook 38 has an example statement). Set the source and the price year of a damage figure beside it. The app picks the change up within a couple of minutes, with no deployment and no job rerun. When all three damage rows are set, the provisional warning disappears.",
-        "To try figures without changing anything, use Try your own damage figures on the Target Area page, the Target Areas table or the Gauge value view. They apply to your session only, nothing is saved, and every figure and download says they are your own."
+        "Every number in that sum is in one small table, economics_assumptions (notebook 38): the probability of each band, the damage per household, and the price uplift. The basis line under each figure shows the central values in use.",
+        "To change a value, update its row in the table in Databricks and set the source and price year beside it. The app picks the change up within a couple of minutes, with no deployment.",
+        "To try figures without changing anything, use Try your own damage figures on the Target Area page, the Target Areas table or the Gauge value view. They apply to your session only, and every figure and download says they are your own."
       ),
       read = c(
-        "Documented: the band edges. They are the Environment Agency's definition of the NaFRA2 chance-of-flooding bands: High over 3.3% a year, Medium 1 to 3.3%, Low 0.1 to 1%, Very Low under 0.1%.",
-        "Judgement, not documented: the High band has no upper limit, so it is capped at 10% a year; the Very Low band has no lower limit, so it is floored at 0.01%; the High band's central value is 4%, because most High households sit nearer the 3.3% edge than the cap; the other central values are geometric means.",
-        "Judgement, not documented: the provisional damage figures of 15,000, 30,000 and 60,000 pounds. They are round numbers chosen to give the right order of magnitude. They are not taken from the Multi-Coloured Handbook or any Environment Agency table, and they have not been agreed. Replace them with the Handbook figure and its price year.",
-        "Checking the scale: the model expects roughly 16,000 households a year to flood in the central case, in rivers and sea bands, by a rough calculation from the national household counts. That is above an ordinary year's number, so treat the central figure as an upper-middle estimate until it is checked against the Environment Agency's own annual average damages."
+        "The band edges are the Environment Agency's definition and are documented. The probabilities inside the bands, the damage figures and the uplift are judgements, with their sources stated on the Economics research page.",
+        "Until all three damage rows are set, the app uses provisional planning values and says so beside every figure."
       ),
       limits = c(
-        "No flood depth, property type or property value is used, only the band a household sits in. Depth-damage curves from the Multi-Coloured Handbook would be the proper method, and the national depth data covers only the areas modelled nationally.",
-        "Only residential households are counted. Critical sites and non-residential property are not valued.",
-        "The price uplift does not apply to the provisional figures or to figures typed into the app, which are taken as they stand.",
-        "The sources behind the damage figures and the uplift, and the working that led to them, are on the Economics research page under Help."
+        "No flood depth, property type or property value is used, only the band a household sits in. Only residential households are counted.",
+        "The price uplift does not apply to the provisional figures or to figures typed into the app, which are taken as they stand."
       )
     ),
-
     list(
       id = "hydrometrics", title = "Hydrometrics", where = "Hydrometrics",
       answers = "What have river levels, flows and rainfall been doing at the Environment Agency's gauges?",
