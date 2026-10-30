@@ -1,6 +1,6 @@
 ## Status of this page
 
-These are working notes on where the economics figures come from. Nobody on the project is an economist, so every value here is a planning value with its source stated, not an agreed figure. The values in use are in the table above. This page records why they are what they are, and what is still assumed. Last updated 30 October 2026.
+These are working notes on where the economics figures come from. Nobody on the project is an economist, so every value here is a planning value with its source stated, not an agreed figure. The values in use are in the table above. This page records why they are what they are, and what is still assumed. Last updated 30 October 2026, with the scale check.
 
 ## The method in one paragraph
 
@@ -44,6 +44,33 @@ The guidance for flood and coastal erosion risk management projects (LIT 66371, 
 The factor from 2014 to 2026 is 104.903 divided by 74.6524, which is 1.405. From 2013 it is 1.428. The two differ by 1.6 per cent. The choice of 2014 gives the smaller factor.
 
 Two cautions apply. The historical years and the target year come from different releases, and historical values can be revised. The 2026 value is a forecast. The 2029 value in Table A1 was not used, because a forecast three years out is not a current price.
+
+## Scale check against published figures
+
+Run on 30 October 2026 in a Databricks notebook, from the 100 m grid (each cell once, so overlapping areas cannot double-count) and the assumptions table as it then stood.
+
+| Band | Households in the model | Annual chance in the central case | Households flooded a year, central |
+|---|---|---|---|
+| High | 239,365 | 4% | about 9,575 |
+| Medium | 227,341 | 1.8% | about 4,092 |
+| Low | 663,024 | 0.32% | about 2,122 |
+| Very Low | 593,292 | 0.032% | about 190 |
+
+| Scenario | Households flooded a year | Damage per household in use | Expected annual damage |
+|---|---|---|---|
+| Low | 10,895 | £32,320 | £352 million |
+| Central | 15,989 | £42,150 | £674 million |
+| High | 38,662 | £73,060 | £2,825 million |
+
+What the check shows:
+
+- **Household counts are credible and a little low.** The Environment Agency's 2024 assessment gives 367,900 properties in the High band and about 2.4 million in rivers and sea overall. The model has 239,365 households in High (65%) and about 1.72 million in all four bands (72%). Properties include businesses, and the model counts the band at each address point, so a shortfall of this size is expected. It is not a sign of a missing band.
+- **The central expected annual damage is plausible.** £674 million a year is the same order as the £640 million Fathom gives for UK residential average annual losses with defences. That figure uses a different method and covers the whole UK, so it is an anchor for scale and nothing more. The Environment Agency's own residential figure for rivers and sea has not been found.
+- **The central case is an upper-middle estimate.** It expects about 16,000 households to flood in an average year. The winter 2013 to 2014 floods flooded about 10,000 properties and summer 2007 about 48,000, much of it from surface water. A year as bad as 2013 to 2014 sits below the central case.
+- **The high case is an envelope, not a forecast.** It puts the High band at 10% a year and the damage at £73,000 per household together, which gives 38,662 households a year. No recent year is near that for rivers and the sea. Quote the range as the extremes of the assumptions, and quote the central figure as the working estimate.
+- **The uplift and the damage were both in use.** The central damage in use, £42,150, is £30,000 times 1.405, so the uplift is being applied as intended.
+
+What this does not settle: whether the band probabilities are right. The High band's 4% central value and its 10% cap are judgements. They drive 60% of the central total, so they are the first thing to revisit if the Environment Agency's own expected annual damage is found.
 
 ## Decisions and what is assumed
 
