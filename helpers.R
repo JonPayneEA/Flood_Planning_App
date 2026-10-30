@@ -121,6 +121,10 @@ group_statement_choices <- function(older) {
 # problem and never raises a banner.
 # -----------------------------------------------------------------------------
 
+# Checks about side features. They show in the pipeline status panel but never raise the app-wide banner, so a feature that is not running (rapid flood
+# guidance, say) cannot put a warning on every page.
+OPTIONAL_HEALTH_CHECKS <- c("rfg_uncounted")
+
 stale_status <- function(health, now = Sys.time(), stale_hours = 3) {
   if (is.null(health) || nrow(health) == 0L) {
     return(list(level = "unknown",
@@ -141,6 +145,7 @@ stale_status <- function(health, now = Sys.time(), stale_hours = 3) {
     }
   }
 
+  checks  <- checks[!(checks$check_name %in% OPTIONAL_HEALTH_CHECKS), , drop = FALSE]
   failing <- checks$check_name[checks$status == "fail"]
   warning <- checks$check_name[checks$status == "warn"]
   if (length(failing) > 0L) {
