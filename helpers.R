@@ -469,6 +469,19 @@ ea_area_history_summary <- function(h, from = NULL, to = NULL, kind = "both") {
   out[order(-(alerts + warnings), -total_minutes, ea_area)]
 }
 
+# add_ea_area(): the Environment Agency area that manages each row's warning or alert area, as a column "EA area" placed after the area id column, for the
+#   exports and downloads. `owners` is fetch_area_owners() (area_id, ea_area). Unchanged when the owners are not available or the id column is missing.
+add_ea_area <- function(d, id_col, owners, label = "EA area") {
+  if (is.null(d) || nrow(d) == 0L || is.null(owners) || nrow(owners) == 0L || !(id_col %in% names(d))) return(d)
+  d <- data.table::copy(data.table::as.data.table(d))
+  o <- owners$ea_area[match(as.character(d[[id_col]]), owners$area_id)]
+  d[, (label) := ifelse(is.na(o) | !nzchar(trimws(o)), "", trimws(o))]
+  keep <- setdiff(names(d), label)
+  pos <- match(id_col, keep)
+  data.table::setcolorder(d, c(keep[seq_len(pos)], label, keep[-seq_len(pos)]))
+  d[]
+}
+
 # area_owner_text(): "Managed by the Environment Agency's Wessex area." for one area code, from fetch_area_owners(); "" when unknown.
 area_owner_text <- function(owners, area_id) {
   if (is.null(owners) || nrow(owners) == 0L) return("")

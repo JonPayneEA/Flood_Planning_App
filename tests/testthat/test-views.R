@@ -587,6 +587,23 @@ test_that("the EA Area history tab groups by EA area and drills into its Target 
   })
 })
 
+test_that("the EA area filter narrows Target Areas, and keeps each gauge's whole value on Gauge value", {
+  owners <- function() data.table(area_id = c("A1", "A2", "A3"), ea_area = c("Wessex", "Thames", "Thames"))
+  areas <- function() data.table(area_id = c("A1", "A2", "A3"), area_name = c("a", "b", "c"), kind = "flood_warning", county = "k",
+                                 area_source = "fluvial", people = 1, risk_score = c(3, 2, 1), people_rs_high_medium = 1, share_people_high_medium = .1,
+                                 households_rs_high_medium = 1, sites = 0L)
+  env <- make_server_env(list(fetch_area_owners = owners, fetch_area_exposure = areas))
+  testServer(env$server, {
+    do.call(session$setInputs, base_inputs)
+    session$setInputs(main_tabs = "Target Areas", areas_kind = "both", areas_source = "any", areas_sort = "risk_score", areas_county = "", areas_search = "", areas_ea = "")
+    expect_equal(areas_table_data()$area_id, c("A1", "A2", "A3"))
+    session$setInputs(areas_ea = "Thames")
+    expect_equal(areas_table_data()$area_id, c("A2", "A3"))
+    session$setInputs(areas_ea = "Nowhere")
+    expect_equal(nrow(areas_table_data()), 0L)
+  })
+})
+
 test_that("a missing episodes table is named on screen", {
   env <- make_server_env(list(fetch_warning_history = function() stop("[TABLE_OR_VIEW_NOT_FOUND] The table or view `cat`.`sch`.`ea_warning_episodes` cannot be found")))
   testServer(env$server, {
