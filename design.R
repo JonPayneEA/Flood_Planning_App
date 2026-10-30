@@ -116,7 +116,7 @@ design_css <- function() {
   --gov-text: {{text}}; --gov-secondary: {{secondary}}; --gov-border: {{border}}; --gov-grey: {{grey}};
   --gov-grey-hover: {{grey_hover}}; --gov-link: {{link}}; --gov-link-hover: {{link_hover}};
   --gov-focus: {{focus}}; --gov-error: {{error}}; --gov-success: {{success}};
-  --gov-container: 1280px; --gov-gutter: 30px;
+  --gov-container: 1760px; --gov-gutter: 30px;
   --sp-1: 5px; --sp-2: 10px; --sp-3: 15px; --sp-4: 20px; --sp-5: 25px; --sp-6: 30px; --sp-7: 40px; --sp-8: 50px; --sp-9: 60px;
 }
 
@@ -135,7 +135,7 @@ h3 { font-size: 19px; line-height: 1.3158; margin-bottom: var(--sp-3); }
 h4, h5, h6 { font-size: 16px; line-height: 1.25; margin-bottom: var(--sp-2); }
 @media (max-width: 40.0525em) { h1, .app-title { font-size: 27px; } h2 { font-size: 21px; } }
 p { margin-top: 0; margin-bottom: var(--sp-4); }
-.app-lead { font-size: 24px; line-height: 1.25; margin-bottom: var(--sp-6); }
+.app-lead { font-size: 24px; line-height: 1.25; margin-bottom: var(--sp-6); max-width: 60em; }
 @media (max-width: 40.0525em) { .app-lead { font-size: 19px; } }
 .text-muted, .app-caption, small, .small { color: var(--gov-secondary) !important; }
 .app-caption { font-size: 16px; }
@@ -553,6 +553,17 @@ areas_css <- function() {
 .kpi-row b { display: block; font-size: 34px; line-height: 1.1; }
 .kpi-row span { font-size: 15px; color: #505A5F; }
 .area-cols { display: grid; grid-template-columns: 1.15fr 1fr; gap: 34px; }
+/* The Target Area page: three columns on a wide screen (maps, then the figures, then the lists), two on a medium one, one on a narrow one. */
+.area-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1.05fr); gap: 0 34px; align-items: start; }
+.area-grid > div { min-width: 0; }
+.area-grid h2 { margin-top: 0; }
+.area-grid h2:not(:first-child) { margin-top: var(--sp-7); }
+.area-wide { margin-top: var(--sp-6); }
+@media (max-width: 1500px) { .area-grid { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); } .area-grid > .area-col-lists { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 0 34px; align-items: start; } }
+@media (max-width: 900px) { .area-grid { grid-template-columns: 1fr; } .area-grid > .area-col-lists { grid-template-columns: 1fr; } }
+@media (min-width: 1501px), (max-width: 900px) { .area-grid > .area-col-lists > div + div { margin-top: var(--sp-7); } }
+.area-grid .dataTables_wrapper { font-size: 14px; }
+.area-grid .kpi-row { grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .area-cols table, .popup-figs { border-collapse: collapse; width: 100%; font-size: 15px; }
 .area-cols th { text-align: left; border-bottom: 2px solid #0B0C0C; padding: 6px 8px 6px 0; }
 .area-cols td, .popup-figs td { border-bottom: 1px solid #B1B4B6; padding: 7px 8px 7px 0; }
