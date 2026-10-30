@@ -553,14 +553,14 @@ areas_css <- function() {
 .kpi-row b { display: block; font-size: 34px; line-height: 1.1; }
 .kpi-row span { font-size: 15px; color: #505A5F; }
 .area-cols { display: grid; grid-template-columns: 1.15fr 1fr; gap: 34px; }
-/* The Target Area page: two columns above 900 px (the maps and the place lists on the left, the figures and the history on the right, balanced in height),
-   one below. */
+/* The Target Area page: two columns above 900 px (the maps and the figures, then the lists in a row of two), one below. */
 .area-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 0 40px; align-items: start; }
 .area-grid > div { min-width: 0; }
 .area-grid h2 { margin-top: 0; }
 .area-grid h2:not(:first-child) { margin-top: var(--sp-7); }
 .area-wide { margin-top: var(--sp-7); }
-@media (max-width: 900px) { .area-grid { grid-template-columns: 1fr; } .area-grid > div + div { margin-top: var(--sp-7); } }
+.area-grid > .area-col-lists { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 0 40px; align-items: start; margin-top: var(--sp-7); }
+@media (max-width: 900px) { .area-grid { grid-template-columns: 1fr; } .area-grid > div + div { margin-top: var(--sp-7); } .area-grid > .area-col-lists { grid-template-columns: 1fr; } .area-grid > .area-col-lists > div + div { margin-top: var(--sp-7); } }
 .area-grid .dataTables_wrapper { font-size: 14px; }
 .area-grid .kpi-row { grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .area-cols table, .popup-figs { border-collapse: collapse; width: 100%; font-size: 15px; }
