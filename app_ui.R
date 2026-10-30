@@ -829,6 +829,33 @@ make_area_history_tab <- function() tags$div(
   tags$div(class = "mt-2", downloadButton("download_ah_detail", "Export this table", class = "btn-sm btn-outline-secondary"))
 )
 
+# EA Area history: the same counts as Warning history, grouped by the Environment Agency area that manages each Target Area.
+make_ea_area_history_tab <- function() tags$div(
+  class = "wh-page",
+  tags$h1(class = "app-title", "EA Area history"),
+  tags$p(class = "app-lead", "How many flood alerts and flood warnings have been issued in each Environment Agency area, and for how long. Select a row to see its Target Areas."),
+  uiOutput("eh_note"),
+  tags$div(
+    class = "filter-row",
+    sliderInput("eh_range", "Issued between",
+                min = Sys.Date() - 3650L, max = Sys.Date(), value = c(Sys.Date() - 3650L, Sys.Date()),
+                timeFormat = "%d %b %Y", width = "420px"),
+    selectInput("eh_kind", "Kind", choices = c("Flood warning and alert" = "both", "Flood warning" = "flood_warning", "Flood alert" = "flood_alert"), width = "220px"),
+    textInput("eh_search", "Search", placeholder = "EA area", width = "220px"),
+    downloadButton("download_eh", "Export CSV", class = "btn-sm btn-outline-secondary")
+  ),
+  uiOutput("eh_kpis"),
+  tags$h2("EA areas"),
+  DT::dataTableOutput("eh_table"),
+  tags$h2(class = "sit-briefing-h", "Target Areas in the selected EA area"),
+  uiOutput("eh_detail_title"),
+  DT::dataTableOutput("eh_areas"),
+  tags$div(class = "mt-2", downloadButton("download_eh_areas", "Export this table", class = "btn-sm btn-outline-secondary")),
+  tags$h2(class = "sit-briefing-h", "Warnings in force at the same time"),
+  uiOutput("eh_concurrent_note"),
+  if (requireNamespace("plotly", quietly = TRUE)) plotly::plotlyOutput("eh_concurrent", height = "auto")
+)
+
 make_warning_history_tab <- function() tags$div(
   class = "wh-page",
   tags$h1(class = "app-title", "Constituency history"),
@@ -1410,6 +1437,7 @@ ui <- function(request) {
     tabPanel("Constituency exposure",  make_const_exposure_tab()),
     tabPanel("Exposure history",       make_exposure_tab()),
     tabPanel("Warning history",        make_area_history_tab()),
+    tabPanel("EA Area history",        make_ea_area_history_tab()),
     tabPanel("Constituency history",   make_warning_history_tab()),
     tabPanel("Warnings vs FGS",        make_coverage_tab()),
     tabPanel("Hydrometrics",           make_hydrometrics_tab()),

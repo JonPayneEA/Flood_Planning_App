@@ -152,7 +152,8 @@ demo_ea_areas <- function() demo_memo("ea_areas", demo_with_seed(7711, {
       ea_area_code = sprintf("DEMO-%s-%03d", ifelse(type == "flood_warning", "FWA", "FAA"), seq_len(n)),
       ea_area_name = sprintf("River %s at %s", sample(rivers, n, replace = TRUE),
                              sub(" .*", "", g$table$constituency_name[idx])),
-      ea_area_type = type
+      ea_area_type = type,
+      ea_area = sample(c("Wessex", "Thames", "Yorkshire", "North East", "East Anglia", "Devon and Cornwall"), n, replace = TRUE)
     )
   )
 }))
@@ -1261,13 +1262,21 @@ fetch_area_history <- function() demo_memo("area_history", demo_with_seed(616, {
     day <- as.Date(Sys.Date() - sample.int(730L, n, replace = TRUE))
     dur <- round(rexp(n, 1 / ifelse(ea$ea_area_type[i] == "flood_alert", 2400, 900))) + 30
     open <- as.integer(day >= Sys.Date() - 1L & runif(n) < .5)
-    data.table(ea_area_code = ea$ea_area_code[i], ea_area_name = ea$ea_area_name[i], ea_area_type = ea$ea_area_type[i], issued_date = day,
+    data.table(ea_area_code = ea$ea_area_code[i], ea_area_name = ea$ea_area_name[i], ea_area = ea$ea_area[i], ea_area_type = ea$ea_area_type[i], issued_date = day,
                dur = dur, sev = as.integer(ea$ea_area_type[i] == "flood_warning" & runif(n) < .12), open = open)
   }))
   rows[, .(n_issued = .N, n_severe = sum(sev), minutes_timed = sum(ifelse(open == 1L, 0, dur)), n_timed = sum(open == 0L),
            longest_minutes = if (any(open == 0L)) max(dur[open == 0L]) else NA_real_, n_open = sum(open)),
-       by = .(ea_area_code, ea_area_name, ea_area_type, issued_date)]
+       by = .(ea_area_code, ea_area_name, ea_area, ea_area_type, issued_date)]
 }))
+
+fetch_area_owners <- function() { a <- demo_ea_areas()$table; data.table(area_id = a$ea_area_code, ea_area = a$ea_area) }
+
+fetch_ea_area_episodes <- function(ea_area) {
+  a <- demo_ea_areas()$table
+  ids <- a$ea_area_code[a$ea_area == ea_area]
+  rbindlist(lapply(ids, fetch_area_episodes), fill = TRUE)
+}
 
 fetch_constituency_shape <- function(constituency_id) {
   g <- demo_geometry(); i <- match(constituency_id, g$table$constituency_id)

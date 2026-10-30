@@ -1460,3 +1460,35 @@ test_that("the feed sentence separates a quiet feed from a dead poll", {
   expect_match(rfg_check_text(latest, NULL, now), "not recorded when the feed was last checked")
   expect_match(rfg_check_text(NULL, fresh, now), "^The feed was last checked")
 })
+
+
+test_that("ea_area_history_summary groups the history by the EA area and names the missing ones", {
+  h <- data.table(ea_area_code = c("A1", "A1", "A2", "A3", "A4"), ea_area_name = c("a", "a", "b", "c", "d"),
+                  ea_area = c("Wessex", "Wessex", "Wessex", "Thames", NA),
+                  ea_area_type = c("flood_alert", "flood_warning", "flood_warning", "flood_alert", "flood_alert"),
+                  issued_date = as.Date(c("2025-01-01", "2025-02-01", "2025-03-01", "2025-03-05", "2025-03-06")),
+                  n_issued = c(2L, 1L, 3L, 4L, 1L), n_severe = c(0L, 1L, 1L, 0L, 0L), minutes_timed = c(100, 50, 60, 40, 0),
+                  n_timed = c(2L, 1L, 3L, 4L, 0L), longest_minutes = c(70, 50, 30, 20, NA), n_open = c(0L, 0L, 0L, 0L, 1L))
+  s <- ea_area_history_summary(h)
+  expect_equal(s$ea_area, c("Wessex", "Thames", "Not recorded"))
+  expect_equal(s$areas[s$ea_area == "Wessex"], 2L)
+  expect_equal(s$alerts[s$ea_area == "Wessex"], 2L); expect_equal(s$warnings[s$ea_area == "Wessex"], 4L)
+  expect_equal(s$severe[s$ea_area == "Wessex"], 2L)
+  expect_equal(s$longest_minutes[s$ea_area == "Wessex"], 70)
+  expect_equal(s$open[s$ea_area == "Not recorded"], 1L)
+  m <- ea_area_history_summary(h, "2025-03-01", "2025-03-31")
+  expect_equal(m$ea_area, c("Thames", "Wessex", "Not recorded"))      # the period drops the January and February issues, and the busiest comes first
+  expect_equal(m$areas[m$ea_area == "Wessex"], 1L)
+  w <- ea_area_history_summary(h, kind = "flood_warning")
+  expect_equal(w$ea_area, "Wessex"); expect_equal(w$alerts, 0L)
+  expect_equal(nrow(ea_area_history_summary(NULL)), 0L)
+  expect_equal(nrow(ea_area_history_summary(h, "2030-01-01", "2030-02-01")), 0L)
+})
+
+test_that("area_owner_text names the EA area, or says nothing when it is not known", {
+  o <- data.table(area_id = c("A1", "A2"), ea_area = c("Wessex", NA))
+  expect_equal(area_owner_text(o, "A1"), "Managed by the Environment Agency's Wessex area.")
+  expect_equal(area_owner_text(o, "A2"), "")
+  expect_equal(area_owner_text(o, "ZZ"), "")
+  expect_equal(area_owner_text(NULL, "A1"), "")
+})
