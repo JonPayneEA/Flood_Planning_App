@@ -1201,7 +1201,8 @@ make_area_detail_tab <- function() tags$div(
   uiOutput("area_head"),
   uiOutput("area_rfg"),
   uiOutput("area_kpis"),
-  # Three columns on a wide screen: the maps, then the figures, then the lists. They stack on a narrow one (see .area-grid in design.R).
+  # Two columns above 900 px: the maps, the place lists and the gauges on the left, the figures and the history on the right, balanced in height. They stack on a
+  # narrow screen (see .area-grid in design.R).
   tags$div(
     class = "area-grid",
     tags$div(
@@ -1213,7 +1214,16 @@ make_area_detail_tab <- function() tags$div(
       uiOutput("area_grid_note"),
       tags$h2("The same area by flood band"),
       tags$p(class = "app-caption", "The map can show the NaFRA2 bands on their own, without the score."),
-      leaflet::leafletOutput("area_band_map", height = "420px")),
+      leaflet::leafletOutput("area_band_map", height = "420px"),
+      tags$h2("Critical sites"),
+      uiOutput("area_sites"),
+      DT::dataTableOutput("area_sites_table"),
+      uiOutput("area_sites_download"),
+      tags$h2("Constituencies"),
+      uiOutput("area_cons"),
+      tags$h2("Linked gauges"),
+      uiOutput("area_gauges_note"),
+      DT::dataTableOutput("area_gauges_table")),
     tags$div(
       class = "area-col-figures",
       tags$h2("By flood band"),
@@ -1225,25 +1235,12 @@ make_area_detail_tab <- function() tags$div(
       tags$h2("Who is vulnerable"),
       uiOutput("area_vuln"),
       tags$h2("Surface water (context)"),
-      uiOutput("area_sw")),
-    tags$div(
-      class = "area-col-lists",
-      tags$div(
-        tags$h2("Critical sites"),
-        uiOutput("area_sites"),
-        DT::dataTableOutput("area_sites_table"),
-        uiOutput("area_sites_download"),
-        tags$h2("Constituencies"),
-        uiOutput("area_cons")),
-      tags$div(
-        tags$h2("Linked gauges"),
-        uiOutput("area_gauges_note"),
-        DT::dataTableOutput("area_gauges_table"),
-        tags$h2("Warning issue history"),
-        uiOutput("area_issue_summary"),
-        if (requireNamespace("plotly", quietly = TRUE)) plotly::plotlyOutput("area_issue_chart", height = "auto"),
-        DT::dataTableOutput("area_issue_table"),
-        downloadButton("download_area_issues", "Download this area's issue history", class = "btn-sm btn-outline-secondary")))),
+      uiOutput("area_sw"),
+      tags$h2("Warning issue history"),
+      uiOutput("area_issue_summary"),
+      if (requireNamespace("plotly", quietly = TRUE)) plotly::plotlyOutput("area_issue_chart", height = "auto"),
+      DT::dataTableOutput("area_issue_table"),
+      downloadButton("download_area_issues", "Download this area's issue history", class = "btn-sm btn-outline-secondary"))),
   tags$div(
     class = "area-wide",
     tags$h2("Who responds"),
