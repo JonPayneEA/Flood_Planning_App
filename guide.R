@@ -549,7 +549,8 @@ guide_products <- function(s) {
       limits = c(
         "No flood depth, property type or property value is used, only the band a household sits in. Depth-damage curves from the Multi-Coloured Handbook would be the proper method, and the national depth data covers only the areas modelled nationally.",
         "Only residential households are counted. Critical sites and non-residential property are not valued.",
-        "The price uplift does not apply to the provisional figures or to figures typed into the app, which are taken as they stand."
+        "The price uplift does not apply to the provisional figures or to figures typed into the app, which are taken as they stand.",
+        "The sources behind the damage figures and the uplift, and the working that led to them, are on the Economics research page under Help."
       )
     ),
 
@@ -925,6 +926,45 @@ make_guide_tab <- function() {
   s <- guide_settings()
   tags$div(class = "guide p-3", guide_toc_ui(s), uiOutput("guide_body"))
 }
+
+# ---- Economics research ---------------------------------------------------------------------------------------------------------
+# A working page, kept apart from the Guide: where the damage figures and the price uplift come from, what is assumed, and the prompts used to
+# find them. The text is economics_notes.md, rendered once; the table above it is the assumptions table as the app reads it.
+
+economics_notes_path <- function() {
+  for (p in c("economics_notes.md", file.path("..", "..", "economics_notes.md"))) if (file.exists(p)) return(p)
+  NA_character_
+}
+
+economics_notes_html <- function() {
+  p <- economics_notes_path()
+  if (is.na(p)) return(tags$p(class = "text-muted", "The notes file economics_notes.md was not found."))
+  md <- paste(readLines(p, warn = FALSE, encoding = "UTF-8"), collapse = "\n")
+  HTML(commonmark::markdown_html(md, extensions = TRUE))
+}
+
+# economics_live_ui(): the assumptions table as the app reads it. `d` is the table (item, scenario, value, unit, source, price_year) or NULL.
+economics_live_ui <- function(d) {
+  if (is.null(d) || !nrow(d)) return(tags$p(class = "text-muted", "The assumptions table could not be read, so the app is using its provisional figures."))
+  d <- as.data.frame(d)
+  d <- d[d$item %in% c("damage_per_household", "price_uplift"), , drop = FALSE]
+  if (!nrow(d)) return(tags$p(class = "text-muted", "The table holds no damage or uplift rows yet."))
+  d <- d[order(d$item, match(d$scenario, c("low", "central", "high"))), , drop = FALSE]
+  show <- function(x) if (is.na(x) || !nzchar(as.character(x))) "not set" else as.character(x)
+  tags$table(class = "econ-notes-table",
+    tags$thead(tags$tr(lapply(c("Item", "Scenario", "Value", "Price year", "Source"), tags$th))),
+    tags$tbody(lapply(seq_len(nrow(d)), function(i) tags$tr(
+      tags$td(if (d$item[i] == "price_uplift") "Price uplift" else "Damage per household"), tags$td(d$scenario[i]),
+      tags$td(show(d$value[i])), tags$td(show(d$price_year[i])), tags$td(show(d$source[i]))))))
+}
+
+make_economics_tab <- function() tags$div(class = "econ-notes",
+  tags$h1(class = "app-title", "Economics research"),
+  tags$p(class = "app-lead", "Where the damage figures and the price uplift come from, what is assumed, and what would settle it. Working notes, not agreed figures."),
+  tags$h2("Values in use"),
+  tags$p(class = "app-caption", "Read from the assumptions table now. A row marked not set is using the app's provisional planning value."),
+  uiOutput("econ_notes_live"),
+  tags$div(class = "econ-notes-body", economics_notes_html()))
 
 # guide_settings(): the live settings the text depends on, from the globals.
 guide_settings <- function() {

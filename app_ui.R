@@ -539,6 +539,12 @@ table.dataTable thead th { color: var(--app-ink); border-bottom: 2px solid var(-
 .guide-card.guide-poc { border-left-color: var(--app-ice); }
 .guide-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .guide-head h3 { margin: 0; font-size: 18px; }
+.econ-notes { max-width: 980px; }
+.econ-notes-table, .econ-notes-body table { border-collapse: collapse; width: 100%; font-size: 14px; margin: 8px 0 16px 0; }
+.econ-notes-table th, .econ-notes-body th { text-align: left; border-bottom: 2px solid var(--app-ink); padding: 6px 8px 6px 0; }
+.econ-notes-table td, .econ-notes-body td { border-bottom: 1px solid var(--app-line); padding: 7px 8px 7px 0; vertical-align: top; }
+.econ-notes-body pre { white-space: pre-wrap; background: var(--app-surface); border: 1px solid var(--app-line); padding: 14px 16px; font-size: 13px; line-height: 1.5; max-height: 30em; overflow: auto; }
+.econ-notes-body h2 { margin-top: var(--sp-7); }
 .guide-card h4 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--app-muted); margin: 14px 0 4px 0; }
 .guide-card ol, .guide-card ul { padding-left: 20px; margin-bottom: 4px; }
 .guide-card li { margin-bottom: 4px; }
@@ -1412,6 +1418,7 @@ ui <- function(request) {
     tabPanel("Rain gauges",            make_rain_tab()),
     tabPanel("Exports",                make_exports_tab()),
     tabPanel("Guide",                  make_guide_tab()),
+    if (POC_FEATURES) tabPanel("Economics research", make_economics_tab()),   # POC-ONLY: working notes on the damage figures
     tabPanel("Planned",                make_planned_tab(DEMO_MODE)),
     if (DEMO_MODE) tabPanel("MP audit log", make_audit_tab()),
     if (DEMO_MODE) tabPanel("Style guide",  make_styleguide_tab())
@@ -1425,7 +1432,7 @@ ui <- function(request) {
     if (DEMO_MODE) tags$div(class = "demo-ribbon", "Demonstration: synthetic data. Nothing is connected, saved or sent."),
     tags$a(class = "skip-link", href = "#main-content", "Skip to main content"),
     app_masthead(),
-    app_navigation(DEMO_MODE),
+    app_navigation(DEMO_MODE, POC_FEATURES),
     if (DEMO_MODE) make_demo_controls(),
     # Shown only when the pipeline is failing, stale or unreadable.
     uiOutput("stale_banner"),

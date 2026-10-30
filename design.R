@@ -90,22 +90,23 @@ APP_SECTIONS <- list(
   list(id = "help", label = "Help",
        intro = "How the figures are made, and what is planned.",
        views = list(list(value = "Guide",   label = "Guide"),
+                    list(value = "Economics research", label = "Economics research", poc = TRUE),
                     list(value = "Planned", label = "Planned"),
                     list(value = "MP audit log",  label = "MP audit log",  demo = TRUE),
                     list(value = "Style guide",   label = "Style guide",   demo = TRUE)))
 )
 
-# The sections with the demonstration-only views dropped when not in demonstration mode.
-app_sections <- function(demo = FALSE) {
+# The sections with the demonstration-only views dropped when not in demonstration mode, and the proof-of-concept views dropped when those features are off.
+app_sections <- function(demo = FALSE, poc = TRUE) {
   lapply(APP_SECTIONS, function(s) {
-    s$views <- Filter(function(v) isTRUE(demo) || !isTRUE(v$demo), s$views)
+    s$views <- Filter(function(v) (isTRUE(demo) || !isTRUE(v$demo)) && (isTRUE(poc) || !isTRUE(v$poc)), s$views)
     s
   })
 }
 
 # Every tab value the shell knows, in order.
-app_view_values <- function(demo = FALSE) {
-  unlist(lapply(app_sections(demo), function(s) vapply(s$views, function(v) v$value, character(1))))
+app_view_values <- function(demo = FALSE, poc = TRUE) {
+  unlist(lapply(app_sections(demo, poc), function(s) vapply(s$views, function(v) v$value, character(1))))
 }
 
 # The CSS. Tokens are written {{name}} and filled from GOV_COLOURS and APP_PALETTE, so a colour is changed in one place.
@@ -436,8 +437,8 @@ app_masthead <- function() {
 }
 
 # Service navigation (sections) and the sub navigation (the views of the section you are in).
-app_navigation <- function(demo = FALSE) {
-  secs <- app_sections(demo)
+app_navigation <- function(demo = FALSE, poc = TRUE) {
+  secs <- app_sections(demo, poc)
   top <- tags$nav(
     class = "app-nav", `aria-label` = "Sections",
     tags$div(class = "app-container",
