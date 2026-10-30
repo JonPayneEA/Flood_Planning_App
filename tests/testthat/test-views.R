@@ -604,6 +604,33 @@ test_that("the EA area filter narrows Target Areas, and keeps each gauge's whole
   })
 })
 
+test_that("the EA area filter on Gauge value keeps a gauge's whole value across every EA area it drives", {
+  owners <- function() data.table(area_id = c("A1", "A2", "A3"), ea_area = c("Wessex", "Thames", "Thames"))
+  ex <- function() data.table(area_id = c("A1", "A2", "A3"), area_name = c("a", "b", "c"), kind = "flood_warning", county = "k", area_source = "fluvial",
+                              people = c(500, 300, 100), households_rs_high = c(100, 40, 10), households_rs_medium = 0, households_rs_low = 0, households_rs_very_low = 0)
+  links <- function() data.table(area_id = c("A1", "A2", "A2", "A3"), measure_uri = c("g1", "g1", "g2", "g3"), gauge = c("One", "One", "Two", "Three"), river = "R")
+  p <- list(high = c(0.033, 0.05, 0.10), medium = c(0.01, 0.0182, 0.033), low = c(0.001, 0.00316, 0.01), very_low = c(0.0001, 0.000316, 0.001))
+  assump <- function() rbind(
+    do.call(rbind, lapply(names(p), function(b) data.frame(item = paste0("prob_", b), scenario = c("low", "central", "high"), value = p[[b]], unit = "", source = NA, price_year = NA, note = ""))),
+    data.frame(item = "damage_per_household", scenario = c("low", "central", "high"), value = c(10000, 30000, 60000), unit = "", source = "test", price_year = "2024", note = ""))
+  env <- make_server_env(list(fetch_area_owners = owners, fetch_area_exposure = ex, fetch_gauge_area_links = links, fetch_econ_assumptions = assump))
+  testServer(env$server, {
+    do.call(session$setInputs, base_inputs)
+    session$setInputs(main_tabs = "Gauge value", gv_ea = "")
+    all_g <- gv_data()
+    expect_setequal(all_g$measure_uri, c("g1", "g2", "g3"))
+    session$setInputs(gv_ea = "Wessex")
+    expect_equal(gv_data()$measure_uri, "g1")                                       # only g1 has an area in Wessex
+    expect_equal(gv_data()$gross_central, all_g$gross_central[all_g$measure_uri == "g1"])   # and it keeps the value of its Thames area as well
+    expect_equal(gv_data()$areas, 2L)
+    session$setInputs(gv_ea = "Thames")
+    expect_setequal(gv_data()$measure_uri, c("g1", "g2", "g3"))
+    session$setInputs(gv_ea = "Nowhere")
+    expect_equal(nrow(gv_data()), 0L)
+    expect_equal(gv_value_of(c("g1", "g2")), round(all_g$split_central[match(c("g1", "g2"), all_g$measure_uri)]))   # the board is not narrowed by the filter
+  })
+})
+
 test_that("a missing episodes table is named on screen", {
   env <- make_server_env(list(fetch_warning_history = function() stop("[TABLE_OR_VIEW_NOT_FOUND] The table or view `cat`.`sch`.`ea_warning_episodes` cannot be found")))
   testServer(env$server, {
