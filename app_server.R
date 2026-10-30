@@ -1342,7 +1342,7 @@ server <- function(input, output, session) {
     exp_links_rv(safe_fetch(fetch_area_constituency_links))
   })
 
-  exp_links <- reactive(exp_links_table(exp_links_rv(), isTRUE(input$exp_all_overlaps)))
+  exp_links <- reactive(add_ea_area(exp_links_table(exp_links_rv(), isTRUE(input$exp_all_overlaps)), "Area code", tryCatch(area_owners_d(), error = function(e) NULL)))
   exp_cons  <- reactive(exp_constituency_table(tryCatch(situation_latest_clean(), error = function(e) NULL)))
   exp_mail  <- reactive({
     b <- briefing_rv()
@@ -2884,6 +2884,10 @@ server <- function(input, output, session) {
     x <- as.data.table(x)
     if (input$areas_kind != "both") x <- x[kind == input$areas_kind]
     if (nzchar(input$areas_county %||% "")) x <- x[county == input$areas_county]
+    if (nzchar(input$areas_ea %||% "")) {
+      ow <- tryCatch(area_owners_d(), error = function(e) NULL)
+      x <- if (is.null(ow)) x[0L] else x[area_id %in% ow$area_id[!is.na(ow$ea_area) & trimws(ow$ea_area) == input$areas_ea]]
+    }
     if (input$areas_source != "any") x <- x[grepl(input$areas_source, area_source, fixed = TRUE)]
     if (nzchar(trimws(input$areas_search %||% ""))) x <- x[grepl(trimws(input$areas_search), area_name, ignore.case = TRUE, fixed = TRUE)]
     x <- data.table::copy(x)
@@ -2956,6 +2960,13 @@ server <- function(input, output, session) {
 
   # The Environment Agency area that manages each warning and alert area (the feed's ea_area), for the area page and the Target Areas table.
   area_owners_d <- reactive(tryCatch(as.data.table(fetch_area_owners()), error = function(e) NULL))
+  ea_area_choices <- function(ids = NULL) {
+    ow <- tryCatch(area_owners_d(), error = function(e) NULL)
+    if (is.null(ow)) return(c("All" = ""))
+    v <- ow$ea_area[is.null(ids) | ow$area_id %in% ids]
+    c("All" = "", sort(unique(trimws(v[!is.na(v) & nzchar(trimws(v))]))))
+  }
+  observe(updateSelectInput(session, "areas_ea", choices = ea_area_choices(), selected = isolate(input$areas_ea)))
 
   output$areas_table <- DT::renderDataTable({
     x <- areas_table_data()
@@ -3306,9 +3317,23 @@ server <- function(input, output, session) {
   gv_links <- reactive({ req(gv_open()); tryCatch(as.data.table(fetch_gauge_area_links()), error = function(e) NULL) })
   gv_ex <- reactive({ req(gv_open()); tryCatch(as.data.table(fetch_area_exposure()), error = function(e) NULL) })
   gv_ea <- reactive({ ex <- gv_ex(); req(!is.null(ex)); econ_area(ex, econ_p()) })
-  gv_data <- reactive({
+  gv_data_all <- reactive({
     l <- gv_links(); ex <- gv_ex(); req(!is.null(l), !is.null(ex))
     econ_gauge_value(l, gv_ea(), ex)
+  })
+  # The gauges with at least one linked area in the chosen EA area. Each keeps its whole value, across every area it drives, so a gauge shows one value on every filter.
+  gv_data <- reactive({
+    g <- gv_data_all()
+    ea <- input$gv_ea %||% ""
+    if (!nzchar(ea)) return(g)
+    ow <- tryCatch(area_owners_d(), error = function(e) NULL); l <- gv_links()
+    if (is.null(ow) || is.null(l)) return(g[0L])
+    ids <- ow$area_id[!is.na(ow$ea_area) & trimws(ow$ea_area) == ea]
+    g[measure_uri %in% unique(l$measure_uri[l$area_id %in% ids])]
+  })
+  observe({
+    l <- gv_links(); req(!is.null(l))
+    updateSelectInput(session, "gv_ea", choices = ea_area_choices(unique(l$area_id)), selected = isolate(input$gv_ea))
   })
   gv_money <- reactive(isTRUE(econ_p()$has_prob) && isTRUE(econ_p()$has_damage))
 
@@ -3316,8 +3341,9 @@ server <- function(input, output, session) {
     if (!identical(input$main_tabs, "Gauge value")) return(NULL)
     if (is.null(gv_links())) return(tags$p(class = "text-muted", "The links from gauges to warning areas could not be loaded (pipeline notebook 28)."))
     if (!isTRUE(econ_p()$has_prob)) return(tags$p(class = "text-muted", "The assumptions are not available yet (pipeline notebook 38)."))
-    if (!gv_money()) return(tags$p(class = "text-muted", "No pound figure yet: the damage per household has not been set in the assumptions table (pipeline notebook 38). Gauges are ranked by the households expected to flood in a year in the areas they drive."))
-    NULL
+    ea_note <- if (nzchar(input$gv_ea %||% "")) tags$p(class = "app-caption", sprintf("Showing the gauges with at least one linked area in the %s area. Each gauge's value is its whole value, across every area it drives, so it can include areas in other EA areas.", input$gv_ea))
+    if (!gv_money()) return(tagList(tags$p(class = "text-muted", "No pound figure yet: the damage per household has not been set in the assumptions table (pipeline notebook 38). Gauges are ranked by the households expected to flood in a year in the areas they drive."), ea_note))
+    ea_note
   })
 
   output$gv_kpis <- renderUI({
@@ -3435,7 +3461,7 @@ server <- function(input, output, session) {
 
   # The split central value of each gauge (NA when the damage figures are not set or the gauge is not linked), for the board's column.
   gv_value_of <- function(uris) {
-    g <- tryCatch(gv_data(), error = function(e) NULL)
+    g <- tryCatch(gv_data_all(), error = function(e) NULL)
     if (is.null(g) || nrow(g) == 0L) return(rep(NA_real_, length(uris)))
     round(g$split_central[match(uris, g$measure_uri)])
   }
@@ -3497,9 +3523,10 @@ server <- function(input, output, session) {
       if (is.null(g) || nrow(g) == 0L) { data.table::fwrite(data.table(), file); return(invisible()) }
       g <- as.data.table(g)
       if (!is.null(ex)) g <- merge(g, ex[, .(kind, area_id, area_name = area_name)], by = c("kind", "area_id"), all.x = TRUE)
-      data.table::fwrite(g[, .(Kind = kind, `Area id` = area_id, Area = if ("area_name" %in% names(g)) area_name else NA_character_, Geography = geography, Code = code, Name = name,
+      data.table::fwrite(add_ea_area(g[, .(Kind = kind, `Area id` = area_id, Area = if ("area_name" %in% names(g)) area_name else NA_character_, Geography = geography, Code = code, Name = name,
                                People = round(people), Households = round(households), `Aged 65+` = round(over65),
-                               `People at risk (High or Medium)` = round(people_rs_high_medium), `Share of the area's people` = share_of_area_people)], file, bom = TRUE)
+                               `People at risk (High or Medium)` = round(people_rs_high_medium), `Share of the area's people` = share_of_area_people)], "Area id", tryCatch(area_owners_d(), error = function(e) NULL)),
+                       file, bom = TRUE)
     })
 
   # The 100 m cells inside the area's boundary.
@@ -3598,10 +3625,10 @@ server <- function(input, output, session) {
     x <- safe_fetch(fetch_area_exposure)
     if (is.null(x) || nrow(x) == 0L) return(data.table())
     x <- as.data.table(x)[order(kind, -people_rs_high_medium)]
-    x[, .(Kind = kind, `Area id` = area_id, Area = area_name, Source = area_source, County = county, People = round(people),
+    add_ea_area(x[, .(Kind = kind, `Area id` = area_id, Area = area_name, Source = area_source, County = county, People = round(people),
           Households = round(households), `People at risk (High or Medium)` = round(people_rs_high_medium),
           `People in Flood Zone 3` = round(people_fz3), `People also in another area` = round(people_shared),
-          `Critical sites` = sites)]
+          `Critical sites` = sites)], "Area id", tryCatch(area_owners_d(), error = function(e) NULL))
   })
   output$download_exp_areas <- downloadHandler(
     filename = function() sprintf("warning_area_exposure_%s.csv", format(Sys.Date(), "%Y%m%d")),
@@ -3734,10 +3761,10 @@ server <- function(input, output, session) {
     content = function(file) {
       x <- areas_table_data()
       if (nrow(x) == 0L) { data.table::fwrite(data.table(), file); return(invisible()) }
-      data.table::fwrite(x[, .(Kind = kind, `Area id` = area_id, Area = area_name, County = county, Source = area_source, People = round(people),
+      data.table::fwrite(add_ea_area(x[, .(Kind = kind, `Area id` = area_id, Area = area_name, County = county, Source = area_source, People = round(people),
                                `Aged 65+` = round(over65), `In most deprived 20%` = round(people_imd_1_2), Households = round(households),
                                `People High` = round(people_rs_high), `People Medium` = round(people_rs_medium), `People Low` = round(people_rs_low), `People Very Low` = round(people_rs_very_low),
-                               `Households at High or Medium` = round(households_rs_high_medium), `Critical sites` = sites)], file, bom = TRUE)
+                               `Households at High or Medium` = round(households_rs_high_medium), `Critical sites` = sites)], "Area id", tryCatch(area_owners_d(), error = function(e) NULL)), file, bom = TRUE)
     }
   )
 
@@ -3751,7 +3778,7 @@ server <- function(input, output, session) {
         cc <- FLOOD_BANDS$col[i]
         x[, .(Kind = kind, `Area id` = area_id, Area = area_name, Band = FLOOD_BANDS$band[i], People = round(get(paste0("people_", cc))), Households = round(get(paste0("households_", cc))))]
       }))
-      data.table::fwrite(out[order(Kind, `Area id`)], file, bom = TRUE)
+      data.table::fwrite(add_ea_area(out[order(Kind, `Area id`)], "Area id", tryCatch(area_owners_d(), error = function(e) NULL)), file, bom = TRUE)
     })
 
   output$cov_list_note <- renderUI({

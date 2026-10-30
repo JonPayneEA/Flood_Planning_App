@@ -408,7 +408,7 @@ guide_products <- function(s) {
       read = c(
         "A busy EA area is not necessarily a high-risk one. It may have more Target Areas, so compare it with the number of areas it manages.",
         "Areas for which the feed gives no EA area are grouped as Not recorded.",
-        "The Target Area page and the Target Areas table name the EA area that manages each area."
+        "The Target Area page and the Target Areas table name the EA area that manages each area. The Target Areas table can be filtered by it, and the area downloads under Exports carry it as a column."
       ),
       limits = c(
         "The EA area is taken from the feed as it stands. It is not the Appendix 2 area number, and some of the feed's names cover more than one of those numbers.",
@@ -537,7 +537,8 @@ guide_products <- function(s) {
         "Every figure is indicative. It uses no flood depth, property type or property value, only the band a household sits in, and a low, central and high range.",
         "Rank by split. Gross counts an area once for each gauge that drives it, so gross figures should not be added across gauges.",
         "Value behind a gauge says what depends on it. It does not show that the gauge prevents that damage, and it does not value the quality of the gauge's data.",
-        "A gauge with a large gross and a small split shares most of its areas with other gauges. A gauge with a large only gauge for figure is a single point of failure for those areas."
+        "A gauge with a large gross and a small split shares most of its areas with other gauges. A gauge with a large only gauge for figure is a single point of failure for those areas.",
+        "The EA area filter keeps the gauges with at least one linked area in that EA area. Each gauge keeps its whole value, across every area it drives, so a gauge shows the same value on every filter and can include areas in other EA areas."
       ),
       limits = c(
         "Only areas with thresholds that notebook 28 linked to a gauge are attributed. An area with no linked gauge, or whose thresholds are not matched by FFFS id and unit, has no gauge behind it here, so the total across gauges is less than the national total.",

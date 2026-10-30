@@ -1492,3 +1492,16 @@ test_that("area_owner_text names the EA area, or says nothing when it is not kno
   expect_equal(area_owner_text(o, "ZZ"), "")
   expect_equal(area_owner_text(NULL, "A1"), "")
 })
+
+
+test_that("add_ea_area puts the EA area after the id column, and leaves a table alone when it cannot", {
+  o <- data.table(area_id = c("A1", "A2"), ea_area = c("Wessex", NA))
+  d <- data.table(Kind = c("x", "y", "z"), `Area id` = c("A1", "A2", "ZZ"), People = 1:3)
+  r <- add_ea_area(d, "Area id", o)
+  expect_equal(names(r), c("Kind", "Area id", "EA area", "People"))
+  expect_equal(r[["EA area"]], c("Wessex", "", ""))
+  expect_equal(names(d), c("Kind", "Area id", "People"))                       # the input is not changed
+  expect_identical(add_ea_area(d, "Area id", NULL), d)
+  expect_identical(add_ea_area(d, "Nope", o), d)
+  expect_equal(nrow(add_ea_area(data.table(), "Area id", o)), 0L)
+})
