@@ -567,6 +567,26 @@ test_that("the Warning history tab follows the Nations filter and the period", {
   })
 })
 
+test_that("the EA Area history tab groups by EA area and drills into its Target Areas", {
+  ah <- function() data.table(ea_area_code = c("011FWFA", "011WAFB", "111FWFC"), ea_area_name = c("River A", "Coast B", "River C"),
+                              ea_area = c("Wessex", "Wessex", "Thames"), ea_area_type = c("flood_warning", "flood_alert", "flood_warning"),
+                              issued_date = as.Date(c("2025-06-01", "2025-06-02", "2025-06-03")), n_issued = c(2L, 4L, 1L), n_severe = c(1L, 0L, 0L),
+                              minutes_timed = c(120, 300, 60), n_timed = c(2L, 4L, 1L), longest_minutes = c(90, 100, 60), n_open = c(0L, 0L, 0L))
+  env <- make_server_env(list(fetch_area_history = ah))
+  testServer(env$server, {
+    do.call(session$setInputs, base_inputs)
+    session$setInputs(main_tabs = "EA Area history", eh_range = as.Date(c("2020-01-01", "2026-01-01")), eh_kind = "both", eh_search = "")
+    expect_equal(eh_summary()$ea_area, c("Wessex", "Thames"))
+    expect_equal(eh_summary()$areas, c(2L, 1L))
+    session$setInputs(eh_kind = "flood_warning")
+    expect_equal(eh_summary()$alerts, c(0L, 0L))
+    session$setInputs(eh_kind = "both", eh_search = "tham")
+    expect_equal(eh_summary()$ea_area, "Thames")
+    session$setInputs(eh_search = "", eh_table_rows_selected = 1L)
+    expect_equal(sort(eh_area_table()$ea_area_code), c("011FWFA", "011WAFB"))
+  })
+})
+
 test_that("a missing episodes table is named on screen", {
   env <- make_server_env(list(fetch_warning_history = function() stop("[TABLE_OR_VIEW_NOT_FOUND] The table or view `cat`.`sch`.`ea_warning_episodes` cannot be found")))
   testServer(env$server, {

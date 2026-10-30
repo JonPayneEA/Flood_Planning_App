@@ -441,6 +441,42 @@ area_history_summary <- function(h, from = NULL, to = NULL) {
   out[order(-issued, -total_minutes, ea_area_name)]
 }
 
+# ea_area_history_summary(): from fetch_area_history(), per Environment Agency area (the feed's ea_area) in the period: how many Target Areas were issued,
+#   how many alerts and warnings were issued, how many reached severe, the time in force, and when one was last issued. Areas the feed gives no EA area
+#   are grouped as "Not recorded". `kind` narrows to "flood_alert" or "flood_warning". Busiest first.
+EA_AREA_NOT_RECORDED <- "Not recorded"
+ea_area_history_summary <- function(h, from = NULL, to = NULL, kind = "both") {
+  empty <- data.table::data.table(ea_area = character(), areas = integer(), alerts = integer(), warnings = integer(), severe = integer(),
+                                  total_minutes = numeric(), mean_minutes = numeric(), longest_minutes = numeric(), open = integer(), last_issued = as.Date(character()))
+  if (is.null(h) || nrow(h) == 0L) return(empty)
+  x <- data.table::as.data.table(h)
+  if (!"ea_area" %in% names(x)) x[, ea_area := NA_character_]
+  d <- as.Date(x$issued_date)
+  keep <- rep(TRUE, nrow(x))
+  if (!is.null(from)) keep <- keep & d >= as.Date(from)
+  if (!is.null(to)) keep <- keep & d <= as.Date(to)
+  if (!identical(kind, "both")) keep <- keep & x$ea_area_type == kind
+  x <- x[keep]
+  if (nrow(x) == 0L) return(empty)
+  x[is.na(ea_area) | !nzchar(trimws(ea_area)), ea_area := EA_AREA_NOT_RECORDED]
+  out <- x[, list(areas = data.table::uniqueN(ea_area_code),
+                  alerts = sum(as.integer(n_issued)[ea_area_type == "flood_alert"]), warnings = sum(as.integer(n_issued)[ea_area_type == "flood_warning"]),
+                  severe = sum(as.integer(n_severe)), total_minutes = sum(as.numeric(minutes_timed), na.rm = TRUE), n_timed = sum(as.integer(n_timed)),
+                  longest_minutes = if (all(is.na(longest_minutes))) NA_real_ else max(as.numeric(longest_minutes), na.rm = TRUE),
+                  open = sum(as.integer(n_open)), last_issued = max(as.Date(issued_date))), by = ea_area]
+  out[, mean_minutes := ifelse(n_timed > 0L, total_minutes / n_timed, NA_real_)][, n_timed := NULL]
+  data.table::setcolorder(out, names(empty))
+  out[order(-(alerts + warnings), -total_minutes, ea_area)]
+}
+
+# area_owner_text(): "Managed by the Environment Agency's Wessex area." for one area code, from fetch_area_owners(); "" when unknown.
+area_owner_text <- function(owners, area_id) {
+  if (is.null(owners) || nrow(owners) == 0L) return("")
+  o <- owners$ea_area[match(area_id, owners$area_id)]
+  if (length(o) != 1L || is.na(o) || !nzchar(trimws(o))) return("")
+  sprintf("Managed by the Environment Agency's %s area.", trimws(o))
+}
+
 warning_constituency_counts <- function(h) {
   empty <- data.table(constituency_id = character(), alerts = integer(), warnings = integer(),
                       severe = integer(), total = integer())

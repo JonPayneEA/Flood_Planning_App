@@ -396,6 +396,27 @@ guide_products <- function(s) {
     ),
 
     list(
+      id = "ea_area_history", title = "EA Area history", where = "EA Area history",
+      answers = "How many flood alerts and flood warnings have been issued in each Environment Agency area, and which Target Areas were behind them?",
+      tables = c("ea_warning_episodes", "ea_flood_warning_areas", "ea_flood_alert_areas"),
+      steps = c(
+        "The Environment Agency's feed gives each warning and alert area the EA area that manages it, such as Wessex or Thames. Notebook 3 stores it beside the area code.",
+        "The counts are the ones on the Warning history tab, grouped by that EA area. An issue is one alert or warning from the time it was switched on to the time it ended. Alerts and warnings are counted separately, and Reached severe is part of the warnings.",
+        "Target Areas issued counts the areas in the EA area that had at least one issue in the period. The slider, the kind and the search work as they do on Warning history.",
+        "Select a row to list its Target Areas with their own counts, and to draw the alerts and warnings in force at the same time across the EA area. The graph counts areas, not people."
+      ),
+      read = c(
+        "A busy EA area is not necessarily a high-risk one. It may have more Target Areas, so compare it with the number of areas it manages.",
+        "Areas for which the feed gives no EA area are grouped as Not recorded.",
+        "The Target Area page and the Target Areas table name the EA area that manages each area."
+      ),
+      limits = c(
+        "The EA area is taken from the feed as it stands. It is not the Appendix 2 area number, and some of the feed's names cover more than one of those numbers.",
+        "The history only goes back as far as the pipeline holds it."
+      )
+    ),
+
+    list(
       id = "warning_history", title = "Constituency history", where = "Constituency history",
       answers = "How many flood alerts and flood warnings have been issued for each constituency, and for which areas?",
       tables = c("ea_warning_episodes", "ea_area_constituency_lookup", "ea_flood_warning_areas", "ea_flood_alert_areas"),
@@ -737,6 +758,7 @@ guide_glossary <- function() {
     c("Rank", "The risk level as a number: 1 Very Low, 2 Low, 3 Medium, 4 High. Zero means nothing is flagged."),
     c("Poll", "One run of the pipeline's polling job, every 30 or 60 minutes."),
     c("Annual probability", "The chance of a flood of a given kind in any one year. 1 per cent a year is a 1 in 100 chance."),
+    c("EA area", "The Environment Agency area that manages a Target Area, such as Wessex or Thames, as the warnings feed gives it."),
     c("Band (NaFRA2)", "The Environment Agency's four chance-of-flooding classes for rivers and sea: High, Medium, Low and Very Low."),
     c("Expected annual damage", "The damage a flood hazard is expected to cause in an average year: households in each band, times the band's annual probability, times the damage per household per flood event. Indicative, with a low, central and high range."),
     c("Provisional", "Planning values used until agreed figures are set. Every figure that uses them says so."),

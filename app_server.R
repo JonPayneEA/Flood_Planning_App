@@ -1442,7 +1442,7 @@ server <- function(input, output, session) {
     "area_row_click", "download_ea_areas", "download_situation",
     "copy_link_click", "goto_gauge", "area_open", "areas_open_selected", "download_exp_links", "download_exp_cons", "download_exp_mail", "download_exp_areas",
     "download_areas", "download_const_exp", "download_const_brief", "download_exp_bands", "download_exp_responders", "download_area_cells", "download_area_issues",
-    "download_area_brief", "download_area_sites", "download_tb", "download_ah", "download_ah_detail", "download_gv",
+    "download_area_brief", "download_area_sites", "download_tb", "download_ah", "download_ah_detail", "download_eh", "download_eh_areas", "download_gv",
     "econ_try_open_a", "econ_try_open_t", "econ_try_open_g", "econ_try_open_a_clear", "econ_try_open_t_clear", "econ_try_open_g_clear", "econ_try_apply",
     "econ_try_low", "econ_try_central", "econ_try_high",
     "situation_table_rows_selected", "situation_table_row_last_clicked",
@@ -2077,7 +2077,7 @@ server <- function(input, output, session) {
   # ---- Warning history by Target Area (job 25) ------------------------------------------------------------------------------------
   # Each warning or alert area: how many times it was issued, and for how long. Read when the tab is first opened; the period, kind and search are
   # applied in R, so they cost no further query.
-  ah_open <- reactive(identical(input$main_tabs, "Warning history"))
+  ah_open <- reactive(input$main_tabs %in% c("Warning history", "EA Area history"))
   ah_rv <- reactiveVal(NULL)
   ah_loaded <- reactiveVal(FALSE)
   observe({
@@ -2177,6 +2177,164 @@ server <- function(input, output, session) {
   output$download_ah_detail <- downloadHandler(
     filename = function() sprintf("area_%s_issues_%s.csv", gsub("[^A-Za-z0-9_.-]", "", ah_selected()$ea_area_code %||% "none"), format(Sys.Date(), "%Y%m%d")),
     content = function(file) data.table::fwrite(tryCatch(ah_episodes(), error = function(e) data.table()), file, bom = TRUE))
+
+  # ---------------------------------------------------------------------------
+  # EA Area history tab. The same data as Warning history (ah_rv), grouped by the Environment Agency area that manages each Target Area.
+  # ---------------------------------------------------------------------------
+
+  eh_open <- reactive(identical(input$main_tabs, "EA Area history"))
+  observeEvent(ah_rv(), {
+    h <- ah_rv(); if (is.null(h) || nrow(h) == 0L) return()
+    days <- as.Date(h$issued_date)
+    updateSliderInput(session, "eh_range", min = min(days), max = max(days), value = c(min(days), max(days)))
+  }, ignoreNULL = TRUE)
+
+  eh_summary <- reactive({
+    h <- ah_rv(); req(h)
+    r <- input$eh_range
+    x <- if (is.null(r)) ea_area_history_summary(h, kind = input$eh_kind %||% "both") else ea_area_history_summary(h, r[1L], r[2L], input$eh_kind %||% "both")
+    q <- tolower(trimws(input$eh_search %||% ""))
+    if (nzchar(q)) x <- x[grepl(q, tolower(ea_area), fixed = TRUE)]
+    x
+  })
+
+  output$eh_note <- renderUI({
+    if (!eh_open()) return(NULL)
+    if (has_gap("ea_warning_episodes")) return(tags$p(class = "text-muted", gap_text("ea_warning_episodes", "EA Area history")))
+    if (is.null(ah_rv())) return(tags$p(class = "text-muted", "The history could not be loaded."))
+    tags$small(class = "text-muted d-block mb-2",
+      "The EA area is the one the Environment Agency's feed gives for each Target Area. An issue is one alert or warning from the time it was switched on to the time it ended. ",
+      "Areas the feed gives no EA area are grouped as Not recorded. Time in force adds up the issues that have ended. EA areas with no issue in the period are not listed.")
+  })
+
+  output$eh_kpis <- renderUI({
+    x <- tryCatch(eh_summary(), error = function(e) NULL); req(!is.null(x))
+    n <- function(v) formatC(round(as.numeric(v)), format = "d", big.mark = ",")
+    tile <- function(big, small) tags$div(tags$b(big), tags$span(small))
+    tags$div(class = "kpi-row",
+             tile(n(nrow(x)), "EA areas issued in the period"),
+             tile(n(sum(x$alerts)), "flood alerts issued"),
+             tile(n(sum(x$warnings)), "flood warnings issued"),
+             tile(n(sum(x$severe)), "reached severe"))
+  })
+
+  output$eh_table <- DT::renderDataTable({
+    x <- eh_summary()
+    if (nrow(x) == 0L) return(DT::datatable(data.frame(Note = "No EA area was issued in this period."), rownames = FALSE, selection = "none", options = list(dom = "t")))
+    d <- data.table(`EA area` = x$ea_area, `Target Areas issued` = x$areas, Alerts = x$alerts, Warnings = x$warnings, `Reached severe` = x$severe,
+                    `Time in force (hours)` = round(x$total_minutes / 60, 1), `Average (hours)` = round(x$mean_minutes / 60, 1),
+                    `Longest (hours)` = round(x$longest_minutes / 60, 1), `Still open` = x$open, `Last issued` = format(x$last_issued, "%d %b %Y"))
+    DT::datatable(d, rownames = FALSE, selection = "single",
+                  options = list(pageLength = 15, scrollX = TRUE, dom = "tip", order = list(),
+                                 language = list(info = "Showing _START_ to _END_ of _TOTAL_ EA areas"))) |>
+      DT::formatRound(c("Time in force (hours)", "Average (hours)", "Longest (hours)"), digits = 1, mark = ",")
+  })
+
+  eh_selected <- reactive({
+    row <- input$eh_table_rows_selected
+    if (is.null(row)) return(NULL)
+    x <- eh_summary()
+    if (row > nrow(x)) NULL else x[row]
+  })
+
+  # The Target Areas of the selected EA area, with the counts Warning history gives them.
+  eh_area_table <- reactive({
+    sel <- eh_selected(); req(sel)
+    h <- data.table::as.data.table(ah_rv()); req(h)
+    if (!"ea_area" %in% names(h)) h[, ea_area := NA_character_]
+    h[is.na(ea_area) | !nzchar(trimws(ea_area)), ea_area := EA_AREA_NOT_RECORDED]
+    h <- h[ea_area == sel$ea_area]
+    r <- input$eh_range
+    x <- if (is.null(r)) area_history_summary(h) else area_history_summary(h, r[1L], r[2L])
+    k <- input$eh_kind %||% "both"
+    if (!identical(k, "both")) x <- x[kind == k]
+    x
+  })
+
+  output$eh_detail_title <- renderUI({
+    a <- eh_selected()
+    if (is.null(a)) return(tags$p(class = "text-muted", "Select an EA area in the table to see its Target Areas."))
+    tags$p(tags$strong(a$ea_area), sprintf(": %s alert%s and %s warning%s issued across %s Target Area%s in the period.",
+           a$alerts, if (a$alerts == 1L) "" else "s", a$warnings, if (a$warnings == 1L) "" else "s", a$areas, if (a$areas == 1L) "" else "s"))
+  })
+
+  output$eh_areas <- DT::renderDataTable({
+    req(eh_selected())
+    x <- eh_area_table()
+    if (nrow(x) == 0L) return(DT::datatable(data.frame(Note = "Nothing to list."), rownames = FALSE, selection = "none", options = list(dom = "t")))
+    d <- data.table(Area = vapply(seq_len(nrow(x)), function(i) area_open_link(x$ea_area_code[i], x$ea_area_name[i]), character(1)),
+                    Kind = ifelse(x$kind == "flood_warning", "Warning", "Alert"), Issued = x$issued, `Reached severe` = x$severe,
+                    `Time in force (hours)` = round(x$total_minutes / 60, 1), `Longest (hours)` = round(x$longest_minutes / 60, 1),
+                    `Still open` = x$open, `Last issued` = format(x$last_issued, "%d %b %Y"))
+    DT::datatable(d, rownames = FALSE, selection = "none", escape = FALSE,
+                  options = list(pageLength = 15, scrollX = TRUE, dom = "tip", order = list(), columnDefs = list(list(orderable = FALSE, targets = 0L)),
+                                 language = list(info = "Showing _START_ to _END_ of _TOTAL_ areas"))) |>
+      DT::formatRound(c("Time in force (hours)", "Longest (hours)"), digits = 1, mark = ",")
+  })
+
+  output$eh_concurrent_note <- renderUI({
+    if (is.null(eh_selected())) return(NULL)
+    tags$div(
+      tags$h6("Alerts and warnings in force at the same time"),
+      tags$small(class = "text-muted d-block mb-2",
+        "Each step up is an alert or warning switched on in a Target Area of this EA area; each step down is one ending. ",
+        "The line counts areas, so two warnings on different rivers at once read as two. Episodes open for over 30 days are left out, ",
+        "because they most likely never received an end message. The period slider sets the span shown."))
+  })
+
+  if (requireNamespace("plotly", quietly = TRUE)) {
+    output$eh_concurrent <- plotly::renderPlotly({
+      sel <- eh_selected(); req(sel)
+      ep <- tryCatch(as.data.table(fetch_ea_area_episodes(sel$ea_area)), error = function(e) NULL)
+      req(ep, nrow(ep) > 0L)
+      k <- input$eh_kind %||% "both"
+      if (!identical(k, "both")) ep <- ep[ea_area_type == k]
+      req(nrow(ep) > 0L)
+      now <- as.POSIXct(Sys.time(), tz = "UTC")
+      cc <- concurrent_counts(ep, now)
+      req(nrow(cc) > 0L)
+      r <- input$eh_range
+      from <- if (is.null(r)) min(cc$time) else as.POSIXct(paste(r[1L], "00:00:00"), tz = "UTC")
+      to   <- if (is.null(r)) now else min(now, as.POSIXct(paste(r[2L], "23:59:59"), tz = "UTC"))
+      before <- cc[time <= from]
+      start_row <- if (nrow(before)) before[.N, .(time = from, alerts, warnings)] else data.table(time = from, alerts = 0L, warnings = 0L)
+      inside <- cc[time > from & time <= to]
+      last <- if (nrow(inside)) inside[.N] else start_row
+      cc <- rbind(start_row, inside, data.table(time = to, alerts = last$alerts, warnings = last$warnings))
+      fig <- plotly::plot_ly(cc, x = ~time)
+      fig <- plotly::add_lines(fig, y = ~alerts, name = "Flood alerts", line = list(color = APP_ALERT_HEX, width = 1.5, shape = "hv"),
+                               hovertemplate = "%{y} in force<extra>Flood alerts</extra>")
+      fig <- plotly::add_lines(fig, y = ~warnings, name = "Flood warnings", line = list(color = APP_WARNING_HEX, width = 1.5, shape = "hv"),
+                               hovertemplate = "%{y} in force<extra>Flood warnings</extra>")
+      top <- max(cc$alerts, cc$warnings, 1L)
+      app_plot_style(fig, height = 380, hovermode = "x unified",
+                     xaxis = app_plot_axis(range = format(c(from, to), "%Y-%m-%d %H:%M:%S", tz = "UTC"), type = "date",
+                                           rangeslider = list(visible = TRUE, thickness = 0.07, bgcolor = APP_PALETTE$tint,
+                                                              bordercolor = APP_PALETTE$line, borderwidth = 1)),
+                     yaxis = app_plot_axis("Areas in force", grid = TRUE, rangemode = "tozero", tickformat = "d",
+                                           dtick = nice_dtick(top), range = c(0, top * 1.08)),
+                     title = list(text = sel$ea_area, x = 0.01, xanchor = "left", font = list(size = 13, color = APP_PALETTE$navy)),
+                     margin = list(t = 50, l = 60, r = 20))
+    })
+  }
+
+  output$download_eh <- downloadHandler(
+    filename = function() sprintf("warning_history_by_ea_area_%s.csv", format(Sys.Date(), "%Y%m%d")),
+    content = function(file) {
+      x <- tryCatch(eh_summary(), error = function(e) data.table())
+      data.table::fwrite(if (nrow(x) == 0L) data.table() else x[, .(`EA area` = ea_area, `Target Areas issued` = areas, Alerts = alerts, Warnings = warnings,
+                                                                 `Reached severe` = severe, `Time in force (hours)` = round(total_minutes / 60, 2),
+                                                                 `Average (hours)` = round(mean_minutes / 60, 2), `Longest (hours)` = round(longest_minutes / 60, 2),
+                                                                 `Still open` = open, `Last issued` = last_issued)], file, bom = TRUE)
+    })
+  output$download_eh_areas <- downloadHandler(
+    filename = function() sprintf("ea_area_%s_target_areas_%s.csv", gsub("[^A-Za-z0-9_.-]", "_", eh_selected()$ea_area %||% "none"), format(Sys.Date(), "%Y%m%d")),
+    content = function(file) {
+      x <- tryCatch(eh_area_table(), error = function(e) data.table())
+      data.table::fwrite(if (nrow(x) == 0L) data.table() else x[, .(Code = ea_area_code, Area = ea_area_name, Kind = kind, Issued = issued, `Reached severe` = severe,
+                                                                 `Time in force (hours)` = round(total_minutes / 60, 2), `Longest (hours)` = round(longest_minutes / 60, 2),
+                                                                 `Still open` = open, `Last issued` = last_issued)], file, bom = TRUE)
+    })
 
   # ---------------------------------------------------------------------------
   # Constituency history tab (job 25).
@@ -2785,6 +2943,7 @@ server <- function(input, output, session) {
     data.table(
       Area = vapply(seq_len(nrow(x)), function(i) area_open_link(x$area_id[i], x$area_name[i]), character(1)),
       Kind = ifelse(x$kind == "flood_warning", "Warning", "Alert"),
+      `EA area` = { ow <- tryCatch(area_owners_d(), error = function(e) NULL); o <- if (is.null(ow)) rep(NA_character_, nrow(x)) else ow$ea_area[match(x$area_id, ow$area_id)]; ifelse(is.na(o), "", o) },
       People = round(x$people), `Aged 65+` = round(x$over65),
       `In most deprived 20%` = sprintf("%.0f%%", 100 * x$share_people_imd_1_2),
       `People by flood band` = band_bar_html(x),
@@ -2795,12 +2954,15 @@ server <- function(input, output, session) {
       `Expected annual damage (central)` = ead_c, `Range, low to high` = ead_r)
   }
 
+  # The Environment Agency area that manages each warning and alert area (the feed's ea_area), for the area page and the Target Areas table.
+  area_owners_d <- reactive(tryCatch(as.data.table(fetch_area_owners()), error = function(e) NULL))
+
   output$areas_table <- DT::renderDataTable({
     x <- areas_table_data()
     if (nrow(x) == 0L) return(DT::datatable(data.frame(Note = "No areas to show."), rownames = FALSE, selection = "none", options = list(dom = "t")))
     DT::datatable(areas_display(x), rownames = FALSE, selection = "single", escape = FALSE,
                   options = list(pageLength = 15, scrollX = TRUE, dom = "tip", order = list(),
-                                 columnDefs = list(list(orderable = FALSE, targets = c(0L, 5L, 8L))),
+                                 columnDefs = list(list(orderable = FALSE, targets = c(0L, 6L, 9L))),
                                  language = list(info = "Showing _START_ to _END_ of _TOTAL_ areas"))) |>
       DT::formatRound(c("People", "Aged 65+", "Households at High or Medium"), digits = 0, mark = ",") |>
       DT::formatCurrency("Expected annual damage (central)", currency = "\u00a3", digits = 0)
@@ -2899,7 +3061,9 @@ server <- function(input, output, session) {
     cells <- tryCatch(area_cells(), error = function(e) NULL)
     tags$div(tags$h1(class = "app-title", a$area_name),
              tags$p(class = "app-lead", sprintf("%s %s.%s", a$type_text, a$area_id,
-                                                if (!is.null(cells) && nrow(cells)) sprintf(" Held in %s cells of 100 m.", area_n(nrow(cells))) else "")))
+                                                if (!is.null(cells) && nrow(cells)) sprintf(" Held in %s cells of 100 m.", area_n(nrow(cells))) else ""),
+                    {  ot <- area_owner_text(tryCatch(area_owners_d(), error = function(e) NULL), a$area_id)
+                       if (nzchar(ot)) paste0(" ", ot) else "" }))
   })
 
   output$area_rfg <- renderUI({

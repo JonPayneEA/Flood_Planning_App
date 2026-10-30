@@ -798,6 +798,7 @@ fetch_area_history <- function() {
     SELECT
       e.ea_area_code,
       MAX(n.ea_area_name)                                              AS ea_area_name,
+      MAX(n.ea_area)                                                   AS ea_area,
       LOWER(e.area_type)                                               AS ea_area_type,
       CAST(e.start_time AS DATE)                                       AS issued_date,
       COUNT(*)                                                         AS n_issued,
@@ -808,9 +809,9 @@ fetch_area_history <- function() {
       SUM(CASE WHEN e.end_time IS NULL THEN 1 ELSE 0 END)              AS n_open
     FROM %s e
     LEFT JOIN (
-      SELECT ea_area_code, ea_area_name FROM %s
+      SELECT ea_area_code, ea_area_name, ea_area FROM %s
       UNION ALL
-      SELECT ea_area_code, ea_area_name FROM %s
+      SELECT ea_area_code, ea_area_name, ea_area FROM %s
     ) n ON n.ea_area_code = e.ea_area_code
     WHERE LOWER(e.area_type) IN ('flood_alert', 'flood_warning')
     GROUP BY e.ea_area_code, LOWER(e.area_type), CAST(e.start_time AS DATE)
@@ -985,6 +986,38 @@ fetch_area_episodes <- function(area_id) {
     WHERE ea_area_code = '%s' AND LOWER(area_type) IN ('flood_alert', 'flood_warning')
     ORDER BY start_time DESC
   ", TBL_WARNING_EPISODES, id))
+}
+
+# fetch_area_owners(): the Environment Agency area that manages each warning and alert area, as the feed gives it (Wessex, Thames and so on),
+#   one row per area code. ea_area is NA where the feed gave none.
+fetch_area_owners <- function() {
+  db_query(sprintf("
+    SELECT ea_area_code AS area_id, MAX(ea_area) AS ea_area FROM (
+      SELECT ea_area_code, ea_area FROM %s
+      UNION ALL
+      SELECT ea_area_code, ea_area FROM %s
+    ) GROUP BY ea_area_code
+  ", TBL_EA_FWA, TBL_EA_FAA))
+}
+
+# fetch_ea_area_episodes(): every alert or warning issued for any area managed by one EA area, for the EA Area history chart. `ea_area` is the name as
+#   the feed gives it; NOT_RECORDED_EA_AREA stands for the areas with none. The name reaches the SQL as letters, digits, spaces and a few marks only,
+#   with a quote doubled.
+NOT_RECORDED_EA_AREA <- "Not recorded"
+fetch_ea_area_episodes <- function(ea_area) {
+  nm <- gsub("[^A-Za-z0-9 &,.()'/-]", "", as.character(ea_area))
+  cond <- if (identical(nm, NOT_RECORDED_EA_AREA)) "(n.ea_area IS NULL OR n.ea_area = '')" else sprintf("n.ea_area = '%s'", gsub("'", "''", nm, fixed = TRUE))
+  db_query(sprintf("
+    SELECT e.episode_id, e.ea_area_code, LOWER(e.area_type) AS ea_area_type, e.start_time, e.end_time, e.duration_minutes, e.peak_level, e.had_severe, e.stale_open
+    FROM %s e
+    JOIN (
+      SELECT ea_area_code, ea_area FROM %s
+      UNION ALL
+      SELECT ea_area_code, ea_area FROM %s
+    ) n ON n.ea_area_code = e.ea_area_code
+    WHERE %s AND LOWER(e.area_type) IN ('flood_alert', 'flood_warning')
+    ORDER BY e.start_time DESC
+  ", TBL_WARNING_EPISODES, TBL_EA_FWA, TBL_EA_FAA, cond))
 }
 
 fetch_warning_episodes <- function(constituency_id) {
@@ -1711,6 +1744,8 @@ fetch_rfg_areas                     <- with_cache(fetch_rfg_areas,              
 fetch_rfg_sites                     <- with_cache(fetch_rfg_sites,                     "rfg_sites", ttl = min(CACHE_TTL_SECONDS, 300))
 fetch_area_issue_counts             <- with_cache(fetch_area_issue_counts,             "area_issue_counts", ttl = min(CACHE_TTL_SECONDS, 300))
 fetch_area_episodes                <- with_cache(fetch_area_episodes,                "area_episodes", ttl = min(CACHE_TTL_SECONDS, 300))
+fetch_area_owners                  <- with_cache(fetch_area_owners,                  "area_owners", ttl = CACHE_TTL_SECONDS)
+fetch_ea_area_episodes             <- with_cache(fetch_ea_area_episodes,             "ea_area_episodes", ttl = min(CACHE_TTL_SECONDS, 300))
 fetch_area_gauges                  <- with_cache(fetch_area_gauges,                  "area_gauges", ttl = min(CACHE_TTL_SECONDS, 60))
 fetch_threshold_board              <- with_cache(fetch_threshold_board,              "threshold_board", ttl = min(CACHE_TTL_SECONDS, 60))
 fetch_area_overlaps                <- with_cache(fetch_area_overlaps,                "area_overlaps", ttl = max(CACHE_TTL_SECONDS, 0) * 6)
