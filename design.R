@@ -565,10 +565,11 @@ areas_css <- function() {
 @media (max-width: 900px) { .area-grid { grid-template-columns: 1fr; } .area-grid > div + div { margin-top: var(--sp-7); } }
 .area-wide .dataTables_wrapper, .area-grid .dataTables_wrapper { font-size: 14px; }
 .area-grid .kpi-row { grid-template-columns: repeat(3, 1fr); gap: 16px; }
-.area-cols table, .popup-figs { border-collapse: collapse; width: 100%; font-size: 15px; }
-.area-cols th { text-align: left; border-bottom: 2px solid #0B0C0C; padding: 6px 8px 6px 0; }
-.area-cols td, .popup-figs td { border-bottom: 1px solid #B1B4B6; padding: 7px 8px 7px 0; }
-.area-cols td.n, .area-cols th.n, .popup-figs td.n { text-align: right; }
+/* The plain tables on the Target Area page sit in .area-grid and .area-wide, and the Rapid Flood Guidance page in .area-cols. DataTables and the responder tables carry their own styles. */
+.area-cols table, .area-grid table:not(.dataTable):not(.responder-table), .area-wide table:not(.dataTable):not(.responder-table), .popup-figs { border-collapse: collapse; width: 100%; font-size: 15px; }
+.area-cols th, .area-grid table:not(.dataTable):not(.responder-table) th, .area-wide table:not(.dataTable):not(.responder-table) th { text-align: left; border-bottom: 2px solid #0B0C0C; padding: 6px 8px 6px 0; }
+.area-cols td, .area-grid table:not(.dataTable):not(.responder-table) td, .area-wide table:not(.dataTable):not(.responder-table) td, .popup-figs td { border-bottom: 1px solid #B1B4B6; padding: 7px 8px 7px 0; }
+.area-cols td.n, .area-cols th.n, .area-grid td.n, .area-grid th.n, .area-wide td.n, .area-wide th.n, .popup-figs td.n { text-align: right; }
 .popup-figs { min-width: 260px; margin-top: 6px; }
 .responder-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 10px 34px; }
 .responder-table { border-collapse: collapse; width: 100%; font-size: 15px; }
