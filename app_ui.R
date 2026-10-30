@@ -539,6 +539,7 @@ table.dataTable thead th { color: var(--app-ink); border-bottom: 2px solid var(-
 .guide-card.guide-poc { border-left-color: var(--app-ice); }
 .guide-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .guide-head h3 { margin: 0; font-size: 18px; }
+.guide-prompt { white-space: pre-wrap; background: var(--app-surface); border: 1px solid var(--app-line); padding: 14px 16px; font-size: 14px; line-height: 1.5; font-family: inherit; max-height: 28em; overflow: auto; margin: 6px 0 12px 0; }
 .guide-card h4 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--app-muted); margin: 14px 0 4px 0; }
 .guide-card ol, .guide-card ul { padding-left: 20px; margin-bottom: 4px; }
 .guide-card li { margin-bottom: 4px; }

@@ -235,3 +235,11 @@ test_that("the Guide explains the Nations filter, and the settings table names t
   expect_match(html(guide_env$guide_settings_ui(settings())), "Nations shown at the start.{0,40}England")
   expect_match(html(guide_env$guide_settings_ui(settings(default_nations = c("E14", "W07")))), "England, Wales")
 })
+
+
+test_that("the Guide carries the prompt for finding the damage figures", {
+  txt <- html(guide_env$guide_body_ui(settings(poc = TRUE)))
+  expect_match(txt, "Economics: finding the damage figures", fixed = TRUE)
+  expect_match(txt, "taken only from the files you can access", fixed = TRUE)
+  expect_match(txt, "Do not convert one into the other", fixed = TRUE)
+})

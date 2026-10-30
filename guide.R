@@ -554,6 +554,30 @@ guide_products <- function(s) {
     ),
 
     list(
+      id = "economics-sources", title = "Economics: finding the damage figures", where = "Gauge value",
+      answers = "Where do the damage per household and the price uplift come from, and what should be asked of the files that hold them?",
+      tables = c("economics_assumptions"),
+      paragraphs = c(
+        "The damage figures are the least certain numbers in the economics model, and nobody on the project is an economist. The prompt below is for an assistant with access to the organisation's own files. It asks only for figures that appear in those files, each with its source, its price year and what it includes, so a value can be set in the table with its source stated.",
+        "Copy the prompt as it stands and give the answer to whoever sets the values in notebook 38's table."
+      ),
+      prompt = "I need figures for a flood exposure model, taken only from the files you can access. Do not use general knowledge or estimate. If a figure is not in the files, say so.\n\nContext\nWe estimate expected annual damage to homes in Flood Warning Areas in England. For each NaFRA2 flood band the model multiplies households by the annual chance of flooding by the damage to one household in one flood event. We need that damage figure in three scenarios (low, central, high), plus a way to bring it to current prices.\n\nFind, with the file name and the page or table for every figure:\n\n1. Average damage per residential property per flood event, in pounds. Preferred sources: the Multi-Coloured Handbook (state which edition), Environment Agency or Defra appraisal guidance, FCERM appraisal supplementary notes, and EA event cost reports (summer 2007, winter 2013 to 2014, winter 2015 to 2016). Give the figure by flood depth or by standard of protection if it is split that way.\n2. Whether each figure is per event or an annual average damage. Say which. Do not convert one into the other.\n3. Whether each figure includes the property structure, contents, emergency costs, and any intangible or health costs. List what it includes.\n4. The price year of each figure (the year the pounds are in) and the discount or inflation basis.\n5. Any guidance on bringing older figures to current prices: the index named (for example the GDP deflator, a construction tender price index), the factor or table, and the years it covers.\n6. Any number for households flooded in a named event, with the matching residential damage total, so an average can be derived. Show the division.\n\nOutput\nA table with the columns: figure, value in pounds, per event or annual average, what it includes, price year, source file, page or table, quote.\nThen three short parts:\n- A recommended low, central and high damage per household per flood event, using only figures from the files, with the reasoning in two or three sentences.\n- A recommended price uplift factor and the year it brings the figures to, if the files support one. If they do not, say so.\n- A list of anything uncertain, conflicting between files, or missing.\n\nRules\n- Quote the source text exactly where a number comes from it.\n- Where files disagree, show both and do not choose silently.\n- UK English. Plain prose. No em dashes.",
+      steps = c(
+        "Ask the prompt of the files. Check that each figure is per event and not an annual average, because the model needs the damage in one flood event.",
+        "Set the three damage rows in the table, with the source and the price year beside each. Use only figures the files state.",
+        "Set the price uplift only if the files give an index and a factor for the years between the figures' price year and today. Otherwise leave it at 1."
+      ),
+      read = c(
+        "A figure with a price year and a source is usable. A figure without a price year should not be given one by inference.",
+        "Structure and contents damage is what the model means. Temporary accommodation, emergency costs and health values are separate categories and are not added unless the model is changed to include them."
+      ),
+      limits = c(
+        "An average derived from a whole-event total mixes homes with businesses, transport and other costs. Use only a residential total with the matching household count.",
+        "A claims-based value is a financial figure and an economic damage value is a different one. They are not interchangeable, so keep the source named."
+      )
+    ),
+
+    list(
       id = "hydrometrics", title = "Hydrometrics", where = "Hydrometrics",
       answers = "What have river levels, flows and rainfall been doing at the Environment Agency's gauges?",
       tables = c("ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_readings_bronze", "ea_rt_measures_mapped", "ea_fw_threshold_gauge_links"),
@@ -822,6 +846,7 @@ guide_card <- function(p, gaps = list()) {
     if (!is.null(p$answers)) tags$p(class = "guide-q", tags$strong("Answers: "), p$answers),
     if (!is.null(p$where)) tags$p(class = "guide-where", tags$span("Where: "), p$where),
     if (length(p$paragraphs)) lapply(p$paragraphs, tags$p),
+    if (!is.null(p$prompt)) tagList(tags$h4("The prompt"), tags$pre(class = "guide-prompt", p$prompt)),
     if (identical(p$show, "matrix")) guide_matrix_ui(),
     if (length(p$steps)) tagList(tags$h4("How it is calculated"), guide_list(as.list(p$steps), ordered = TRUE)),
     if (length(p$read)) tagList(tags$h4("How to read it"), guide_list(as.list(p$read))),
