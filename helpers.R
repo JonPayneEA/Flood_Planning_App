@@ -1129,7 +1129,7 @@ PIPELINE_TABLE_JOBS <- c(
   fgs_constituency_changes = 18L, constituency_flood_situation = 19L, mp_briefing_drafts = 20L,
   fgs_constituency_exposure = 21L, pipeline_health = 22L, flood_warnings_current = 11L, ea_fw_threshold_gauge_links = 28L, ea_warning_episodes = 25L, ea_warning_fgs_coverage = 26L, ea_rt_measure_register = 9L, ea_rt_readings_all = 23L, ea_rt_latest = 23L, ea_rt_readings_bronze = 10L, fgs_constituency_mp_contacts = 14L,
   flood_warning_constituency_contacts = 13L, fgs_constituency_intersections = 7L,
-  economics_assumptions = 38L, rfg_updates = 36L, rfg_polygons = 36L, rfg_polygon_exposure = 37L, rfg_polygon_constituencies = 37L, rfg_polygon_areas = 37L, rfg_polygon_sites = 37L,
+  economics_assumptions = 38L, rfg_checks = 36L, rfg_updates = 36L, rfg_polygons = 36L, rfg_polygon_exposure = 37L, rfg_polygon_constituencies = 37L, rfg_polygon_areas = 37L, rfg_polygon_sites = 37L,
   fgs_ea_area_intersections = 7L, ea_area_constituency_lookup = 6L, ea_area_exposure = 35L, ea_area_overlaps = 35L, ea_area_coverage = 35L, constituency_sites = 35L, ea_area_sites = 35L, ea_area_geographies = 35L, exposure_grid_100m = 34L, constituency_flood_exposure = 35L)
 
 missing_table_info <- function(msg) {
@@ -1705,6 +1705,20 @@ rfg_totals <- function(x) {
 only_valid_rfg <- function(x) {
   if (is.null(x) || nrow(x) == 0L || !("is_valid" %in% names(x))) return(x)
   x <- as.data.frame(x); x[x$is_valid %in% TRUE, , drop = FALSE]
+}
+
+# rfg_check_text(): one sentence about the feed. The updates table grows only when guidance changes, so its newest row can be weeks old on a quiet feed; the
+#   check row is the heartbeat of the polling job. `latest` is the newest update row (last_updated), `check` the one-row heartbeat (checked_at, result).
+rfg_check_text <- function(latest, check, now = Sys.time()) {
+  rec <- if (is.null(latest) || nrow(latest) == 0L) NULL else sprintf("The latest guidance state was recorded on %s.", format(as.POSIXct(latest$last_updated[1L], tz = "UTC"), "%d %b %Y %H:%M"))
+  chk <- NULL
+  if (!is.null(check) && nrow(check) > 0L && !is.na(check$checked_at[1L])) {
+    t <- as.POSIXct(check$checked_at[1L], tz = "UTC")
+    mins <- as.numeric(difftime(now, t, units = "mins"))
+    chk <- if (mins <= 90) sprintf("The feed was last checked at %s UTC, %s.", format(t, "%H:%M"), if (mins < 2) "just now" else sprintf("%d minutes ago", as.integer(round(mins))))
+           else sprintf("The feed was last checked at %s UTC on %s, which is over an hour and a half ago: the polling job may not be running.", format(t, "%H:%M"), format(t, "%d %b"))
+  } else chk <- "It is not recorded when the feed was last checked."
+  paste(c(rec, chk), collapse = " ")
 }
 
 # rfg_default_key(): the update the Rapid Flood Guidance view opens on: the one in force, else the newest that ever had guidance, else NA.

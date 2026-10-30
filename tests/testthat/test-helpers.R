@@ -1447,3 +1447,16 @@ test_that("a side feature's health check never raises the app-wide banner, but a
   expect_equal(w$level, "warn"); expect_match(w$message, "mp_details_age"); expect_no_match(w$message, "rfg_uncounted")   # a real warning still shows, without it
   expect_equal(stale_status(h(base, "mp_count", "fail"), now)$level, "fail")
 })
+
+test_that("the feed sentence separates a quiet feed from a dead poll", {
+  now <- as.POSIXct("2026-10-30 12:00:00", tz = "UTC")
+  latest <- data.frame(last_updated = as.POSIXct("2026-08-28 20:01:00", tz = "UTC"))
+  fresh <- data.frame(checked_at = as.POSIXct("2026-10-30 11:50:00", tz = "UTC"), result = "no_change")
+  txt <- rfg_check_text(latest, fresh, now)
+  expect_match(txt, "latest guidance state was recorded on 28 Aug 2026 20:01"); expect_match(txt, "last checked at 11:50 UTC, 10 minutes ago")
+  expect_no_match(txt, "may not be running")
+  stale <- data.frame(checked_at = as.POSIXct("2026-10-30 08:00:00", tz = "UTC"), result = "no_change")
+  expect_match(rfg_check_text(latest, stale, now), "over an hour and a half ago: the polling job may not be running")
+  expect_match(rfg_check_text(latest, NULL, now), "not recorded when the feed was last checked")
+  expect_match(rfg_check_text(NULL, fresh, now), "^The feed was last checked")
+})

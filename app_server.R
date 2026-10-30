@@ -2497,6 +2497,13 @@ server <- function(input, output, session) {
     if (!identical(new, isolate(rfg_updates_rv()))) rfg_updates_rv(new)
   })
   rfg_updates_all <- reactive(rfg_updates_rv())
+  # The heartbeat: when job 36 last checked the feed, even if nothing changed. Read with the updates, every two minutes, and quietly absent if not built yet.
+  rfg_check_rv <- reactiveVal(NULL)
+  observe({
+    invalidateLater(120000, session)
+    new <- tryCatch(as.data.table(fetch_rfg_check()), error = function(e) NULL)
+    if (!identical(new, isolate(rfg_check_rv()))) rfg_check_rv(new)
+  })
   rfg_open <- reactive(identical(input$main_tabs, "Rapid Flood Guidance"))
 
   # The update the view shows: the one picked in the history table, else the one in force, else the newest that had guidance.
@@ -2528,8 +2535,7 @@ server <- function(input, output, session) {
     cur <- rfg_current(u); v <- rfg_view_row()
     n <- function(x) formatC(round(as.numeric(x)), format = "d", big.mark = ",")
     head <- if (!is.null(cur)) tags$div(class = "alert alert-warning", tags$strong("Rapid flood guidance is in force."))
-            else tags$div(class = "alert alert-secondary", tags$strong("No rapid flood guidance at this time."),
-                          sprintf(" Last checked update: %s.", fmt_statement_time(u$last_updated[1L], "%d %b %Y %H:%M")))
+            else tags$div(class = "alert alert-secondary", tags$strong("No rapid flood guidance at this time."), " ", rfg_check_text(u, rfg_check_rv()))
     if (is.null(v) || nrow(v) == 0L) return(head)
     tot <- rfg_totals_d(); t <- if (is.null(tot)) NULL else tot[update_key == v$update_key]
     tile <- function(big, small) tags$div(tags$b(big), tags$span(small))
@@ -2544,7 +2550,8 @@ server <- function(input, output, session) {
                         tile(sprintf("%s of %s", n(v$n_valid), n(v$n_polygons)), "polygons still valid"),
                         tile(if (is.null(t) || nrow(t) == 0L) "n/a" else n(t$people), "people under its polygons"),
                         tile(if (is.null(t) || nrow(t) == 0L) "n/a" else n(t$households), "households"),
-                        tile(if (is.null(t) || nrow(t) == 0L) "n/a" else n(t$people_rs_high_medium), "of them in a High or Medium rivers and sea band"))),
+                        tile(if (is.null(t) || nrow(t) == 0L) "n/a" else n(t$people_rs_high_medium), "of them in a High or Medium rivers and sea band")),
+               tags$p(class = "app-caption", "A guidance polygon is a broad area where heavy showers may cause rapid flooding somewhere inside it. The people and households are everyone who lives in the area, not those expected to be flooded. The High or Medium band figure is the better guide to where flooding is most likely.")),
              if (!is.null(shown)) tags$p(class = "app-caption", shown))
   })
 

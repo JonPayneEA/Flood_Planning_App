@@ -48,12 +48,12 @@ GUIDE_TABLES <- data.frame(
             "ea_area_constituency_lookup", "mp_contact_details",
             "fgs_constituency_changes", "fgs_changes_log", "constituency_flood_situation", "mp_briefing_drafts",
             "fgs_constituency_exposure", "pipeline_health", "ea_warning_episodes",
-            "ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_readings_bronze", "ea_warning_fgs_coverage", "ea_rt_measures_mapped", "ea_rt_latest", "flood_warnings_current", "ea_fw_threshold_gauge_links", "ea_area_exposure", "ea_area_overlaps", "ea_area_coverage", "constituency_flood_exposure", "exposure_grid_100m", "ea_area_sites", "ea_area_geographies", "constituency_sites", "rfg_updates", "rfg_polygons", "rfg_polygon_exposure", "rfg_polygon_constituencies", "rfg_polygon_areas", "rfg_polygon_sites", "economics_assumptions"),
-  notebook = c("01", "01", "07", "07", "03", "03", "05", "06", "04", "18", "18", "19", "20", "21", "22", "25", "09", "23", "10", "26", "16", "23", "11", "28", "35", "35", "35", "35", "34", "35", "35", "35", "36", "36", "37", "37", "37", "37", "38"),
+            "ea_rt_measure_register", "ea_rt_readings_all", "ea_rt_readings_bronze", "ea_warning_fgs_coverage", "ea_rt_measures_mapped", "ea_rt_latest", "flood_warnings_current", "ea_fw_threshold_gauge_links", "ea_area_exposure", "ea_area_overlaps", "ea_area_coverage", "constituency_flood_exposure", "exposure_grid_100m", "ea_area_sites", "ea_area_geographies", "constituency_sites", "rfg_updates", "rfg_polygons", "rfg_polygon_exposure", "rfg_polygon_constituencies", "rfg_polygon_areas", "rfg_polygon_sites", "economics_assumptions", "rfg_checks"),
+  notebook = c("01", "01", "07", "07", "03", "03", "05", "06", "04", "18", "18", "19", "20", "21", "22", "25", "09", "23", "10", "26", "16", "23", "11", "28", "35", "35", "35", "35", "34", "35", "35", "35", "36", "36", "37", "37", "37", "37", "38", "36"),
   refresh = c("Each FGS issue or amendment", "Each FGS issue or amendment", "Each FGS issue", "Each FGS issue",
               "Weekly", "Weekly", "Quarterly, or after an election", "Weekly and quarterly", "Weekly",
               "Every poll", "Every poll", "Every poll", "Every poll", "Daily", "Every poll", "Every poll",
-              "Weekly", "Every 15 minutes", "Daily", "Daily", "When the mapping file changes", "Every 15 minutes", "Every poll", "Manual, when the mapping or thresholds change", "Manual, when the hazard maps or address points change", "Manual, with the table above", "Manual, with the table above", "Manual, with the table above", "Manual, after notebooks 30 to 33", "Manual, with the table above", "Manual, with the table above", "Manual, with the table above", "Every poll, all day", "Every poll, all day", "When an update is stored", "When an update is stored", "When an update is stored", "When an update is stored", "By hand; job 38 only adds missing rows"),
+              "Weekly", "Every 15 minutes", "Daily", "Daily", "When the mapping file changes", "Every 15 minutes", "Every poll", "Manual, when the mapping or thresholds change", "Manual, when the hazard maps or address points change", "Manual, with the table above", "Manual, with the table above", "Manual, with the table above", "Manual, after notebooks 30 to 33", "Manual, with the table above", "Manual, with the table above", "Manual, with the table above", "Every poll, all day", "Every poll, all day", "When an update is stored", "When an update is stored", "When an update is stored", "When an update is stored", "By hand; job 38 only adds missing rows", "Every poll, all day"),
   holds = c("One row per statement: the headline and the forecast text.",
             "One row per risk polygon, flood source and day, with impact, likelihood and risk level.",
             "Each FGS shape that overlaps an EA flood warning or alert area.",
@@ -92,7 +92,8 @@ GUIDE_TABLES <- data.frame(
             "Each polygon split by constituency, with the people in each. Restricted schema.",
             "The people of each polygon inside each warning or alert area. A person in two areas of one kind is in both. Restricted schema.",
             "The critical sites inside each polygon, with their rivers and sea band. Restricted schema.",
-            "The probability of each flood band and the damage per household per flood event, each low, central and high, behind the indicative expected annual damage. The damage figures are set by hand."),
+            "The probability of each flood band and the damage per household per flood event, each low, central and high, behind the indicative expected annual damage. The damage figures are set by hand.",
+            "One row, overwritten every run: when the polling job last checked the rapid flood guidance feed and how the run ended. It shows a quiet feed from a stopped poll."),
   stringsAsFactors = FALSE
 )
 
@@ -480,13 +481,15 @@ guide_products <- function(s) {
     list(
       id = "rapid-flood-guidance", title = "Rapid Flood Guidance", where = "Rapid Flood Guidance",
       answers = "Is rapid flooding guidance in force, where are its polygons, and how many people, households and critical sites lie under them?",
-      tables = c("rfg_updates", "rfg_polygons", "rfg_polygon_exposure", "rfg_polygon_constituencies", "rfg_polygon_areas", "rfg_polygon_sites"),
+      tables = c("rfg_updates", "rfg_polygons", "rfg_checks", "rfg_polygon_exposure", "rfg_polygon_constituencies", "rfg_polygon_areas", "rfg_polygon_sites"),
       steps = c(
         "Notebook 36 asks the Flood Forecasting Centre for the latest rapid flood guidance on every poll, all day, and stores each new or modified update. When no guidance is current it stores that too, so the history shows when guidance started and stopped.",
         "Notebook 37 then counts the address points inside each valid polygon: people, households, over 65s, the rivers and sea band, and the Census vulnerability counts. It also finds the constituencies, warning areas, alert areas and critical sites each polygon reaches.",
         "The Overview shows a banner while guidance is in force, the forecast map can show its polygons, and an area or constituency under it carries a note."
       ),
       read = c(
+        "A guidance polygon is a broad area where heavy showers may cause rapid flooding somewhere inside it. The people and households counted are everyone who lives in the area, not those expected to be flooded, and a single polygon can hold millions of people. The High or Medium band figure is the better guide to where flooding is most likely.",
+        "The updates table grows only when guidance changes, so on a quiet feed its newest row can be weeks old. The page also says when the polling job last checked the feed, from a one-row record the job overwrites every run (about every 15 minutes). If that time is over an hour and a half old, the polling job may not be running.",
         "A polygon is valid while it is still in force. The polygons of past updates have expired or been withdrawn, so they are marked no longer valid. They are counted and shown for the record, in grey on the map, so the history has people under it. The Overview banner, the forecast map layer and the notes on Target Area and constituency pages use only polygons that are still valid, and guidance whose polygons have all expired is not treated as in force.",
         "A person inside two areas of one kind is in both area rows, so the area rows should not be added together. The polygon rows are the distinct counts."
       ),
