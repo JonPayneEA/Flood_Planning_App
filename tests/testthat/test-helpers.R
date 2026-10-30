@@ -374,6 +374,7 @@ test_that("polygons_only keeps the polygon parts of a collection and drops the r
   expect_equal(out$code, c("a", "b"))
   expect_true(all(as.character(sf::st_geometry_type(out)) %in% c("POLYGON", "MULTIPOLYGON")))
   # leaflet can now draw it, which is what the collection stopped
+  skip_if_not_installed("leaflet")
   expect_no_error(leaflet::addPolygons(leaflet::leaflet(), data = out))
 })
 
