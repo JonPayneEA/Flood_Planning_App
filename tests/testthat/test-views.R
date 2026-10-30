@@ -595,7 +595,7 @@ test_that("the EA area filter narrows Target Areas, and keeps each gauge's whole
   env <- make_server_env(list(fetch_area_owners = owners, fetch_area_exposure = areas))
   testServer(env$server, {
     do.call(session$setInputs, base_inputs)
-    session$setInputs(main_tabs = "Target Areas", areas_kind = "both", areas_source = "any", areas_sort = "risk_score", areas_county = "", areas_search = "", areas_ea = "")
+    session$setInputs(main_tabs = "Target Area", areas_kind = "both", areas_source = "any", areas_sort = "risk_score", areas_county = "", areas_search = "", areas_ea = "")
     expect_equal(areas_table_data()$area_id, c("A1", "A2", "A3"))
     session$setInputs(areas_ea = "Thames")
     expect_equal(areas_table_data()$area_id, c("A2", "A3"))
