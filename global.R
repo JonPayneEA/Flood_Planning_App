@@ -259,7 +259,7 @@ CONTACT_MIN_PCT <- env_number("FGS_CONTACT_MIN_PCT", 0.01)
 # pipeline's WARNING_CONTACT_MIN_PCT in config.py (0.01 = 1%).
 # The newest change merged into this app (the pull request number and date), shown in the footer with how shared links are saved, so what is running on
 # Connect can be told from a glance. Update it with each merge to main.
-APP_BUILD <- "PR 107, 30 Oct 2026"
+APP_BUILD <- "PR 108, 30 Oct 2026"
 
 TARGET_AREA_MIN_PCT <- env_number("FGS_WARNING_CONTACT_MIN_PCT", 0.01)
 
