@@ -1436,3 +1436,14 @@ test_that("a price uplift multiplies the saved damage figures and the basis says
   expect_equal(pr$damage[["central"]], 30000); expect_equal(unname(pr$uplift), c(1, 1, 1))
   o <- econ_apply_override(econ_params(up), c(low = 1, central = 2, high = 3)); expect_equal(o$damage[["central"]], 2)
 })
+
+test_that("a side feature's health check never raises the app-wide banner, but a real problem still does", {
+  now <- as.POSIXct("2026-10-30 10:00:00", tz = "UTC")
+  h <- function(...) data.frame(check_name = c(...)[c(TRUE, FALSE)], status = c(...)[c(FALSE, TRUE)], value = "", detail = "", checked_at = "2026-10-30T09:50:00Z", stringsAsFactors = FALSE)
+  base <- c("fgs_latest_statement", "ok", "overall", "warn")
+  expect_equal(stale_status(h(base, "rfg_uncounted", "warn"), now)$level, "ok")                    # the RFG warning alone is not shown
+  expect_equal(stale_status(h(base, "rfg_uncounted", "fail"), now)$level, "ok")
+  w <- stale_status(h(base, "rfg_uncounted", "warn", "mp_details_age", "warn"), now)
+  expect_equal(w$level, "warn"); expect_match(w$message, "mp_details_age"); expect_no_match(w$message, "rfg_uncounted")   # a real warning still shows, without it
+  expect_equal(stale_status(h(base, "mp_count", "fail"), now)$level, "fail")
+})
