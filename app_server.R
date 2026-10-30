@@ -3164,7 +3164,8 @@ server <- function(input, output, session) {
                               a$sites, a$sites_health, a$sites_education, a$sites_emergency, a$sites_utilities, a$sites_rs_high_medium))
     s <- area_sites_data()
     if (is.null(s)) return(tags$div(summary, tags$p(class = "app-caption", "The list of named sites is not available yet (pipeline notebook 35 writes it).")))
-    if (nrow(as.data.table(s)) == 0L) return(tags$div(summary, tags$p(class = "app-caption", "No critical sites are inside this area.")))
+    if (nrow(as.data.table(s)) == 0L) return(if (isTRUE(a$sites == 0)) tags$p(class = "text-muted", "No critical sites are inside this area.")
+                                             else tags$div(summary, tags$p(class = "app-caption", "No critical sites are inside this area.")))
     summary
   })
 

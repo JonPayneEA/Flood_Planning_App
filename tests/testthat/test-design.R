@@ -72,3 +72,11 @@ test_that("the Economics research view is a proof-of-concept view", {
   expect_true("Economics research" %in% app_view_values(FALSE, poc = TRUE))
   expect_false("Economics research" %in% app_view_values(FALSE, poc = FALSE))
 })
+
+
+test_that("the plain tables on the Target Area page are styled where they sit, not only on the Rapid Flood Guidance page", {
+  css <- paste(readLines(file.path(app_root, "design.R"), warn = FALSE), collapse = "\n")
+  expect_match(css, ".area-grid table:not(.dataTable)", fixed = TRUE)
+  expect_match(css, ".area-wide table:not(.dataTable)", fixed = TRUE)
+  expect_match(css, ".area-grid td.n", fixed = TRUE)                       # numbers right-aligned there too
+})
