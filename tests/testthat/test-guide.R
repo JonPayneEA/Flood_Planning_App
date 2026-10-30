@@ -235,3 +235,19 @@ test_that("the Guide explains the Nations filter, and the settings table names t
   expect_match(html(guide_env$guide_settings_ui(settings())), "Nations shown at the start.{0,40}England")
   expect_match(html(guide_env$guide_settings_ui(settings(default_nations = c("E14", "W07")))), "England, Wales")
 })
+
+
+test_that("the Economics research page renders its notes, its prompts and the live table", {
+  txt <- html(guide_env$make_economics_tab())
+  expect_match(txt, "Evidence for the damage per household", fixed = TRUE)
+  expect_match(txt, "<table>", fixed = TRUE)                                       # the evidence register is a table, not raw pipes
+  expect_match(txt, "taken only from the files you can access", fixed = TRUE)
+  expect_match(txt, "Do not apply one uplift factor to all three", fixed = TRUE)
+  expect_no_match(txt, "\\| ---")
+  d <- data.frame(item = c("damage_per_household", "price_uplift"), scenario = c("central", "central"), value = c(NA, 1.405),
+                  price_year = c(NA, "2026"), source = c(NA, "GDP deflator"), stringsAsFactors = FALSE)
+  live <- html(guide_env$economics_live_ui(d))
+  expect_match(live, "not set", fixed = TRUE)
+  expect_match(live, "1.405", fixed = TRUE)
+  expect_match(html(guide_env$economics_live_ui(NULL)), "could not be read")
+})

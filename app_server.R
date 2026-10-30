@@ -2677,6 +2677,7 @@ server <- function(input, output, session) {
 
   # ---- Economics: the indicative expected annual damage (assumptions from FGS_Notebooks job 38) ----------------------------------
   econ_assump_d <- reactive(tryCatch(as.data.table(fetch_econ_assumptions()), error = function(e) NULL))
+  output$econ_notes_live <- renderUI(economics_live_ui(econ_assump_d()))
   # Damage figures typed in by the user for this session only (nothing is written anywhere). NULL means the saved assumptions are used.
   econ_override <- reactiveVal(NULL)
   econ_p <- reactive(econ_apply_override(econ_with_provisional(econ_params(econ_assump_d())), econ_override()))
